@@ -78,8 +78,53 @@ func TestAppAlias(t *testing.T) {
 func TestInvalidBuildCPU(t *testing.T) {
 	for _, value := range []string{"invalid", "0", "-1", "1025", "NaN", "Inf", "0.001"} {
 		t.Setenv("STARTSHIP_BUILD_CPUS", value)
-		if err := buildImage("", nil, "unused", "unused"); err == nil {
+		if _, _, err := buildConfig("project"); err == nil {
 			t.Errorf("accepted %q", value)
+		}
+	}
+}
+
+func TestPersistentBuildConfig(t *testing.T) {
+	t.Setenv("STARTSHIP_BUILD_MEMORY", "")
+	t.Setenv("STARTSHIP_BUILD_CPUS", "")
+	first, opts, err := buildConfig("project")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(first, "startship-build-project-") || !strings.Contains(strings.Join(opts, " "), "memory=1g --driver-opt cpu-period=100000 --driver-opt cpu-quota=100000") {
+		t.Fatal(first, opts)
+	}
+	again, _, _ := buildConfig("project")
+	if first != again {
+		t.Fatal("builder not stable")
+	}
+	t.Setenv("STARTSHIP_BUILD_CPUS", "0.5")
+	changed, _, _ := buildConfig("project")
+	if changed == first {
+		t.Fatal("CPU change did not replace builder")
+	}
+	t.Setenv("STARTSHIP_BUILD_MEMORY", "768m")
+	memoryChanged, _, _ := buildConfig("project")
+	if memoryChanged == changed {
+		t.Fatal("memory change did not replace builder")
+	}
+	other, _, _ := buildConfig("other")
+	if other == memoryChanged {
+		t.Fatal("projects share builder")
+	}
+	if projectBuildLock("project") != projectBuildLock("project") || projectBuildLock("project") == projectBuildLock("other") {
+		t.Fatal("incorrect build serialization")
+	}
+}
+
+func TestBuildArgs(t *testing.T) {
+	for _, noCache := range []bool{false, true} {
+		args := buildArgs("builder", "image", "Dockerfile", noCache)
+		if strings.Contains(strings.Join(args, " "), "--no-cache") != noCache {
+			t.Fatal(args)
+		}
+		if args[len(args)-1] != "." || !strings.Contains(strings.Join(args, " "), "--builder builder --load") {
+			t.Fatal(args)
 		}
 	}
 }

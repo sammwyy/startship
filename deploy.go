@@ -75,10 +75,15 @@ func (a *Server) clone(app Record, dir string, out io.Writer) error {
 	return command("", out, "git", "clone", "--depth", "1", "--branch", app.Branch, "--", raw, dir)
 }
 func (a *Server) enqueue(app Record) (Record, error) {
-	if _, e := a.projectSource(app); e != nil {
-		return Record{}, e
+	return a.enqueueDeployment(app, Record{})
+}
+func (a *Server) enqueueDeployment(app Record, d Record) (Record, error) {
+	if d.RedeployOf == "" {
+		if _, e := a.projectSource(app); e != nil {
+			return Record{}, e
+		}
 	}
-	d := Record{ID: randomID(), Kind: "deployments", Owner: app.Owner, Parent: app.ID, AppID: app.ID, Status: "queued", Created: time.Now()}
+	d.ID, d.Kind, d.Owner, d.Parent, d.AppID, d.Status, d.Created = randomID(), "deployments", app.Owner, app.ID, app.ID, "queued", time.Now()
 	if e := a.store.save(d); e != nil {
 		return d, e
 	}
@@ -126,16 +131,34 @@ func (a *Server) build(appID, id string) {
 		return
 	}
 	logger := &logWriter{a: a, id: id, secret: app.GitToken}
-	var container string
 	defer func() {
 		if e != nil {
 			a.store.update(id, func(r *Record) { r.Status = "failed"; now := time.Now(); r.Finished = &now })
-			if container != "" {
-				command("", logger, "docker", "rm", "-f", container)
-			}
 		}
 		a.logDeploymentResult(logger, app, e)
 	}()
+	d, err := a.store.get(id)
+	if err != nil {
+		e = err
+		return
+	}
+	if d.RedeployOf != "" {
+		fmt.Fprintf(logger, "Redeploying release %s (no clone, build or tests)\n", d.RedeployOf)
+		if e = releaseAvailable(d); e != nil {
+			return
+		}
+		network := "startship-" + app.ProjectID
+		if e = ensureNetwork(network, logger); e != nil {
+			return
+		}
+		a.store.update(id, func(r *Record) { r.Network = network })
+		if d.StaticDir != "" {
+			e = a.activate(app, id)
+		} else {
+			e = a.startRelease(app, id, d.Image, network, logger)
+		}
+		return
+	}
 	a.status(id, "building")
 	source, sourceErr := a.projectSource(app)
 	if sourceErr != nil {
@@ -186,7 +209,7 @@ func (a *Server) build(appID, id string) {
 			if e != nil {
 				return
 			}
-			e = buildImage(root, logger, image, "Dockerfile.startship-test")
+			e = buildImage(root, logger, app.ProjectID, image, "Dockerfile.startship-test", d.NoCache)
 			if e != nil {
 				return
 			}
@@ -224,7 +247,7 @@ func (a *Server) build(appID, id string) {
 	if kind != "dockerfile" {
 		dockerPath = "Dockerfile.startship"
 	}
-	if e = buildImage(root, logger, image, dockerPath); e != nil {
+	if e = buildImage(root, logger, app.ProjectID, image, dockerPath, d.NoCache); e != nil {
 		return
 	}
 	if app.TestCommand != "" {
@@ -235,8 +258,31 @@ func (a *Server) build(appID, id string) {
 			return
 		}
 	}
+	e = a.startRelease(app, id, image, network, logger)
+}
+
+func releaseAvailable(d Record) error {
+	if d.StaticDir != "" {
+		info, err := os.Stat(d.StaticDir)
+		if err != nil || !info.IsDir() {
+			return fmt.Errorf("release static directory is gone; rebuild the app")
+		}
+		return nil
+	}
+	if d.Image == "" || exec.Command("docker", "image", "inspect", d.Image).Run() != nil {
+		return fmt.Errorf("release image is gone; rebuild the app")
+	}
+	return nil
+}
+
+func (a *Server) startRelease(app Record, id, image, network string, logger io.Writer) (e error) {
 	a.status(id, "starting")
-	container = "startship-" + app.ID + "-" + id
+	container := "startship-" + app.ID + "-" + id
+	defer func() {
+		if e != nil {
+			command("", logger, "docker", "rm", "-f", container)
+		}
+	}()
 	args := append(appRunArgs(app, network, false), "--name", container)
 	args = append(args, image)
 	if e = command("", logger, "docker", args...); e != nil {
@@ -263,7 +309,7 @@ func (a *Server) build(appID, id string) {
 		time.Sleep(300 * time.Millisecond)
 	}
 	a.store.update(id, func(r *Record) { r.Container = container; r.IP = ip })
-	e = a.activate(app, id)
+	return a.activate(app, id)
 }
 
 func (a *Server) logDeploymentResult(out io.Writer, app Record, err error) {

@@ -30,7 +30,8 @@ type Server struct {
 // Response-only fields must not be persisted or accepted as app configuration.
 type apiRecord struct {
 	Record
-	URL string `json:"url,omitempty"`
+	URL          string `json:"url,omitempty"`
+	Redeployable bool   `json:"redeployable,omitempty"`
 }
 
 func publicRecord(v Record) apiRecord {
@@ -208,12 +209,44 @@ func (a *Server) api() http.Handler {
 				return
 			}
 		}
-		if len(p) == 4 && kind == "apps" && p[3] == "deploy" && r.Method == "POST" {
-			if _, e := a.projectSource(old); e != nil {
+		if len(p) == 4 && kind == "apps" && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" {
+			var options struct {
+				NoCache      bool   `json:"no_cache"`
+				DeploymentID string `json:"deployment_id"`
+			}
+			if e := json.NewDecoder(r.Body).Decode(&options); e != nil && e != io.EOF {
+				fail(w, 400, "invalid deployment options")
+				return
+			}
+			next := Record{NoCache: options.NoCache}
+			if p[3] == "redeploy" {
+				sourceID := options.DeploymentID
+				if sourceID == "" {
+					sourceID = old.Active
+				}
+				if sourceID == "" {
+					fail(w, 409, "app has no active release")
+					return
+				}
+				source, e := a.store.get(sourceID)
+				if e != nil || source.Kind != "deployments" || source.AppID != old.ID || source.Owner != uid {
+					fail(w, 404, "release not found")
+					return
+				}
+				if source.Status != "running" && source.Status != "superseded" {
+					fail(w, 409, "only successful releases can be redeployed")
+					return
+				}
+				if e := releaseAvailable(source); e != nil {
+					fail(w, 409, e.Error())
+					return
+				}
+				next = Record{RedeployOf: source.ID, Image: source.Image, StaticDir: source.StaticDir, Commit: source.Commit}
+			} else if _, e := a.projectSource(old); e != nil {
 				fail(w, 400, e.Error())
 				return
 			}
-			d, e := a.enqueue(old)
+			d, e := a.enqueueDeployment(old, next)
 			if e != nil {
 				fail(w, 500, e.Error())
 				return
@@ -223,7 +256,11 @@ func (a *Server) api() http.Handler {
 		}
 		if r.Method == "GET" {
 			if len(p) > 2 {
-				reply(w, 200, publicRecord(old))
+				result := publicRecord(old)
+				if old.Kind == "deployments" && (old.Status == "running" || old.Status == "superseded") {
+					result.Redeployable = releaseAvailable(old) == nil
+				}
+				reply(w, 200, result)
 				return
 			}
 			out := []apiRecord{}
@@ -267,6 +304,10 @@ func (a *Server) api() http.Handler {
 			}
 			a.store.db.Exec("DELETE FROM records WHERE id=?", old.ID)
 			if old.Kind == "projects" {
+				lock := projectBuildLock(old.ID)
+				lock.Lock()
+				removeProjectBuilders(old.ID, "", nil)
+				lock.Unlock()
 				network := "startship-" + old.ID
 				if self := selfContainer(); self != "" {
 					command("", nil, "docker", "network", "disconnect", network, self)

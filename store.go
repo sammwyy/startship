@@ -41,6 +41,8 @@ type Record struct {
 	Image          string            `json:"image,omitempty"`
 	Container      string            `json:"container,omitempty"`
 	Network        string            `json:"network,omitempty"`
+	NoCache        bool              `json:"no_cache,omitempty"`
+	RedeployOf     string            `json:"redeploy_of,omitempty"`
 	IP             string            `json:"ip,omitempty"`
 	StaticDir      string            `json:"static_dir,omitempty"`
 	Created        time.Time         `json:"created,omitempty"`
