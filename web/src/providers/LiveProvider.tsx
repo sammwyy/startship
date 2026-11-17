@@ -37,7 +37,13 @@ export function LiveProvider({ children }: { children: ReactNode }) {
             });
         },
         setStatus,
-        (version) => client.setQueryData(queries.version().queryKey, version),
+        (version) => {
+          void client.cancelQueries({
+            queryKey: queries.version().queryKey,
+            exact: true,
+          });
+          client.setQueryData(queries.version().queryKey, version);
+        },
       ),
     [client],
   );

@@ -59,8 +59,11 @@ export function DeploymentsView() {
         }
       />
       <div className="project-deployments">
-        <section className="release-history" aria-label="Deployment history">
-          <div className="panel release-directory">
+        <section
+          className="panel release-history"
+          aria-label="Deployment history"
+        >
+          <div className="release-directory">
             {releases.map((r) => (
               <button
                 key={r.id}

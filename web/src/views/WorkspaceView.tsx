@@ -192,25 +192,27 @@ export function WorkspaceView() {
               Your first release starts with a deploy.
             </p>
           )}
-          <div className="release-list">
-            <h2>Recent releases</h2>
-            {releases.slice(0, 4).map((r) => (
-              <Link
-                key={r.id}
-                className="release-item"
-                to={`/project/${r.project_id}/deployments?release=${encodeURIComponent(r.id)}`}
-              >
-                <div>
-                  <strong>
-                    {projects.find((p) => p.id === r.project_id)?.name ||
-                      "Project"}
-                  </strong>
-                  <small>{r.commit?.slice(0, 7) || r.id.slice(0, 7)}</small>
-                </div>
-                <Badge status={r.status} />
-              </Link>
-            ))}
-          </div>
+          {!!releases.length && (
+            <div className="release-list">
+              <h2>Recent releases</h2>
+              {releases.slice(0, 4).map((r) => (
+                <Link
+                  key={r.id}
+                  className="release-item"
+                  to={`/project/${r.project_id}/deployments?release=${encodeURIComponent(r.id)}`}
+                >
+                  <div>
+                    <strong>
+                      {projects.find((p) => p.id === r.project_id)?.name ||
+                        "Project"}
+                    </strong>
+                    <small>{r.commit?.slice(0, 7) || r.id.slice(0, 7)}</small>
+                  </div>
+                  <Badge status={r.status} />
+                </Link>
+              ))}
+            </div>
+          )}
         </aside>
       </div>
     </>

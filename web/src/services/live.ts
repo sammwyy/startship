@@ -166,6 +166,12 @@ export function applyLiveMessage(
       release: queries.releases(spec.project_id).queryKey,
       route: queries.routes(spec.project_id).queryKey,
     };
+    for (const queryKey of [
+      ...Object.values(key),
+      queries.containers().queryKey,
+      queries.releases().queryKey,
+    ])
+      void client.cancelQueries({ queryKey, exact: true });
     if (event.type === "snapshot") {
       const data = event.data as {
         project: Project;
@@ -210,6 +216,7 @@ export function applyLiveMessage(
     }
   } else if (spec.topic === "workspace") {
     const key = queries.projects(spec.workspace_id).queryKey;
+    void client.cancelQueries({ queryKey: key, exact: true });
     if (event.type === "snapshot")
       client.setQueryData(
         key,
@@ -223,6 +230,7 @@ export function applyLiveMessage(
         ? `releases/${spec.release_id}`
         : `containers/${spec.container_id}/logs`,
     ];
+    void client.cancelQueries({ queryKey: key, exact: true });
     if (event.type === "snapshot") client.setQueryData(key, event.data);
     else if (event.type === "log")
       client.setQueryData<Partial<Release>>(key, (old) => ({
@@ -236,11 +244,20 @@ export function applyLiveMessage(
         ...old,
         ...event.record,
       }));
-  } else if (spec.topic === "traffic" && event.type === "snapshot")
+  } else if (spec.topic === "traffic" && event.type === "snapshot") {
+    void client.cancelQueries({
+      queryKey: ["traffic", spec.project_id, spec.window],
+      exact: true,
+    });
     client.setQueryData(["traffic", spec.project_id, spec.window], event.data);
-  else if (spec.topic === "system_update" && event.type === "snapshot")
+  } else if (spec.topic === "system_update" && event.type === "snapshot") {
+    void client.cancelQueries({
+      queryKey: queries.updates().queryKey,
+      exact: true,
+    });
     client.setQueryData<UpdateInfo>(
       queries.updates().queryKey,
       event.data as UpdateInfo,
     );
+  }
 }

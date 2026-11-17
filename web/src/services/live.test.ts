@@ -119,6 +119,38 @@ describe("authenticated live connection", () => {
   });
 });
 describe("live query cache", () => {
+  it("does not let a delayed bootstrap GET overwrite already-received log chunks", async () => {
+    const client = new QueryClient();
+    let finish!: (data: { log: string }) => void;
+    const bootstrap = client
+      .fetchQuery({
+        queryKey: ["releases/race"],
+        queryFn: () =>
+          new Promise<{ log: string }>((resolve) => {
+            finish = resolve;
+          }),
+      })
+      .catch(() => {});
+    const sub = { topic: "release_log" as const, release_id: "race" };
+    applyLiveMessage(client, sub, {
+      id: "sub-1",
+      topic: "release_log",
+      type: "snapshot",
+      data: { log: "first\n" },
+    });
+    applyLiveMessage(client, sub, {
+      id: "sub-1",
+      topic: "release_log",
+      type: "log",
+      data: "second\n",
+    });
+    finish({ log: "first\n" });
+    await bootstrap;
+    expect(client.getQueryData(["releases/race"])).toEqual({
+      log: "first\nsecond\n",
+    });
+    client.clear();
+  });
   const message = (data: Partial<LiveMessage>): LiveMessage => ({
     type: "snapshot",
     id: "sub-1",

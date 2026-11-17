@@ -129,6 +129,9 @@
   min-height: 42px;
   font-size: 12px;
 }
+.project-search .search-field input:focus-visible {
+  outline: none;
+}
 .workspace-layout > section {
   min-width: 0;
 }
@@ -287,7 +290,8 @@
   max-height: 620px;
 }
 .release-toolbar {
-  padding: 14px 0 0;
+  padding: 14px;
+  border-top: 1px solid var(--line);
   margin-top: 0;
   gap: 12px;
 }
