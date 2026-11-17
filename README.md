@@ -33,7 +33,7 @@ the release asset base URL for testing.
 On the daemon's machine, root or members of the `startship` group can use the
 CLI **without login** via `/run/startship/startship.sock`. Add a trusted user with
 `sudo usermod -aG startship USER`, then log in again. Socket access grants local
-Platform Admin access as the first (bootstrap) administrator account; protect it
+Platform Admin access, acting as the longest-serving holder of the fixed Platform Admin role; protect it
 like root access. Local access works even while dashboard first-run setup is pending.
 Login, logout and account/password updates on the socket are not session operations;
 use an HTTP login for account changes. `startship logout` without a saved server
@@ -215,6 +215,16 @@ Alternatively, terminate TLS at a trusted gateway in front of port 8080 (or 80 w
 | STARTSHIP_SELF_CONTAINER | detected hostname inside Docker |
 
 With `STARTSHIP_DASHBOARD_DOMAIN`, proxy requests for that hostname go to the dashboard and API. The daemon creates Docker network `startship`. Containerized startshipd must join that same network; compose configures it, and startup also attempts connection using `STARTSHIP_SELF_CONTAINER`. No application ports are published.
+
+## Users, roles and permissions
+
+Permissions are a fixed list defined in code (`GET /api/permissions`): platform ones (`workspaces.create`, `users.manage`, `roles.manage`, `audit.view`), workspace ones (`workspace.manage`, `projects.create`, `members.manage`) and project ones (`project.view`, `logs.view`, `traffic.view`, `deploy`, `project.settings`, `project.environment`, `project.source`, `domains.manage`, `project.delete`).
+
+A role has a name, a color, an icon and a set of permissions. Guest, Member, Contributor and Administrator are built in and read-only but can be cloned (`POST /api/roles {"clone_of":"member"}`); custom roles are edited in the dashboard under **Roles** or with `PATCH /api/roles/{id}`. **Platform Admin** is fixed: it holds every permission everywhere, cannot be edited, deleted or overridden, and the last holder cannot lose it. The first account gets it automatically.
+
+Roles are assigned to a user at a scope with `POST /api/assignments {"user_id","role_id","scope":"platform|workspace|project","scope_id"}`. Any role at a workspace makes the user a member; workspace roles apply to every project in it, and a project can add its own. A Guest is a member who sees no project until given a role on one. A plain user without roles can only edit their own account.
+
+Overrides refine roles Discord-style: `PUT /api/overrides {"scope","scope_id","subject_type":"role|user","subject_id","allow":[...],"deny":[...]}`. Workspace overrides apply before project overrides and role overrides before user overrides, so the most specific rule wins. Nobody can grant a permission they do not hold. `GET /api/effective?workspace_id=&project_id=` returns the caller's permissions at a scope, `GET /api/workspaces/{id}/members` lists members, and every change to users, roles, assignments and overrides is recorded with its actor in `GET /api/audit`.
 
 ## API
 
