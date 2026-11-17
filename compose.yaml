@@ -1,0 +1,22 @@
+services:
+  harbor:
+    build: .
+    container_name: harbord
+    restart: unless-stopped
+    environment:
+      HARBOR_SELF_CONTAINER: harbord
+      HARBOR_DATA: /data
+    ports:
+      - "8080:8080"
+      - "80:80"
+      - "443:443"
+    volumes:
+      - harbor-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - harbor
+networks:
+  harbor:
+    name: harbor
+volumes:
+  harbor-data:
