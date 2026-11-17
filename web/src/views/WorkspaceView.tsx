@@ -136,7 +136,8 @@ export function WorkspaceView() {
                     <span className="project-row-copy">
                       <h3>{p.name}</h3>
                       <span>
-                        {owned.length} containers ·{" "}
+                        {owned.length} container{owned.length === 1 ? "" : "s"}{" "}
+                        ·{" "}
                         {p.git_url
                           ? p.branch || "main"
                           : "Connect a repository"}

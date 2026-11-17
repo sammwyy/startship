@@ -13,7 +13,16 @@ vi.mock("@tanstack/react-query", async (original) => ({
         { id: "two", name: "Documentation", workspace_id: "w1" },
       ],
     },
-    { data: [] },
+    {
+      data: [
+        {
+          id: "c1",
+          project_id: "one",
+          status: "running",
+          active_deployment: "release-1",
+        },
+      ],
+    },
     { data: [] },
   ],
 }));
@@ -43,6 +52,8 @@ describe("project directory", () => {
       1,
     );
     const search = screen.getByRole("searchbox", { name: "Search projects" });
+    expect(screen.getByText(/1 container ·/)).toBeTruthy();
+    expect(screen.getByText(/0 containers ·/)).toBeTruthy();
     fireEvent.change(search, { target: { value: "  STORE  " } });
     expect(screen.getByRole("link", { name: /Storefront/ })).toBeTruthy();
     expect(screen.queryByRole("link", { name: /Documentation/ })).toBeNull();
