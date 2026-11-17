@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { Icon } from "./Icon";
 
@@ -93,6 +93,12 @@ export function ThemeButton() {
     document.documentElement.dataset.theme || "dark",
   );
   const next = theme === "light" ? "dark" : "light";
+  useEffect(() => {
+    const sync = () =>
+      setTheme(document.documentElement.dataset.theme || "dark");
+    window.addEventListener("theme-changed", sync);
+    return () => window.removeEventListener("theme-changed", sync);
+  }, []);
   return (
     <button
       type="button"
@@ -101,6 +107,7 @@ export function ThemeButton() {
       onClick={() => {
         document.documentElement.dataset.theme = next;
         setTheme(next);
+        window.dispatchEvent(new Event("theme-changed"));
         try {
           localStorage.setItem("startship-theme", next);
         } catch {

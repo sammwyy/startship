@@ -50,6 +50,24 @@ describe("shared components", () => {
     expect(document.documentElement.dataset.theme).toBe("light");
     expect(localStorage.getItem("startship-theme")).toBe("light");
   });
+  it("keeps the desktop and mobile theme controls in sync", async () => {
+    document.documentElement.dataset.theme = "dark";
+    render(
+      <>
+        <ThemeButton />
+        <ThemeButton />
+      </>,
+    );
+    await userEvent.click(
+      screen.getAllByRole("button", { name: "Switch to light theme" })[0],
+    );
+    const controls = screen.getAllByRole("button", {
+      name: "Switch to dark theme",
+    });
+    expect(controls).toHaveLength(2);
+    await userEvent.click(controls[1]);
+    expect(document.documentElement.dataset.theme).toBe("dark");
+  });
   it("composes constrained exact, wildcard and administrator hostnames", async () => {
     render(
       <HostPicker

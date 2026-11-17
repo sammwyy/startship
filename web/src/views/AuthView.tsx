@@ -65,6 +65,7 @@ export function AuthView() {
       </section>
       <section className="auth-form">
         <AsyncForm
+          key={force ? "rotate" : setup ? "setup" : "login"}
           onSubmit={async (form) => {
             if (force) {
               if (!session.temporaryPassword) {
