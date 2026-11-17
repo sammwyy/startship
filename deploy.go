@@ -385,8 +385,10 @@ func (a *Server) restore() {
 		}
 	}
 	if self != "" {
-		if e := command("", os.Stderr, "docker", "network", "connect", "startship", self); e != nil {
-			fmt.Fprintln(os.Stderr, "Ensure startshipd is already attached to startship:", e)
+		if _, e := containerIP(self); e != nil {
+			if e := command("", os.Stderr, "docker", "network", "connect", "startship", self); e != nil {
+				fmt.Fprintln(os.Stderr, "Ensure startshipd is already attached to startship:", e)
+			}
 		}
 	}
 	for _, d := range a.store.list("deployments", "") {
