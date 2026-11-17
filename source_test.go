@@ -40,6 +40,7 @@ func TestProjectSourceAPIAndWebhook(t *testing.T) {
 	var project Record
 	body := request("POST", "projects", map[string]any{"name": "Monorepo", "workspace_id": workspace.ID, "git_url": "https://example.com/shared.git", "git_token": "test-project-token"}, 200)
 	json.Unmarshal(body, &project)
+	a.queues["project:"+project.ID] = make(chan string, 10)
 	if project.Branch != "main" || project.WebhookSecret == "" || strings.Contains(string(body), "test-project-token") {
 		t.Fatal("project source/default branch/webhook or token redaction is incorrect")
 	}
@@ -71,7 +72,7 @@ func TestProjectSourceAPIAndWebhook(t *testing.T) {
 			t.Fatal("all apps must inherit the latest project source and preserved credential")
 		}
 	}
-	deliver := func(id, secret, branch string, status int) []Record {
+	deliver := func(id, secret, branch string, status int) Record {
 		t.Helper()
 		data := []byte(`{"ref":"refs/heads/` + branch + `"}`)
 		mac := hmac.New(sha256.New, []byte(secret))
@@ -84,24 +85,26 @@ func TestProjectSourceAPIAndWebhook(t *testing.T) {
 		if w.Code != status {
 			t.Fatal(w.Code, w.Body.String())
 		}
-		var out []Record
+		var out Record
 		json.Unmarshal(w.Body.Bytes(), &out)
 		return out
 	}
 	deliver(project.ID, "wrong-secret", "release", 401)
 	deliver(project.ID, project.WebhookSecret, "main", 200)
+	deliver(project.ID, project.WebhookSecret, "release", 200)
 	if len(a.queues[apps[0].ID]) != 0 || len(a.queues[apps[1].ID]) != 0 {
 		t.Fatal("wrong-branch push queued work")
 	}
+	request("PATCH", "projects/"+project.ID, map[string]bool{"auto_deploy": true}, 200)
 	queued := deliver(project.ID, project.WebhookSecret, "release", 202)
-	if len(queued) != 2 || len(a.queues[apps[0].ID]) != 1 || len(a.queues[apps[1].ID]) != 1 {
-		t.Fatal("one project push must enqueue both enabled monorepo apps")
+	if queued.ProjectID != project.ID || len(a.queues["project:"+project.ID]) != 1 || len(a.queues[apps[0].ID]) != 0 || len(a.queues[apps[1].ID]) != 0 {
+		t.Fatal("one project push must enqueue one project deployment, never separate container deployments")
 	}
 	request("PATCH", "apps/"+apps[1].ID, map[string]bool{"auto_deploy": false}, 200)
-	if queued = deliver(project.ID, project.WebhookSecret, "release", 202); len(queued) != 1 || queued[0].AppID != apps[0].ID {
-		t.Fatal("disabled app was not excluded")
+	if queued = deliver(project.ID, project.WebhookSecret, "release", 202); queued.ProjectID != project.ID || len(a.queues["project:"+project.ID]) != 2 {
+		t.Fatal("legacy app options must not split project deployments")
 	}
-	// Old app URLs remain signed/app-scoped, but use the shared project's branch.
+	// Old signed webhook URLs also queue the complete project.
 	a.store.update(apps[0].ID, func(app *Record) { app.WebhookSecret = "legacy-hook" })
 	deliver(apps[0].ID, "legacy-hook", "main", 200)
 	deliver(apps[0].ID, "legacy-hook", "release", 202)

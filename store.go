@@ -12,41 +12,47 @@ import (
 )
 
 type Record struct {
-	ID             string            `json:"id"`
-	Kind           string            `json:"-"`
-	Owner          string            `json:"-"`
-	Parent         string            `json:"-"`
-	Name           string            `json:"name,omitempty"`
-	WorkspaceID    string            `json:"workspace_id,omitempty"`
-	ProjectID      string            `json:"project_id,omitempty"`
-	AppID          string            `json:"app_id,omitempty"`
-	GitURL         string            `json:"git_url,omitempty"`
-	GitToken       string            `json:"git_token,omitempty"`
-	SourceConflict bool              `json:"source_conflict,omitempty"`
-	Branch         string            `json:"branch,omitempty"`
-	RootDir        string            `json:"root_dir,omitempty"`
-	BuildType      string            `json:"build_type,omitempty"`
-	Port           int               `json:"port,omitempty"`
-	Env            map[string]string `json:"env,omitempty"`
-	TestCommand    string            `json:"test_command,omitempty"`
-	AutoDeploy     bool              `json:"auto_deploy"`
-	WebhookSecret  string            `json:"webhook_secret,omitempty"`
-	Active         string            `json:"active_deployment,omitempty"`
-	Host           string            `json:"host,omitempty"`
-	PathPrefix     string            `json:"path_prefix,omitempty"`
-	StripPrefix    bool              `json:"strip_prefix"`
-	Status         string            `json:"status,omitempty"`
-	Commit         string            `json:"commit,omitempty"`
-	Log            string            `json:"log,omitempty"`
-	Image          string            `json:"image,omitempty"`
-	Container      string            `json:"container,omitempty"`
-	Network        string            `json:"network,omitempty"`
-	NoCache        bool              `json:"no_cache,omitempty"`
-	RedeployOf     string            `json:"redeploy_of,omitempty"`
-	IP             string            `json:"ip,omitempty"`
-	StaticDir      string            `json:"static_dir,omitempty"`
-	Created        time.Time         `json:"created,omitempty"`
-	Finished       *time.Time        `json:"finished,omitempty"`
+	ID                string            `json:"id"`
+	Kind              string            `json:"-"`
+	Owner             string            `json:"-"`
+	Parent            string            `json:"-"`
+	Name              string            `json:"name,omitempty"`
+	WorkspaceID       string            `json:"workspace_id,omitempty"`
+	ProjectID         string            `json:"project_id,omitempty"`
+	AppID             string            `json:"app_id,omitempty"`
+	ContainerID       string            `json:"container_id,omitempty"`
+	ReleaseID         string            `json:"release_id,omitempty"`
+	ContainerReleases []string          `json:"container_releases,omitempty"`
+	ConfigVersion     int               `json:"config_version,omitempty"`
+	ConfigConflict    bool              `json:"config_conflict,omitempty"`
+	ConfigConfirmed   bool              `json:"config_confirmed,omitempty"`
+	GitURL            string            `json:"git_url,omitempty"`
+	GitToken          string            `json:"git_token,omitempty"`
+	SourceConflict    bool              `json:"source_conflict,omitempty"`
+	Branch            string            `json:"branch,omitempty"`
+	RootDir           string            `json:"root_dir,omitempty"`
+	BuildType         string            `json:"build_type,omitempty"`
+	Port              int               `json:"port,omitempty"`
+	Env               map[string]string `json:"env,omitempty"`
+	TestCommand       string            `json:"test_command,omitempty"`
+	AutoDeploy        bool              `json:"auto_deploy"`
+	WebhookSecret     string            `json:"webhook_secret,omitempty"`
+	Active            string            `json:"active_deployment,omitempty"`
+	Host              string            `json:"host,omitempty"`
+	PathPrefix        string            `json:"path_prefix,omitempty"`
+	StripPrefix       bool              `json:"strip_prefix"`
+	Status            string            `json:"status,omitempty"`
+	Commit            string            `json:"commit,omitempty"`
+	Log               string            `json:"log,omitempty"`
+	Image             string            `json:"image,omitempty"`
+	Container         string            `json:"container,omitempty"`
+	Network           string            `json:"network,omitempty"`
+	NoCache           bool              `json:"no_cache,omitempty"`
+	RedeployOf        string            `json:"redeploy_of,omitempty"`
+	IP                string            `json:"ip,omitempty"`
+	StaticDir         string            `json:"static_dir,omitempty"`
+	Created           time.Time         `json:"created,omitempty"`
+	Finished          *time.Time        `json:"finished,omitempty"`
 }
 type Store struct {
 	db *sql.DB
@@ -73,6 +79,10 @@ func openStore(path string) (*Store, error) {
 	}
 	s := &Store{db: db}
 	if e = s.migrateProjectSources(); e != nil {
+		db.Close()
+		return nil, e
+	}
+	if e = s.migrateProjectConfig(); e != nil {
 		db.Close()
 		return nil, e
 	}

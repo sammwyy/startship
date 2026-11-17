@@ -118,7 +118,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	d := target.Deployment
 	if d.Status != "running" {
-		http.Error(w, "Startship: this app has no healthy deployment yet.", 502)
+		http.Error(w, "Startship: this container has no healthy deployment yet.", 502)
 		return
 	}
 	if target.Route.StripPrefix {

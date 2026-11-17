@@ -22,7 +22,10 @@ deploy_times = {}
 test_limits_seen = set()
 process = None
 log = (work / "daemon.log").open("w")
-api = "http://127.0.0.1:18080/api/"
+dashboard_port = os.getenv("STARTSHIP_E2E_DASHBOARD_PORT", "18080")
+proxy_port = os.getenv("STARTSHIP_E2E_HTTP_PORT", "18081")
+proxy_url = "http://127.0.0.1:" + proxy_port
+api = "http://127.0.0.1:" + dashboard_port + "/api/"
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
 def request(path, body=None, method=None):
@@ -104,8 +107,8 @@ fn main() {
     for args in (["init", "-b", "main"], ["add", "."],
                  ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "fixture"]):
         subprocess.run(["git", "-C", str(repo)] + args, check=True, stdout=subprocess.DEVNULL)
-    environment = dict(os.environ, STARTSHIP_DATA=str(work / "data"), STARTSHIP_DASHBOARD_ADDR="127.0.0.1:18080",
-                       STARTSHIP_HTTP_ADDR="127.0.0.1:18081", STARTSHIP_ADMIN_USER="admin",
+    environment = dict(os.environ, STARTSHIP_DATA=str(work / "data"), STARTSHIP_DASHBOARD_ADDR="127.0.0.1:" + dashboard_port,
+                       STARTSHIP_HTTP_ADDR="127.0.0.1:" + proxy_port, STARTSHIP_ADMIN_USER="admin",
                        STARTSHIP_ADMIN_PASSWORD="test-password", STARTSHIP_ACME_EMAIL="", STARTSHIP_DASHBOARD_DOMAIN="")
     process = subprocess.Popen([str(root / "startshipd")], env=environment, stdout=log, stderr=log)
     for _ in range(60):
@@ -134,7 +137,7 @@ fn main() {
         route = request("routes", {"project_id": project["id"], "app_id": app["id"], "host": "test.local",
                                    "path_prefix": prefix, "strip_prefix": name in ("static", "dockerfile")})
         public_url = urlsplit(route["url"])
-        assert (public_url.scheme, public_url.hostname, public_url.port, public_url.path) == ("http", "test.local", 18081, prefix), route
+        assert (public_url.scheme, public_url.hostname, public_url.port, public_url.path) == ("http", "test.local", int(proxy_port), prefix), route
         if name == "python":
             builders_before = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-" + project["id"]], text=True).split()
             cached = wait_deploy(app)
@@ -204,7 +207,7 @@ fn main() {
               ("/dockerfile/probe?via=router", "hello from Startship Dockerfile /probe?via=router"),
               ("/rust/probe?via=router", "hello from Startship Rust /rust/probe?via=router"))
     for path, expected in checks:
-        result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", "http://127.0.0.1:18081" + path], text=True)
+        result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", proxy_url + path], text=True)
         print("curl " + path + ": " + result.strip())
         assert expected in result
     # A Dockerfile build failure must not replace the healthy release either.
@@ -271,7 +274,7 @@ fn main() {
     assert subprocess.run(["docker", "network", "inspect", "startship-" + other["id"]], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0
     print("project delete removes persistent builder and network: OK")
     status = subprocess.check_output(["curl", "-sS", "-o", os.devnull, "-w", "%{http_code}",
-                                      "http://127.0.0.1:18081/static/"], text=True)
+                                      proxy_url + "/static/"], text=True)
     assert status == "404", status
     # Verify every route is restored from SQLite after daemon restart.
     process.terminate()
@@ -280,7 +283,7 @@ fn main() {
     for _ in range(60):
         try:
             for path, expected in checks:
-                result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", "http://127.0.0.1:18081" + path], stderr=subprocess.DEVNULL, text=True)
+                result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", proxy_url + path], stderr=subprocess.DEVNULL, text=True)
                 assert expected in result, (path, result)
             print("restart routing: OK")
             break
@@ -314,8 +317,85 @@ fn main() {
     config = json.loads(subprocess.check_output(["docker", "inspect", new_builder[0]], text=True))[0]["HostConfig"]
     assert config["Memory"] == 805306368 and config["CpuQuota"] == 50000 and config["CpuPeriod"] == 100000, config
     print("changed build limits replace builder; concurrent sibling builds safely reuse one bounded builder: OK")
-    result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", "http://127.0.0.1:18081/dockerfile/"], text=True)
+    result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", proxy_url + "/dockerfile/"], text=True)
     assert "hello from Startship Dockerfile" in result
+    # The dashboard's project unit discovers multiple HTTP containers without app CRUD.
+    grouped_repo = work / "grouped"
+    grouped_repo.mkdir()
+    (grouped_repo / "package.json").write_text('{"private":true,"workspaces":["services/*"]}')
+    for name in ("api", "web"):
+        directory = grouped_repo / "services" / name
+        directory.mkdir(parents=True)
+        (directory / "app.py").write_text((repo / "app.py").read_text().replace("Startship python", "grouped " + name) + '\n')
+        (directory / "Dockerfile").write_text('FROM python:3.13-slim\nWORKDIR /app\nCOPY app.py .\nEXPOSE 8080\nCMD ["python", "app.py"]\n')
+    def commit_grouped():
+        for args in (["add", "."], ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "grouped fixture"]):
+            subprocess.run(["git", "-C", str(grouped_repo)] + args, check=True, stdout=subprocess.DEVNULL)
+    subprocess.run(["git", "-C", str(grouped_repo), "init", "-b", "main"], check=True, stdout=subprocess.DEVNULL)
+    commit_grouped()
+    grouped = request("projects", {"workspace_id": ws["id"], "name": "Grouped", "git_url": grouped_repo.as_uri(), "env": {"SHARED": "project"}})
+    project_ids.append(grouped["id"])
+    def deploy_project(options=None, action="deploy", expected="running"):
+        queued = request("projects/" + grouped["id"] + "/" + action, options or {})
+        for _ in range(240):
+            release = request("releases/" + queued["id"])
+            if release["status"] in ("running", "failed"):
+                assert release["status"] == expected, release.get("log")
+                return release
+            time.sleep(0.5)
+        raise TimeoutError("project release did not complete")
+    first_group = deploy_project()
+    containers = request("containers?project_id=" + grouped["id"])
+    app_ids.extend(c["id"] for c in containers)
+    assert len(containers) == 2 and len(first_group["container_releases"]) == 2
+    assert first_group["log"].count("Cloning into") == 1
+    assert request("projects/" + grouped["id"])["active_deployment"] == first_group["id"]
+    for container in containers:
+        revision = request("deployments/" + container["active_deployment"])
+        assert revision["release_id"] == first_group["id"] and revision["commit"] == first_group["commit"]
+        info = inspect_if_present(revision["container"])
+        assert "SHARED=project" in info["Config"]["Env"]
+        assert set(info["NetworkSettings"]["Networks"]) == {"startship-" + grouped["id"]}
+        route = request("routes", {"project_id": grouped["id"], "container_id": container["id"], "host": "grouped.local",
+                                  "path_prefix": "/api" if container["root_dir"].endswith("api") else "/", "strip_prefix": container["root_dir"].endswith("api")})
+        assert route["container_id"] == container["id"]
+        assert "log" in request("containers/" + container["id"] + "/logs")
+    def grouped_response(path):
+        return subprocess.check_output(["curl", "-fsS", "-H", "Host: grouped.local", proxy_url + path], text=True)
+    assert "grouped web /" in grouped_response("/")
+    assert "grouped api /probe" in grouped_response("/api/probe")
+    print("project deployment: one checkout, two detected HTTP containers, one shared release/env, selectable domain targets and runtime logs: OK")
+    failing_file = grouped_repo / "services" / "web" / "Dockerfile"
+    healthy_file = failing_file.read_text()
+    failing_file.write_text(healthy_file.replace('CMD ', 'RUN false\nCMD '))
+    commit_grouped()
+    failed_group = deploy_project(expected="failed")
+    assert request("projects/" + grouped["id"])["active_deployment"] == first_group["id"]
+    assert "grouped api /probe" in grouped_response("/api/probe") and "grouped web /" in grouped_response("/")
+    for revision_id in failed_group["container_releases"]:
+        revision = request("deployments/" + revision_id)
+        if revision.get("container"):
+            assert inspect_if_present(revision["container"]) is None
+    print("failed grouped deployment preserves every previous container and removes staged runtimes: OK")
+    request("projects/" + grouped["id"], {"env": {"SHARED": "current"}, "test_command": "exit 1"}, "PATCH")
+    restarted_group = deploy_project({"deployment_id": first_group["id"]}, "redeploy")
+    assert restarted_group["redeploy_of"] == first_group["id"] and "Cloning into" not in restarted_group["log"]
+    for revision_id in restarted_group["container_releases"]:
+        revision = request("deployments/" + revision_id)
+        assert "SHARED=current" in inspect_if_present(revision["container"])["Config"]["Env"]
+    process.terminate()
+    process.wait(timeout=15)
+    process = subprocess.Popen([str(root / "startshipd")], env=environment, stdout=log, stderr=log)
+    for _ in range(60):
+        try:
+            assert "grouped api /probe" in grouped_response("/api/probe")
+            assert request("releases/" + restarted_group["id"])["status"] == "running"
+            break
+        except Exception:
+            time.sleep(0.2)
+    else:
+        raise RuntimeError("grouped release did not survive restart")
+    print("grouped artifact redeploy skips clone/build/tests, uses shared current env and survives daemon restart: OK")
     print("E2E PASS")
 finally:
     if process and process.poll() is None:
