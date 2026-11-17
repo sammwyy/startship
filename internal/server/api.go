@@ -691,6 +691,10 @@ func (a *Server) api() http.Handler {
 			}
 		case "routes":
 			v.Parent = v.ProjectID
+			if v.Port < 0 || v.Port > 65535 {
+				fail(w, 400, "container port must be between 1 and 65535, or 0 for the detected port")
+				return
+			}
 			if v.ContainerID != "" {
 				v.AppID = v.ContainerID
 			}

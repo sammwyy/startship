@@ -31,7 +31,11 @@ func TestWorkspaceDomains(t *testing.T) {
 	route("apps.example.com", 403)
 	route("www.example.com", 403)
 	route("x.other.com", 403)
-	accountRequest(t, f.h, "POST", "routes", `{"project_id":"`+f.project.ID+`","container_id":"web","host":"anything.test","path_prefix":"/"}`, f.root, 200)
+	external := decodeBody[Record](t, accountRequest(t, f.h, "POST", "routes", `{"project_id":"`+f.project.ID+`","container_id":"web","host":"anything.test","path_prefix":"/"}`, f.root, 200).Body.Bytes())
+	// A contributor may retain an existing hostname, but cannot introduce an
+	// unregistered hostname when editing the path, destination, or port.
+	accountRequest(t, f.h, "PATCH", "routes/"+external.ID, `{"path_prefix":"/status","port":9000}`, f.bob, 200)
+	accountRequest(t, f.h, "PATCH", "routes/"+external.ID, `{"host":"another.test"}`, f.bob, 403)
 
 	list := decodeBody[struct {
 		Domains   []WorkspaceDomain `json:"domains"`

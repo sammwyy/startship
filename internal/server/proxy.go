@@ -42,7 +42,11 @@ func (a *Server) refresh() {
 			continue
 		}
 		d, _ := a.store.Get(app.Active)
-		targets = append(targets, Target{Route: r, Deployment: d, Port: app.Port})
+		port := r.Port
+		if port == 0 {
+			port = app.Port
+		}
+		targets = append(targets, Target{Route: r, Deployment: d, Port: port})
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].Route.ID < targets[j].Route.ID })
 	a.routeMu.Lock()

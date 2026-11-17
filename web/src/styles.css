@@ -4,6 +4,237 @@
   margin: 0;
   min-width: 0;
 }
+.route-editor {
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.route-editor-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.route-editor-heading h3,
+.route-editor-heading p {
+  margin: 0;
+}
+.route-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.route-editor-section {
+  padding: 22px 24px;
+  min-width: 0;
+}
+.route-editor-section + .route-editor-section {
+  border-left: 1px solid var(--line);
+}
+.route-step {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 20px;
+  color: var(--success);
+}
+.route-editor .host-composer {
+  flex-wrap: wrap;
+}
+.route-editor .host-composer > * {
+  min-width: 0;
+}
+.route-editor .host-composer [name="domain"] {
+  flex-basis: 55%;
+}
+.route-editor .host-composer [name="host"] {
+  flex-basis: 100%;
+}
+.route-editor .host-composer .host-dot {
+  flex: 0;
+}
+.route-editor .host-picker {
+  margin-bottom: 14px;
+}
+.route-editor label {
+  font-size: 11px;
+}
+.route-editor :is(input:not([type="checkbox"]), select):focus-visible {
+  outline: none;
+}
+.route-editor .field-label {
+  font-size: 11px;
+}
+.route-auto-target {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 14px;
+  min-height: 72px;
+}
+.route-auto-target .field-label {
+  margin: 0 0 4px;
+}
+.route-preview {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0 24px;
+  padding: 15px 18px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+.route-preview > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.route-preview > .icon {
+  color: var(--success);
+  flex-shrink: 0;
+}
+.route-preview strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.route-advanced {
+  margin: 16px 24px;
+}
+.route-advanced summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+}
+.route-advanced label {
+  margin-top: 14px;
+}
+.route-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+}
+.route-editor-footer p,
+.route-editor-footer .form-actions {
+  margin: 0;
+}
+.route-editor-footer .form-actions {
+  flex-shrink: 0;
+}
+.route-editor .form-error {
+  margin: 0 24px 16px;
+}
+.domain-route-labels,
+.domain-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+.domain-route-labels {
+  font-size: 10px;
+  color: var(--muted);
+  background: var(--raised);
+  padding-block: 10px;
+}
+.domain-route:last-child {
+  border-bottom: 0;
+}
+.domain-route-address {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.domain-route-address > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.domain-route-address a {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+.domain-route-address a .icon {
+  width: 12px;
+  margin-left: 4px;
+  color: var(--muted);
+}
+.domain-route-target,
+.domain-route-target > span {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.domain-route-target > .icon {
+  margin-right: 12px;
+  color: var(--muted);
+}
+.domain-route-target strong {
+  color: var(--success);
+  font-weight: 500;
+}
+.domain-route-actions {
+  display: flex;
+  gap: 6px;
+}
+.route-empty {
+  padding: 40px 24px;
+  text-align: center;
+}
+.route-empty .card-icon {
+  margin: 0 auto;
+}
+.route-empty p {
+  max-width: 420px;
+  margin: 8px auto 16px;
+}
+.route-empty .text-link {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--success);
+}
+@media (max-width: 800px) {
+  .route-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .route-editor-section + .route-editor-section {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .route-editor-footer {
+    flex-wrap: wrap;
+  }
+  .route-editor-footer .form-actions {
+    margin-left: auto;
+  }
+  .domain-route {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .domain-route-labels {
+    display: none;
+  }
+  .domain-route-target {
+    grid-column: 1;
+  }
+  .domain-route-actions {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+}
 .auth-form .form-fields > button {
   width: 100%;
 }

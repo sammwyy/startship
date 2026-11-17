@@ -1,177 +1,190 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useProject } from "../../layouts/ProjectLayout";
 import { useSession } from "../../providers/SessionProvider";
 import { useUI } from "../../providers/UIProvider";
 import { remove, request } from "../../services/api";
 import type { DomainRoute, WorkspaceDomain } from "../../services/types";
-import { text } from "../../lib/project";
-import { HostPicker, pickedHost } from "../../components/HostPicker";
 import { ProjectHeading } from "../../components/ProjectHeading";
-import { Field } from "../../components/ui";
+import { RouteEditor } from "../../components/RouteEditor";
 import { Icon } from "../../components/Icon";
 
 export function DomainsView() {
   const { project, containers, routes, refresh } = useProject(),
     { user, can } = useSession(),
     ui = useUI();
+  const [editor, setEditor] = useState<{
+    route?: DomainRoute;
+    domains: WorkspaceDomain[];
+  }>();
+  const [loading, setLoading] = useState(false);
   const editable = can("domains.manage", project);
   async function edit(route?: DomainRoute) {
-    if (!containers.length) {
-      ui.notify("Deploy the project to detect its containers first");
-      return;
+    setLoading(true);
+    try {
+      const { domains } = await request<{ domains: WorkspaceDomain[] }>(
+        `workspaces/${project.workspace_id}/domains`,
+      );
+      setEditor({ route, domains });
+    } finally {
+      setLoading(false);
     }
-    const { domains } = await request<{ domains: WorkspaceDomain[] }>(
-      `workspaces/${project.workspace_id}/domains`,
-    );
-    ui.dialog({
-      title: route ? "Edit domain" : "Connect domain",
-      description:
-        "Pick a hostname under one of the workspace domains. Longer path prefixes take priority.",
-      submit: route ? "Save domain" : "Connect domain",
-      fields: (
-        <>
-          <HostPicker
-            domains={domains}
-            host={route?.host}
-            admin={user?.platform_admin}
-          />
-          <Field
-            label="Path prefix"
-            name="path_prefix"
-            defaultValue={route?.path_prefix || "/"}
-            required
-          />
-          {containers.length > 1 ? (
-            <label>
-              Target container
-              <select
-                name="container_id"
-                defaultValue={route?.container_id || route?.app_id}
-              >
-                {containers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} · :{c.port}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <>
-              <input
-                type="hidden"
-                name="container_id"
-                value={containers[0].id}
-              />
-              <p className="small muted">Target: {containers[0].name}</p>
-            </>
-          )}
-          <label className="inline-check">
-            <input
-              type="checkbox"
-              name="strip_prefix"
-              defaultChecked={route?.strip_prefix}
-            />
-            Strip path prefix before forwarding
-          </label>
-          <p className="note">
-            Point this hostname’s DNS A record to your server’s public IP.
-          </p>
-        </>
-      ),
-      onSubmit: async (form) => {
-        await request(
-          `routes${route ? `/${route.id}` : ""}`,
-          {
-            host: pickedHost(form),
-            project_id: project.id,
-            container_id: text(form, "container_id"),
-            path_prefix: text(form, "path_prefix"),
-            strip_prefix: form.has("strip_prefix"),
-          },
-          route ? "PATCH" : "POST",
-        );
-        await refresh();
-        ui.notify("Domain saved");
-      },
-    });
   }
   return (
     <>
-      <ProjectHeading title="Domains" />
-      <div className="section-head">
-        <h2>Domains</h2>
-        <button
-          className="primary"
-          disabled={!editable}
-          onClick={() => ui.run(() => edit())}
-        >
-          <Icon name="plus" />
-          Connect domain
-        </button>
-      </div>
-      <div className="panel">
-        {routes.map((route) => (
-          <div className="container-row" key={route.id}>
-            <span className="card-icon">
-              <Icon name="globe" />
-            </span>
-            <div className="container-copy">
-              <a
-                href={
-                  route.url && /^https?:\/\//.test(route.url)
-                    ? route.url
-                    : undefined
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                {route.host}
-                {route.path_prefix}
-              </a>
-              <span>
-                {containers.find(
-                  (c) => c.id === (route.container_id || route.app_id),
-                )?.name || "Container unavailable"}
-                {route.strip_prefix ? " · strips prefix" : ""}
-              </span>
-            </div>
-            <button
-              disabled={!editable}
-              aria-label={`Edit ${route.host}`}
-              onClick={() => ui.run(() => edit(route))}
-            >
-              Edit
-            </button>
-            <button
-              disabled={!editable}
-              aria-label={`Delete ${route.host}`}
-              onClick={() =>
-                ui.dialog({
-                  title: "Disconnect domain",
-                  description: `Disconnect ${route.host}${route.path_prefix}?`,
-                  submit: "Disconnect",
-                  onSubmit: async () => {
-                    await remove(`routes/${route.id}`);
-                    await refresh();
-                  },
-                })
-              }
-            >
-              <Icon name="close" />
-            </button>
+      <ProjectHeading
+        title="Domains"
+        actions={
+          <button
+            className="primary"
+            disabled={!editable || !containers.length || loading || !!editor}
+            onClick={() => ui.run(() => edit())}
+          >
+            <Icon name="plus" />
+            {loading ? "Loading…" : "Connect domain"}
+          </button>
+        }
+      />
+      {editor && (
+        <>
+          {!editor.domains.length && !user?.platform_admin && (
+            <p className="note">
+              Register a domain in{" "}
+              <Link to={`/workspace/${project.workspace_id}/settings`}>
+                Workspace settings
+              </Link>{" "}
+              first, or ask a workspace administrator.
+            </p>
+          )}
+          <RouteEditor
+            key={editor.route?.id || "new"}
+            containers={containers}
+            domains={editor.domains}
+            route={editor.route}
+            admin={user?.platform_admin}
+            onCancel={() => setEditor(undefined)}
+            onSave={async (data) => {
+              await request(
+                `routes${editor.route ? `/${editor.route.id}` : ""}`,
+                { ...data, project_id: project.id },
+                editor.route ? "PATCH" : "POST",
+              );
+              await refresh();
+              setEditor(undefined);
+              ui.notify("Route saved");
+            }}
+          />
+        </>
+      )}
+      {!!routes.length && (
+        <div className="panel domain-routes">
+          <div className="domain-route-labels">
+            <span>Public address</span>
+            <span>Destination</span>
           </div>
-        ))}
-        {!routes.length && (
-          <p className="panel-pad small muted">
-            No domains connected. Deploy the project, then point a hostname to
-            it.
+          {routes.map((route) => {
+            const target = containers.find(
+              (c) => c.id === (route.container_id || route.app_id),
+            );
+            return (
+              <div className="domain-route" key={route.id}>
+                <div className="domain-route-address">
+                  <span className="card-icon">
+                    <Icon name="globe" />
+                  </span>
+                  <div>
+                    <a
+                      href={
+                        route.url && /^https?:\/\//.test(route.url)
+                          ? route.url
+                          : undefined
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {route.host}
+                      <span className="muted">{route.path_prefix}</span>
+                      <Icon name="arrow" />
+                    </a>
+                    <span className="small muted">
+                      {route.strip_prefix
+                        ? "Path prefix removed"
+                        : "Original path forwarded"}
+                    </span>
+                  </div>
+                </div>
+                <div className="domain-route-target">
+                  <Icon name="next" />
+                  <span>
+                    <Icon name="box" />
+                    {target?.name || "Container unavailable"}
+                    <strong>:{route.port || target?.port || "—"}</strong>
+                  </span>
+                </div>
+                <div className="domain-route-actions">
+                  <button
+                    disabled={!editable || loading}
+                    aria-label={`Edit ${route.host}${route.path_prefix}`}
+                    onClick={() => ui.run(() => edit(route))}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    disabled={!editable}
+                    aria-label={`Disconnect ${route.host}${route.path_prefix}`}
+                    onClick={() =>
+                      ui.dialog({
+                        title: "Disconnect domain",
+                        description: `Disconnect ${route.host}${route.path_prefix}? The container will keep running.`,
+                        submit: "Disconnect",
+                        onSubmit: async () => {
+                          await remove(`routes/${route.id}`);
+                          if (editor?.route?.id === route.id)
+                            setEditor(undefined);
+                          await refresh();
+                        },
+                      })
+                    }
+                  >
+                    <Icon name="trash" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {!routes.length && !editor && (
+        <div className="panel route-empty">
+          <span className="card-icon">
+            <Icon name="globe" />
+          </span>
+          <h3>
+            {containers.length
+              ? "Give your project an address"
+              : "Deploy before connecting a domain"}
+          </h3>
+          <p className="muted">
+            {containers.length
+              ? "Connect a hostname and path. We’ll forward requests to the right container and port."
+              : "Your first deployment detects the containers you can route traffic to."}
           </p>
-        )}
-      </div>
-      <p className="note">
-        One container is the default target. With multiple containers, choose a
-        target for each hostname or path. Longer matching path prefixes take
-        priority.
-      </p>
+          {!containers.length && (
+            <Link
+              className="text-link"
+              to={`/project/${project.id}/deployments`}
+            >
+              Go to deployments <Icon name="next" />
+            </Link>
+          )}
+        </div>
+      )}
+      {!!routes.length && (
+        <p className="note">
+          Routes with a longer matching path take priority. Use the same
+          hostname with different paths to reach different containers.
+        </p>
+      )}
     </>
   );
 }

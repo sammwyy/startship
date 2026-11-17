@@ -20,26 +20,45 @@ export function HostPicker({
   domains,
   host = "",
   admin,
+  onHostChange,
 }: {
   domains: WorkspaceDomain[];
   host?: string;
   admin?: boolean;
+  onHostChange?: (host: string) => void;
 }) {
   const exact = domains.find((d) => d.apex && d.name === host),
     wildcard =
       !exact &&
       domains.find((d) => d.subdomains && host.endsWith(`.${d.name}`));
+  const existingOnly = !!host && !exact && !wildcard && !admin;
   const [selected, setSelected] = useState(
     exact?.name ||
       (wildcard
         ? `*.${wildcard.name}`
-        : host && admin
-          ? ""
-          : domains.length
-            ? `${domains[0].subdomains ? "*." : ""}${domains[0].name}`
-            : ""),
+        : existingOnly
+          ? host
+          : host && admin
+            ? ""
+            : domains.length
+              ? domainPatterns(domains[0])[0]
+              : ""),
   );
-  if (!domains.length && !admin)
+  const [sub, setSub] = useState(
+    wildcard ? host.slice(0, -wildcard.name.length - 1) : "",
+  );
+  const [custom, setCustom] = useState(!exact && !wildcard ? host : "");
+  function change(domain: string, prefix = sub, hostname = custom) {
+    setSelected(domain);
+    onHostChange?.(
+      domain === ""
+        ? hostname
+        : domain.startsWith("*.")
+          ? `${prefix.trim().replace(/\.$/, "")}.${domain.slice(2)}`
+          : domain,
+    );
+  }
+  if (!domains.length && !admin && !existingOnly)
     return (
       <p className="note">
         This workspace has no domains yet. A workspace administrator adds them
@@ -56,9 +75,12 @@ export function HostPicker({
           name="sub"
           aria-label="Subdomain"
           placeholder="app"
-          defaultValue={
-            wildcard ? host.slice(0, -wildcard.name.length - 1) : ""
-          }
+          value={sub}
+          onChange={(e) => {
+            setSub(e.target.value);
+            change(selected, e.target.value);
+          }}
+          disabled={mode !== "sub"}
           required={mode === "sub"}
           autoComplete="off"
         />
@@ -67,8 +89,11 @@ export function HostPicker({
           name="domain"
           aria-label="Domain"
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onChange={(e) => change(e.target.value)}
         >
+          {existingOnly && (
+            <option value={host}>{host} (existing route)</option>
+          )}
           {domains.flatMap(domainPatterns).map((p) => (
             <option key={p}>{p}</option>
           ))}
@@ -78,11 +103,22 @@ export function HostPicker({
           name="host"
           aria-label="Hostname"
           placeholder="example.com"
-          defaultValue={!exact && !wildcard ? host : ""}
+          value={custom}
+          onChange={(e) => {
+            setCustom(e.target.value);
+            change(selected, sub, e.target.value);
+          }}
+          disabled={mode !== "custom"}
           required={mode === "custom"}
           autoComplete="off"
         />
       </div>
+      {existingOnly && selected === host && (
+        <p className="small muted">
+          This hostname is outside the workspace’s registered domains. You can
+          keep it on this existing route, or choose a registered domain.
+        </p>
+      )}
     </div>
   );
 }
