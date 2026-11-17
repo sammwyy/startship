@@ -113,6 +113,7 @@ func (a *Server) insertUser(user, pass string, pending, personal bool) (string, 
 			return "", e
 		}
 	}
+	var changes []Record
 	if personal {
 		ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace", Created: time.Now().UTC()}
 		b, _ := json.Marshal(ws)
@@ -122,8 +123,13 @@ func (a *Server) insertUser(user, pass string, pending, personal bool) (string, 
 		if _, e = a.grant(tx, id, "administrator", scopeWorkspace, ws.ID, "setup"); e != nil {
 			return "", e
 		}
+		changes = append(changes, ws)
 	}
-	return id, tx.Commit()
+	if e := tx.Commit(); e != nil {
+		return "", e
+	}
+	a.store.Notify(changes...)
+	return id, nil
 }
 
 // resetPassword sets a temporary password that must be replaced at the next sign-in.

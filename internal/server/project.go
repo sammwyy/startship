@@ -375,6 +375,7 @@ func (a *Server) activateProject(projectID, releaseID string, containers []Recor
 	if err = tx.Commit(); err != nil {
 		return err
 	}
+	a.store.Notify(changes...)
 	a.refresh()
 	for _, d := range retired {
 		if d.Container != "" {

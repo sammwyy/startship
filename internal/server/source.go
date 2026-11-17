@@ -86,5 +86,9 @@ func migrateProjectSources(s *Store) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	s.Notify(changes...)
+	return nil
 }
