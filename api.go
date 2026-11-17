@@ -33,16 +33,19 @@ type apiRecord struct {
 	Record
 	URL          string `json:"url,omitempty"`
 	Redeployable bool   `json:"redeployable,omitempty"`
+	HasGitToken  bool   `json:"has_git_token,omitempty"`
 }
 
 func publicRecord(v Record) apiRecord {
+	hasToken := v.GitToken != ""
 	v.GitToken = ""
 	if v.Kind == "apps" {
 		v.GitURL, v.Branch = "", ""
 	}
-	out := apiRecord{Record: v}
+	out := apiRecord{Record: v, HasGitToken: v.Kind == "projects" && hasToken}
 	if v.Kind == "routes" {
 		out.URL = routeURL(v)
+		out.ContainerID = v.AppID
 	}
 	return out
 }
@@ -96,6 +99,95 @@ func (a *Server) user(r *http.Request) string {
 	var id string
 	a.store.db.QueryRow("SELECT user_id FROM sessions WHERE id=? AND expires>?", c.Value, time.Now().Unix()).Scan(&id)
 	return id
+}
+func (a *Server) updateAccount(w http.ResponseWriter, r *http.Request, uid string) {
+	var v struct {
+		Username        *string `json:"username"`
+		CurrentPassword string  `json:"current_password"`
+		NewPassword     *string `json:"new_password"`
+	}
+	if decode(w, r, &v) != nil {
+		fail(w, 400, "invalid JSON")
+		return
+	}
+	if v.Username == nil && v.NewPassword == nil {
+		fail(w, 400, "provide a username or new password")
+		return
+	}
+	if v.Username != nil {
+		name := strings.TrimSpace(*v.Username)
+		if len(name) < 1 || len(name) > 100 {
+			fail(w, 400, "username must be between 1 and 100 bytes")
+			return
+		}
+		v.Username = &name
+	}
+	if v.NewPassword != nil && (len(*v.NewPassword) < 8 || len(*v.NewPassword) > 72) {
+		fail(w, 400, "new password must be between 8 and 72 bytes")
+		return
+	}
+	if v.CurrentPassword == "" {
+		fail(w, 400, "current password required")
+		return
+	}
+	a.store.mu.Lock()
+	defer a.store.mu.Unlock()
+	tx, err := a.store.db.Begin()
+	if err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	defer tx.Rollback()
+	cookie, _ := r.Cookie("startship_session")
+	var name, hash string
+	err = tx.QueryRow("SELECT u.username,u.password FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND s.id=? AND s.expires>?", uid, cookie.Value, time.Now().Unix()).Scan(&name, &hash)
+	if err != nil {
+		fail(w, 401, "session expired; sign in again")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(v.CurrentPassword)) != nil {
+		fail(w, 403, "current password is incorrect")
+		return
+	}
+	if v.Username != nil {
+		name = *v.Username
+		var count int
+		if err = tx.QueryRow("SELECT count(*) FROM users WHERE username=? AND id<>?", name, uid).Scan(&count); err != nil {
+			fail(w, 500, "account update failed")
+			return
+		}
+		if count != 0 {
+			fail(w, 409, "username is already in use")
+			return
+		}
+	}
+	if v.NewPassword != nil {
+		var generated []byte
+		generated, err = bcrypt.GenerateFromPassword([]byte(*v.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			fail(w, 500, "account update failed")
+			return
+		}
+		hash = string(generated)
+	}
+	if _, err = tx.Exec("UPDATE users SET username=?,password=? WHERE id=?", name, hash, uid); err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	token := randomID()
+	if _, err = tx.Exec("DELETE FROM sessions WHERE user_id=?", uid); err == nil {
+		_, err = tx.Exec("INSERT INTO sessions VALUES(?,?,?)", token, uid, time.Now().Add(7*24*time.Hour).Unix())
+	}
+	if err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode, MaxAge: 604800})
+	reply(w, 200, map[string]string{"id": uid, "username": name})
 }
 func (a *Server) api() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -158,6 +250,8 @@ func (a *Server) api() http.Handler {
 				fail(w, 400, "invalid JSON")
 				return
 			}
+			a.store.mu.Lock()
+			defer a.store.mu.Unlock()
 			var id, hash string
 			e := a.store.db.QueryRow("SELECT id,password FROM users WHERE username=?", strings.TrimSpace(v.Username)).Scan(&id, &hash)
 			if e != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(v.Password)) != nil {
@@ -187,6 +281,15 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		if p[1] == "me" {
+			if r.Method == "PATCH" {
+				a.updateAccount(w, r, uid)
+				return
+			}
+			if r.Method != "GET" {
+				w.Header().Set("Allow", "GET, PATCH")
+				fail(w, 405, "method not allowed")
+				return
+			}
 			var name string
 			a.store.db.QueryRow("SELECT username FROM users WHERE id=?", uid).Scan(&name)
 			reply(w, 200, map[string]string{"id": uid, "username": name})
@@ -197,7 +300,15 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		kind := p[1]
-		if kind != "workspaces" && kind != "projects" && kind != "apps" && kind != "routes" && kind != "deployments" {
+		containers := kind == "containers"
+		if containers {
+			if r.Method != "GET" {
+				fail(w, 405, "containers are detected and managed by their project")
+				return
+			}
+			kind = "apps"
+		}
+		if kind != "workspaces" && kind != "projects" && kind != "apps" && kind != "routes" && kind != "deployments" && kind != "releases" {
 			fail(w, 404, "not found")
 			return
 		}
@@ -212,6 +323,18 @@ func (a *Server) api() http.Handler {
 		}
 		if len(p) == 4 && kind == "projects" && p[3] == "traffic" {
 			a.projectTraffic(w, r, old)
+			return
+		}
+		if len(p) == 4 && kind == "projects" && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" {
+			a.projectDeployAPI(w, r, old, p[3])
+			return
+		}
+		if containers && len(p) == 4 && p[3] == "logs" {
+			a.containerLogs(w, r, old)
+			return
+		}
+		if kind == "apps" && old.ReleaseID != "" && r.Method != "GET" && r.Method != "DELETE" {
+			fail(w, 405, "detected containers are configured and deployed through their project")
 			return
 		}
 		if len(p) == 4 && kind == "apps" && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" {
@@ -262,6 +385,12 @@ func (a *Server) api() http.Handler {
 		if r.Method == "GET" {
 			if len(p) > 2 {
 				result := publicRecord(old)
+				if containers {
+					result = a.containerRecord(old)
+				}
+				if old.Kind == "releases" && (old.Status == "running" || old.Status == "superseded") {
+					result.Redeployable = a.projectReleaseAvailable(old) == nil
+				}
 				if old.Kind == "deployments" && (old.Status == "running" || old.Status == "superseded") {
 					result.Redeployable = releaseAvailable(old) == nil
 				}
@@ -279,12 +408,19 @@ func (a *Server) api() http.Handler {
 				if parent := r.URL.Query().Get("app_id"); parent != "" && v.AppID != parent {
 					continue
 				}
-				out = append(out, publicRecord(v))
+				if (kind == "deployments" || kind == "releases") && r.URL.Query().Get("logs") == "false" {
+					v.Log = ""
+				}
+				result := publicRecord(v)
+				if containers {
+					result = a.containerRecord(v)
+				}
+				out = append(out, result)
 			}
 			reply(w, 200, out)
 			return
 		}
-		if kind == "deployments" {
+		if kind == "deployments" || kind == "releases" {
 			fail(w, 405, "read only")
 			return
 		}
@@ -353,6 +489,21 @@ func (a *Server) api() http.Handler {
 		switch kind {
 		case "projects":
 			v.Parent = v.WorkspaceID
+			if v.RootDir == "" {
+				v.RootDir = "."
+			}
+			if v.BuildType == "" {
+				v.BuildType = "auto"
+			}
+			if !safeRoot(v.RootDir) || v.Port < 0 || v.Port > 65535 || !validBuildType(v.BuildType) {
+				fail(w, 400, "invalid project configuration")
+				return
+			}
+			v.ConfigVersion = 1
+			if v.ConfigConfirmed {
+				v.ConfigConflict = false
+			}
+			v.ConfigConfirmed = false
 			if v.GitURL != "" {
 				if e := validateGit(v.GitURL); e != nil {
 					fail(w, 400, e.Error())
@@ -394,6 +545,10 @@ func (a *Server) api() http.Handler {
 			}
 		case "routes":
 			v.Parent = v.ProjectID
+			if v.ContainerID != "" {
+				v.AppID = v.ContainerID
+			}
+			v.ContainerID = ""
 			v.Host = normalizeHost(v.Host)
 			v.PathPrefix = normalizePrefix(v.PathPrefix)
 			app, e := a.store.get(v.AppID)
@@ -468,6 +623,26 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	project := target
+	if target.Kind == "apps" {
+		project, e = a.projectSource(target)
+		if e != nil {
+			fail(w, 400, e.Error())
+			return
+		}
+	}
+	if project.ConfigVersion > 0 {
+		if r.Header.Get("X-GitHub-Event") != "push" || event.Ref != "refs/heads/"+project.Branch || !project.AutoDeploy {
+			reply(w, 200, map[string]bool{"ignored": true})
+			return
+		}
+		d, err := a.enqueueProject(project, Record{})
+		if err != nil {
+			fail(w, 409, err.Error())
+			return
+		}
+		reply(w, 202, publicRecord(d))
+		return
+	}
 	apps := []Record{}
 	if target.Kind == "apps" {
 		project, e = a.projectSource(target)

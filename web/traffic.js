@@ -1,15 +1,15 @@
 'use strict';
 
-// Kept separate from the dashboard navigation prototype in PR #12.
+// Project metrics view; the shared dashboard shell owns project navigation.
 async function trafficPage(id) {
  const version=viewVersion, project=await api('projects/'+encodeURIComponent(id));
  if(version!==viewVersion)return;
- workspace=workspaces.find(w=>w.id===project.workspace_id);
- shell('<a href="#project/'+esc(project.id)+'">'+esc(project.name)+'</a> &nbsp; / &nbsp; Traffic',
-  '<div class="traffic-layout"><aside class="traffic-sidebar"><a class="traffic-project" href="#project/'+esc(project.id)+'"><span class="card-icon">'+icon('box')+'</span><strong>'+esc(project.name)+'</strong></a><span class="traffic-kicker">PROJECT</span><nav aria-label="Project monitoring"><a href="#project/'+esc(project.id)+'">'+icon('grid')+'Project overview</a><a class="active" aria-current="page" href="#project/'+esc(project.id)+'/traffic">'+icon('activity')+'Traffic<span class="traffic-dot"></span></a></nav><div class="traffic-source">'+icon('branch')+'<span>'+esc(project.branch||'No source connected')+'</span><small>One project. One source.</small></div></aside>'+ 
+ workspace=workspaces.find(w=>w.id===project.workspace_id)||workspace;
+ if(workspace)localStorage.setItem('workspace',workspace.id);
+ shell(
   '<section class="traffic-main" aria-labelledby="traffic-title"><div class="traffic-heading"><div><div class="traffic-kicker">OBSERVABILITY / BUILT IN</div><h1 id="traffic-title">Live traffic<span class="traffic-prototype">Prototype</span></h1><p>Your router sees it. Now you do.</p></div><div class="traffic-controls"><span id="traffic-live" class="traffic-live" role="status">Connecting…</span><div class="traffic-ranges" aria-label="Traffic time range">'+[[300,'5m'],[900,'15m'],[3600,'1h']].map(([n,label])=>'<button data-window="'+n+'" aria-pressed="'+(n===300)+'">'+label+'</button>').join('')+'</div></div></div>'+ 
   '<div id="traffic-error" role="alert" hidden></div><div id="traffic-data"><div class="traffic-loading">Listening to your project…</div></div>'+ 
-  '<div class="traffic-footnote"><span>'+icon('lock')+'No agents. No SDKs. Nothing to configure.</span><span>Last hour · in memory · resets on restart</span></div></section></div>');
+  '<div class="traffic-footnote"><span>'+icon('lock')+'No agents. No SDKs. Nothing to configure.</span><span>Last hour · in memory · resets on restart</span></div></section>',project);
  $('.dashboard').classList.add('traffic-shell');
  let windowSeconds=300,loading=false;
  const current=()=>version===viewVersion&&!!$('#traffic-data');

@@ -14,14 +14,13 @@ docker compose up --build -d
 
 Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so use a strong, unique password and keep it safe.
 
-From there: open a workspace (or create one with **+ New workspace**; the top-bar selector switches between them) and create a project connected to **one Git repository**. The project owns the repository, branch, credentials, and GitHub webhook. Choose a single application to build the repository root, or a monorepo to define frontend, backend, or daemon apps in folders of that same repository. Apps only configure their root directory, build, port, variables, and deployment behavior; they cannot select another source. Deploy an app and connect a domain to expose it.
+From there, use the sidebar's workspace menu to switch or create workspaces, then connect a project to **one Git repository**. Configure the **project**, not separate apps: source, build defaults, environment, tests, and push deployment are shared. Startship detects the runnable containers in that repository and manages them as **one project deployment**. Most projects have one container; a monorepo can have several HTTP servers.
 
-Projects open directly into their application's controls. Multi-app projects add an application switcher; single-app projects skip that extra navigation. Both use the same deployments, domains, app settings, and **Project Git** tabs, with live build logs and the project's copyable webhook credentials. **Project source** edits the source shared by every app. Environment variables use one KEY=VALUE per line. Sign out next to your avatar in the top-right corner. The theme button remembers your light/dark choice.
+Every project uses the same direct sidebar sections: **Deployments, Logs, Containers, Domains, Source, Environment, Settings**. There is no app selector, app creation step, per-app configuration, or per-container deploy action. Containers are a read-only runtime view with links to logs. Deployments show one release history and combined build output; Logs can show project build output or a container's runtime output. Connect a domain after the first deployment; a single container is selected automatically, while multiple containers offer an explicit target.
 
-Use **Open app** or a public endpoint in the application's Deployments or Domains tab to visit the deployed app, not the
-dashboard or internal container port. URLs use the configured router port and
-HTTPS when ACME is enabled; if a gateway maps different external ports, use your
-gateway's public URL instead.
+**All projects** returns to the selected workspace in one click. On narrow screens the navigation button opens a drawer. The bottom account menu includes username/password editing, the remembered light/dark theme choice, and sign out. Account changes require your current password, rotate this session, and invalidate other sessions. Environment variables use one KEY=VALUE per line.
+
+Use a public link in **Domains** to visit a deployed project, not the dashboard or an internal container port. URLs include the configured router port and use HTTPS when ACME is enabled; behind a gateway, use its public URL.
 
 Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/dl/), Git and Docker Engine required; no C toolchain):
 
@@ -98,29 +97,18 @@ legacy releases remain on the shared network until redeployed.
 
 ### Deploy, rebuild, or redeploy
 
-**Deploy now** builds the project's current branch with cached layers.
-**Rebuild without cache** rebuilds without reusing executable build layers (base
-images and metadata-only steps may still be cached by BuildKit). **Redeploy** starts the active release without cloning, building,
-or running tests, using the app's current environment and port. The release
-inspector's **Redeploy this release** can roll back to an older successful release
-while its image or static directory still exists. All container starts retain the
-same limits, capabilities, project network, and health check. A failed start keeps
-the old active release. Static redeploys share the existing static files without
-deleting them when the previous release is superseded.
+**Deploy project** checks out the configured branch once and detects its containers. Containers build and pass health checks before all active pointers and routes switch transactionally. If any container fails, staged runtimes are removed and the whole previous project deployment stays active. Deployments are queued per project.
 
-API equivalents:
+**Build without cache** disables reusable executable build layers (base images may remain cached). **Redeploy selected** restarts all containers from a successful project release without cloning, building, or running tests, using the project's current shared environment and optional port override. Static releases share existing files. Artifact availability is checked for the entire selected release.
 
 ```text
-POST /api/apps/<id>/deploy     {}                   # cached build
-POST /api/apps/<id>/deploy     {"no_cache": true}   # uncached build
-POST /api/apps/<id>/redeploy   {}                   # active release
-POST /api/apps/<id>/redeploy   {"deployment_id": "<release-id>"}
+POST /api/projects/<id>/deploy     {}
+POST /api/projects/<id>/deploy     {"no_cache": true}
+POST /api/projects/<id>/redeploy   {}
+POST /api/projects/<id>/redeploy   {"deployment_id": "<project-release-id>"}
 ```
 
-Redeploy returns HTTP 409 if there is no active release, the selected release was
-not successful, or its image/static directory is gone; rebuild instead. The new
-deployment records `redeploy_of` and copies the source commit, and still activates
-atomically. Deployments are queued per app as before.
+Redeploy requires a successful project release whose images/static directories still exist. Legacy individually deployed containers remain online during upgrade; the first project deployment establishes the grouped release history.
 
 ## HTTPS
 
@@ -155,26 +143,25 @@ With `STARTSHIP_DASHBOARD_DOMAIN`, proxy requests for that hostname go to the da
 
 All bodies and responses are JSON. Login using `POST /api/login {"username":"admin","password":"..."}`, keep the `startship_session` cookie. `POST /api/logout`, `GET /api/me`. Sessions expire after seven days.
 
-Names are required and trimmed. Ownership-scoped `GET/POST /api/{workspaces,projects,apps,routes}` and `GET/PUT/PATCH/DELETE /api/{collection}/{id}`. Delete children before parents. POST returns the new object including ID. Fields:
+`PATCH /api/me {"username":"new-name","current_password":"...","new_password":"..."}` changes the signed-in account. Supply a username, a new password, or both, plus the current password. Usernames must be unique and 1–100 bytes after trimming; new passwords must be 8–72 bytes (bcrypt's limit). Success returns `{id, username}`, invalidates all previous sessions, and sets a fresh session cookie so the caller stays signed in. This is not a password-reset flow: you must know the current password.
+
+Ownership-scoped CRUD: `workspaces`, `projects`, and `routes`. Names are required except for routes. POST returns the new object including ID.
 
 - workspace: `name`
-- project: `workspace_id, name, git_url, git_token, branch`
-- app: `project_id, name, root_dir, build_type, port, env, test_command, auto_deploy`
-- route: `project_id, app_id, host, path_prefix, strip_prefix`
+- project: `workspace_id, name, git_url, git_token, branch, root_dir, build_type, port, env, test_command, auto_deploy`
+- route: `project_id, container_id, host, path_prefix, strip_prefix`
 
-Projects accept `git_url, git_token, branch` in addition to their name and workspace. Apps inherit that source; setting source fields on an app is rejected. Defaults: project branch `main`, app root `.`, build type `auto`, port 8080, path prefix `/`. Env is a JSON object of strings. Tokens are used only with HTTPS and excluded from API responses. API project responses include the shared webhook secret.
+Project defaults: branch `main`, root `.`, build strategy `auto`, port `0` (detect), automatic push deployment off. Env is a string map applied to all detected containers. Git tokens require HTTPS and are excluded from responses. Project responses include their signed webhook details.
 
-On upgrade, an existing source is promoted from apps to their project only when all populated app sources agree. Conflicting legacy repositories/branches/credentials are flagged for an explicit choice in **Project source**, without deleting apps or interrupting active deployments. Builds are blocked until that choice is made. Existing app-specific signed webhook URLs remain compatible but use the project's branch and source.
+Read-only runtime views: `GET /api/containers?project_id=...`, `GET /api/containers/{id}`, and `GET /api/containers/{id}/logs` (last 200 runtime lines; static containers have no serving process). Grouped history: `GET /api/releases?project_id=...&logs=false` for lightweight polling and `GET /api/releases/{id}` for combined logs and `container_releases` artifact IDs. Internal per-container build records remain readable under `deployments`. Legacy `apps` endpoints and `app_id` route fields remain for compatibility, not as dashboard configuration.
 
-`POST /api/apps/{id}/deploy {}` queues a build. `GET /api/deployments?app_id=...` and `GET /api/deployments/{id}` include persisted incremental logs. Lists also support `project_id` and `workspace_id` filters.
+Upgrade promotes compatible legacy source/settings to the project without interrupting traffic. Conflicting sources require choosing one source. Different legacy environments/test commands set a configuration warning and block project deployment until the shared settings and environment have been reviewed and explicitly confirmed with `config_confirmed: true`. Existing container records retain their old values for reference until a healthy project deployment replaces them.
 
-`POST /api/detect {"project_id":"..."}` clones the authenticated project's shared source and scans its root and immediate child directories. It returns `root_dir, build_type, port` candidates; create apps from these via the apps endpoint without repeating source fields.
-
-GitHub webhook: `POST /api/webhooks/github/{projectID}`; set the project's webhook secret in GitHub and select push events. HMAC SHA-256 signatures are required. Pushes to the project's branch enqueue builds for its apps with `auto_deploy: true`. One project webhook covers all app folders in that repository.
+GitHub webhook: `POST /api/webhooks/github/{projectID}`, with HMAC SHA-256 signature and push events. A matching branch queues **one project release** when the project's `auto_deploy` is enabled; legacy signed container URLs also resolve to the project. No container-specific push switches are used by project deployments.
 
 ## Builds and routing
 
-Auto detection order: Dockerfile, Node package.json, Python requirements.txt/pyproject.toml, Go go.mod, Rust Cargo.toml, static index.html. Each app builds serially; different apps build concurrently. Repositories are cloned shallowly at the configured branch. Roots cannot escape the checkout. For complex build workflows supply a Dockerfile.
+Auto detection checks the selected root first. A runnable root is one container; otherwise it descends up to three folder levels to discover server roots, ignoring dependency, hidden, and build directories. Workspace-only Node manifests are not servers. Detection recognizes Dockerfiles (including numeric EXPOSE ports), runnable Node projects, Python entrypoints, Go modules, Rust crates, and static index.html. Each detected root is an independent build context; complex shared-workspace builds need an appropriate Dockerfile. A manual project build strategy treats its selected root as a single container. Port defaults to 3000 for Node or 8080 otherwise, unless detected from EXPOSE or overridden project-wide. Builds within a project are serialized; separate projects can deploy concurrently.
 
 Generated Node images select the highest matching major from 18, 20, 22, 24 and 26 using `engines.node` major ranges (including `||`, `>=`, `^` and exact majors); absent or unsupported ranges fall back to 22. They install dependencies (`npm ci` with a lockfile, otherwise `npm install`), run a build script if present, and use npm start. A Procfile `web:` command overrides the launch command for Node and Python. Python installs requirements or pyproject.toml when present, then selects main.py, app.py, or manage.py (Django runserver on 0.0.0.0:$PORT), in that order; without an entrypoint it requests a Procfile instead of guessing. Standalone Python entrypoint files are also detected. Go builds the root main package; Rust expects one executable target. All generated images set PORT; your app must bind on 0.0.0.0. Test commands execute inside a disposable image container with app env. Static apps copy their root without .git (symlinks rejected).
 
@@ -188,7 +175,8 @@ For a monorepo, connect `api.example.com` with prefix `/` to the backend, `examp
 
 ```sh
 go vet ./... && go test ./...
+node --test scripts/navigation.test.cjs # optional frontend regression checks, Node 18+
 ./scripts/e2e.sh
 ```
 
-E2E requires Python 3, curl, Git and real Docker. Uses localhost ports 18080/18081, creates a local Dockerfile + Python + Rust + static monorepo, auto-detects and deploys all four through the API, tests route URLs, prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.
+E2E requires Python 3, curl, Git and real Docker. It also covers a two-HTTP-container project release, shared config, container domain targets, grouped failure preservation, artifact redeploy, and restart recovery. Uses localhost ports 18080/18081, creates a local Dockerfile + Python + Rust + static monorepo, auto-detects and deploys all four through the API, tests route URLs, prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.

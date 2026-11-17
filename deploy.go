@@ -18,6 +18,7 @@ import (
 type logWriter struct {
 	a      *Server
 	id     string
+	group  string
 	secret string
 	mu     sync.Mutex
 }
@@ -40,6 +41,9 @@ func (l *logWriter) Write(b []byte) (int, error) {
 		s = strings.ReplaceAll(s, l.secret, "[REDACTED]")
 	}
 	e := l.a.store.update(l.id, func(r *Record) { r.Log += s })
+	if e == nil && l.group != "" {
+		e = l.a.store.update(l.group, func(r *Record) { r.Log += s })
+	}
 	return len(b), e
 }
 func command(dir string, out io.Writer, name string, args ...string) error {
@@ -124,24 +128,38 @@ func checkoutRoot(dir, rootDir string) (string, error) {
 	return root, nil
 }
 
-func (a *Server) status(id, status string) { a.store.update(id, func(r *Record) { r.Status = status }) }
+func (a *Server) status(id, status string) {
+	a.store.update(id, func(r *Record) { r.Status = status })
+	if d, err := a.store.get(id); err == nil && d.ReleaseID != "" {
+		a.store.update(d.ReleaseID, func(r *Record) { r.Status = status })
+	}
+}
 func (a *Server) build(appID, id string) {
 	app, e := a.store.get(appID)
 	if e != nil {
 		return
 	}
-	logger := &logWriter{a: a, id: id, secret: app.GitToken}
+	a.buildContainer(app, id, "", "")
+}
+func (a *Server) buildContainer(app Record, id, checkout, commit string) {
+	var e error
+	d, err := a.store.get(id)
+	if err != nil {
+		return
+	}
+	logger := &logWriter{a: a, id: id, group: d.ReleaseID, secret: app.GitToken}
 	defer func() {
 		if e != nil {
 			a.store.update(id, func(r *Record) { r.Status = "failed"; now := time.Now(); r.Finished = &now })
 		}
-		a.logDeploymentResult(logger, app, e)
+		if d.ReleaseID == "" {
+			a.logDeploymentResult(logger, app, e)
+		} else if e != nil {
+			fmt.Fprintf(logger, "Container failed: %v\n", e)
+		} else {
+			fmt.Fprintln(logger, "Container healthy; ready for project activation")
+		}
 	}()
-	d, err := a.store.get(id)
-	if err != nil {
-		e = err
-		return
-	}
 	if d.RedeployOf != "" {
 		fmt.Fprintf(logger, "Redeploying release %s (no clone, build or tests)\n", d.RedeployOf)
 		if e = releaseAvailable(d); e != nil {
@@ -171,23 +189,27 @@ func (a *Server) build(appID, id string) {
 		return
 	}
 	a.store.update(id, func(r *Record) { r.Network = network })
-	dir := filepath.Join(a.data, "builds", id)
-	if e = os.MkdirAll(filepath.Dir(dir), 0700); e != nil {
-		return
+	dir := checkout
+	if dir == "" {
+		dir = filepath.Join(a.data, "builds", id)
+		if e = os.MkdirAll(filepath.Dir(dir), 0700); e != nil {
+			return
+		}
+		defer os.RemoveAll(dir)
+		if e = a.clone(source, dir, logger); e != nil {
+			return
+		}
+		var sha []byte
+		sha, e = exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
+		if e != nil {
+			return
+		}
+		commit = strings.TrimSpace(string(sha))
+		if e = os.RemoveAll(filepath.Join(dir, ".git")); e != nil {
+			return
+		}
 	}
-	defer os.RemoveAll(dir)
-	if e = a.clone(source, dir, logger); e != nil {
-		return
-	}
-	var sha []byte
-	sha, e = exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
-	if e != nil {
-		return
-	}
-	a.store.update(id, func(r *Record) { r.Commit = strings.TrimSpace(string(sha)) })
-	if e = os.RemoveAll(filepath.Join(dir, ".git")); e != nil {
-		return
-	}
+	a.store.update(id, func(r *Record) { r.Commit = commit })
 	var root string
 	root, e = checkoutRoot(dir, app.RootDir)
 	if e != nil {
@@ -365,6 +387,9 @@ func copyStatic(src, dest string) error {
 	})
 }
 func (a *Server) activate(app Record, id string) error {
+	if d, err := a.store.get(id); err == nil && d.ReleaseID != "" {
+		return a.store.update(id, func(r *Record) { r.Status = "ready"; now := time.Now(); r.Finished = &now })
+	}
 	a.store.mu.Lock()
 	current, e := a.store.get(app.ID)
 	if e != nil {
@@ -454,9 +479,28 @@ func (a *Server) restore() {
 					}
 				})
 			}
-		case "queued", "building", "testing", "starting":
+		case "queued", "building", "testing", "starting", "ready":
 			a.store.update(d.ID, func(r *Record) { r.Status = "failed"; r.Log += "daemon restarted during deployment\n" })
 			command("", nil, "docker", "rm", "-f", "startship-"+d.AppID+"-"+d.ID)
+		}
+	}
+	for _, release := range a.store.list("releases", "") {
+		interrupted := release.Status == "queued" || release.Status == "building" || release.Status == "testing" || release.Status == "starting"
+		if release.Status == "running" {
+			for _, id := range release.ContainerReleases {
+				d, err := a.store.get(id)
+				if err != nil || d.Status != "running" {
+					interrupted = true
+				}
+			}
+		}
+		if interrupted {
+			a.store.update(release.ID, func(r *Record) {
+				r.Status = "failed"
+				r.Log += "\nProject deployment interrupted by restart or a missing container\n"
+				now := time.Now().UTC()
+				r.Finished = &now
+			})
 		}
 	}
 	a.refresh()
