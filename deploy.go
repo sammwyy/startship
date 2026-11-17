@@ -100,6 +100,22 @@ func (a *Server) enqueue(app Record) (Record, error) {
 		return d, fmt.Errorf("deployment queue full")
 	}
 }
+func checkoutRoot(dir, rootDir string) (string, error) {
+	checkout, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	root, err := filepath.EvalSymlinks(filepath.Join(dir, rootDir))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(checkout, root)
+	if err != nil || !safeRoot(rel) {
+		return "", fmt.Errorf("root directory escapes repository")
+	}
+	return root, nil
+}
+
 func (a *Server) status(id, status string) { a.store.update(id, func(r *Record) { r.Status = status }) }
 func (a *Server) build(appID, id string) {
 	app, e := a.store.get(appID)
@@ -135,18 +151,11 @@ func (a *Server) build(appID, id string) {
 	if e = os.RemoveAll(filepath.Join(dir, ".git")); e != nil {
 		return
 	}
-	root := filepath.Join(dir, app.RootDir)
-	var resolved string
-	resolved, e = filepath.EvalSymlinks(root)
+	var root string
+	root, e = checkoutRoot(dir, app.RootDir)
 	if e != nil {
 		return
 	}
-	rel, er := filepath.Rel(dir, resolved)
-	if er != nil || !safeRoot(rel) {
-		e = fmt.Errorf("root directory escapes repository")
-		return
-	}
-	root = resolved
 	kind := app.BuildType
 	if kind == "auto" {
 		kind = detect(root)

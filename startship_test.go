@@ -133,6 +133,61 @@ func TestBuildFailureLog(t *testing.T) {
 	}
 }
 
+func TestCheckoutRoot(t *testing.T) {
+	base := t.TempDir()
+	checkout := filepath.Join(base, "_data", "builds", "checkout")
+	app := filepath.Join(checkout, "app")
+	outside := filepath.Join(base, "outside")
+	for _, dir := range []string{app, outside} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for link, target := range map[string]string{
+		filepath.Join(base, "data"):          filepath.Join(base, "_data"),
+		filepath.Join(base, "checkout-link"): checkout,
+		filepath.Join(checkout, "internal"):  app,
+		filepath.Join(checkout, "external"):  outside,
+		filepath.Join(checkout, "sibling"):   filepath.Dir(checkout),
+	} {
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, dir := range []string{checkout, filepath.Join(base, "data", "builds", "checkout"), filepath.Join(base, "checkout-link")} {
+		for _, tc := range []struct {
+			root, want string
+			escape     bool
+		}{
+			{"", checkout, false},
+			{".", checkout, false},
+			{"app", app, false},
+			{"internal", app, false},
+			{"external", "", true},
+			{"sibling", "", true},
+			{"..", "", true},
+		} {
+			t.Run(dir+"/"+tc.root, func(t *testing.T) {
+				got, err := checkoutRoot(dir, tc.root)
+				if tc.escape {
+					if err == nil || err.Error() != "root directory escapes repository" {
+						t.Fatalf("got %q, %v; want containment error", got, err)
+					}
+					return
+				}
+				if err != nil || got != tc.want {
+					t.Fatalf("got %q, %v; want %q", got, err, tc.want)
+				}
+			})
+		}
+	}
+	for _, tc := range []struct{ dir, root string }{{filepath.Join(base, "missing"), "."}, {checkout, "missing"}} {
+		if _, err := checkoutRoot(tc.dir, tc.root); !os.IsNotExist(err) {
+			t.Fatalf("got %v; want missing path error", err)
+		}
+	}
+}
+
 func TestDetection(t *testing.T) {
 	for _, v := range []struct{ file, kind string }{{"Dockerfile", "dockerfile"}, {"package.json", "node"}, {"requirements.txt", "python"}, {"pyproject.toml", "python"}, {"go.mod", "go"}, {"Cargo.toml", "rust"}, {"index.html", "static"}} {
 		t.Run(v.kind+v.file, func(t *testing.T) {
