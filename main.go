@@ -111,6 +111,11 @@ func main() {
 	if e := serve(servers); e != nil {
 		log.Fatal(e)
 	}
+	socket, e := a.serveSocket(socketPath(data))
+	if e != nil {
+		log.Fatal(e)
+	}
+	servers = append(servers, socket)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c
