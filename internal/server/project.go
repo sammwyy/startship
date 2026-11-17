@@ -435,25 +435,26 @@ func (a *Server) containerRecord(c Record) apiRecord {
 }
 
 func (a *Server) containerLogs(w http.ResponseWriter, r *http.Request, c Record) {
-	d, err := a.store.Get(c.Active)
-	if err != nil {
-		reply(w, 200, map[string]string{"log": "Container is not deployed yet."})
-		return
-	}
-	if d.StaticDir != "" {
-		reply(w, 200, map[string]string{"log": "Static container: files are served directly; no runtime process logs."})
-		return
-	}
-	if d.Container == "" {
-		reply(w, 200, map[string]string{"log": "No runtime output available."})
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-	defer cancel()
-	output, err := exec.CommandContext(ctx, "docker", "logs", "--tail", "200", d.Container).CombinedOutput()
+	text, err := a.containerLogText(r.Context(), c)
 	if err != nil {
 		fail(w, 502, "runtime logs unavailable")
 		return
 	}
-	reply(w, 200, map[string]string{"log": string(output)})
+	reply(w, 200, map[string]string{"log": text})
+}
+func (a *Server) containerLogText(parent context.Context, c Record) (string, error) {
+	d, err := a.store.Get(c.Active)
+	if err != nil {
+		return "Container is not deployed yet.", nil
+	}
+	if d.StaticDir != "" {
+		return "Static container: files are served directly; no runtime process logs.", nil
+	}
+	if d.Container == "" {
+		return "No runtime output available.", nil
+	}
+	ctx, cancel := context.WithTimeout(parent, 5*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "docker", "logs", "--tail", "200", d.Container).CombinedOutput()
+	return string(output), err
 }

@@ -37,13 +37,25 @@ func (t *commandTail) Write(b []byte) (int, error) {
 func (l *logWriter) Write(b []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.a.live != nil {
+		l.a.live.logMu.Lock()
+		defer l.a.live.logMu.Unlock()
+	}
 	s := string(b)
 	if l.secret != "" {
 		s = strings.ReplaceAll(s, l.secret, "[REDACTED]")
 	}
-	e := l.a.store.Update(l.id, func(r *Record) { r.Log += s })
+	end := 0
+	appendLog := func(r *Record) { r.Log += s; end = len(r.Log) }
+	e := l.a.store.Update(l.id, appendLog)
+	if e == nil {
+		l.a.live.publish(liveEvent{id: l.id, text: s, end: end})
+	}
 	if e == nil && l.group != "" {
-		e = l.a.store.Update(l.group, func(r *Record) { r.Log += s })
+		e = l.a.store.Update(l.group, appendLog)
+		if e == nil {
+			l.a.live.publish(liveEvent{id: l.group, text: s, end: end})
+		}
 	}
 	return len(b), e
 }
