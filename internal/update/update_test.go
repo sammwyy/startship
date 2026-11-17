@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,5 +130,59 @@ func TestInstallRejectsChecksumMismatchAtomically(t *testing.T) {
 	}
 	if _, err := testClient(s).Install(context.Background(), "../v1", dir, Binaries); err == nil {
 		t.Fatal("accepted invalid version")
+	}
+}
+
+func TestLatestFallsBackToReleasePageWhenRateLimited(t *testing.T) {
+	var auth string
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases/latest":
+			auth = r.Header.Get("Authorization")
+			w.Header().Set("X-RateLimit-Remaining", "0")
+			w.Header().Set("X-RateLimit-Reset", "1794956535")
+			http.Error(w, "API rate limit exceeded", http.StatusForbidden)
+		case "/owner/repo/releases/latest":
+			if r.Method != "HEAD" {
+				t.Errorf("page fetched with %s", r.Method)
+			}
+			http.Redirect(w, r, "/owner/repo/releases/tag/v2.1.0", http.StatusFound)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer s.Close()
+	c := testClient(s)
+	c.Token = "secret"
+	c.LatestPageURL = s.URL + "/owner/repo/releases/latest"
+	r, err := c.Latest(context.Background())
+	if err != nil || r.Version != "v2.1.0" || r.URL != s.URL+"/owner/repo/releases/tag/v2.1.0" {
+		t.Fatal(r, err)
+	}
+	if auth != "Bearer secret" {
+		t.Errorf("Authorization = %q", auth)
+	}
+
+	c.LatestPageURL = s.URL + "/missing"
+	_, err = c.Latest(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "rate limit exceeded until 2026-11-17") || !strings.Contains(err.Error(), "STARTSHIP_GITHUB_TOKEN") || !strings.Contains(err.Error(), "fallback") {
+		t.Fatal(err)
+	}
+
+	c.LatestPageURL = ""
+	if _, err = c.Latest(context.Background()); err == nil || strings.Contains(err.Error(), "fallback") {
+		t.Fatal(err)
+	}
+}
+
+func TestLatestPageRejectsUnexpectedRedirect(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/owner/repo/releases", http.StatusFound)
+	}))
+	defer s.Close()
+	c := testClient(s)
+	c.LatestPageURL = s.URL + "/owner/repo/releases/latest"
+	if _, err := c.latestPage(context.Background()); err == nil {
+		t.Fatal("expected error")
 	}
 }

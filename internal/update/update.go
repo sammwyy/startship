@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -23,8 +24,10 @@ import (
 
 const (
 	DefaultReleasesURL = "https://api.github.com/repos/sammwyy/startship/releases"
-	defaultDownloadURL = "https://github.com/sammwyy/startship/releases/download"
-	maxBinarySize      = 512 << 20
+	// DefaultLatestPageURL redirects to the latest release tag without the REST API's per-IP limit.
+	DefaultLatestPageURL = "https://github.com/sammwyy/startship/releases/latest"
+	defaultDownloadURL   = "https://github.com/sammwyy/startship/releases/download"
+	maxBinarySize        = 512 << 20
 )
 
 // Binaries are the release assets installed side by side.
@@ -106,41 +109,100 @@ type Release struct {
 type Client struct {
 	HTTP        *http.Client
 	ReleasesURL string
+	// LatestPageURL, when set, is the fallback for Latest when the release API fails (e.g. rate limited).
+	LatestPageURL string
+	// Token, when set, authenticates release API requests (STARTSHIP_GITHUB_TOKEN).
+	Token string
 	// DownloadURL, when set, is the asset base for every version (like install.sh's STARTSHIP_DOWNLOAD_URL).
 	DownloadURL string
 	GOOS        string
 	GOARCH      string
 }
 
-// FromEnv returns a client honoring STARTSHIP_RELEASES_URL and STARTSHIP_DOWNLOAD_URL.
+// FromEnv returns a client honoring STARTSHIP_RELEASES_URL, STARTSHIP_DOWNLOAD_URL and STARTSHIP_GITHUB_TOKEN.
 func FromEnv() *Client {
-	c := &Client{HTTP: &http.Client{Timeout: 5 * time.Minute}, ReleasesURL: DefaultReleasesURL, DownloadURL: os.Getenv("STARTSHIP_DOWNLOAD_URL"), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
+	c := &Client{HTTP: &http.Client{Timeout: 5 * time.Minute}, ReleasesURL: DefaultReleasesURL, LatestPageURL: DefaultLatestPageURL, Token: os.Getenv("STARTSHIP_GITHUB_TOKEN"), DownloadURL: os.Getenv("STARTSHIP_DOWNLOAD_URL"), GOOS: runtime.GOOS, GOARCH: runtime.GOARCH}
 	if v := os.Getenv("STARTSHIP_RELEASES_URL"); v != "" {
-		c.ReleasesURL = strings.TrimRight(v, "/")
+		c.ReleasesURL, c.LatestPageURL = strings.TrimRight(v, "/"), ""
 	}
 	return c
 }
 
 func (c *Client) get(ctx context.Context, url string) (*http.Response, error) {
+	return c.do(ctx, url, false)
+}
+
+func (c *Client) do(ctx context.Context, url string, api bool) (*http.Response, error) {
 	r, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
 	r.Header.Set("User-Agent", "startship-updater")
+	if api {
+		r.Header.Set("Accept", "application/vnd.github+json")
+		if c.Token != "" {
+			r.Header.Set("Authorization", "Bearer "+c.Token)
+		}
+	}
 	resp, err := c.HTTP.Do(r)
 	if err != nil {
 		return nil, err
 	}
 	if resp.StatusCode != 200 {
 		resp.Body.Close()
+		if api && (resp.StatusCode == 403 || resp.StatusCode == 429) && resp.Header.Get("X-RateLimit-Remaining") == "0" {
+			reset := ""
+			if n, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil {
+				reset = " until " + time.Unix(n, 0).UTC().Format(time.RFC3339)
+			}
+			return nil, fmt.Errorf("GET %s: GitHub API rate limit exceeded%s (set STARTSHIP_GITHUB_TOKEN to raise it)", url, reset)
+		}
 		return nil, fmt.Errorf("GET %s: %s", url, resp.Status)
 	}
 	return resp, nil
 }
 
 // Latest returns the newest published (non-draft, non-prerelease) release.
+// When the release API fails (unauthenticated requests share a 60/hour limit per IP),
+// it falls back to the release page redirect, which has no notes or date.
 func (c *Client) Latest(ctx context.Context) (Release, error) {
-	resp, err := c.get(ctx, c.ReleasesURL+"/latest")
+	r, err := c.latestAPI(ctx)
+	if err == nil || c.LatestPageURL == "" || ctx.Err() != nil {
+		return r, err
+	}
+	r, pageErr := c.latestPage(ctx)
+	if pageErr != nil {
+		return Release{}, fmt.Errorf("%w; fallback: %v", err, pageErr)
+	}
+	return r, nil
+}
+
+func (c *Client) latestPage(ctx context.Context) (Release, error) {
+	r, err := http.NewRequestWithContext(ctx, "HEAD", c.LatestPageURL, nil)
+	if err != nil {
+		return Release{}, err
+	}
+	r.Header.Set("User-Agent", "startship-updater")
+	hc := *c.HTTP
+	hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := hc.Do(r)
+	if err != nil {
+		return Release{}, err
+	}
+	resp.Body.Close()
+	loc, err := resp.Location()
+	if err != nil {
+		return Release{}, fmt.Errorf("HEAD %s: %s without a release redirect", c.LatestPageURL, resp.Status)
+	}
+	tag := path.Base(loc.Path)
+	if !strings.HasSuffix(path.Dir(loc.Path), "/releases/tag") || !ValidVersion(tag) {
+		return Release{}, fmt.Errorf("HEAD %s: unexpected redirect to %s", c.LatestPageURL, loc)
+	}
+	return Release{Version: tag, URL: loc.String()}, nil
+}
+
+func (c *Client) latestAPI(ctx context.Context) (Release, error) {
+	resp, err := c.do(ctx, c.ReleasesURL+"/latest", true)
 	if err != nil {
 		return Release{}, err
 	}
