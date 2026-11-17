@@ -12,7 +12,7 @@ cd startship
 docker compose up --build -d
 ```
 
-Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so use a strong, unique password and keep it safe.
+Run `docker compose logs startship` to find the prominent first-run credentials banner. Open `http://localhost:8080` (or `http://<server-ip>:8080`), sign in as `admin` with the printed random password, and set your own password (8–72 bytes). Setup is then marked complete and you land on workspaces. Restarting before this step rotates the temporary password and prints it again; use the latest banner. Treat these logs as sensitive. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so keep your new password safe.
 
 From there, use the sidebar's workspace menu to switch or create workspaces, then connect a project to **one Git repository**. Configure the **project**, not separate apps: source, build defaults, environment, tests, and push deployment are shared. Startship detects the runnable containers in that repository and manages them as **one project deployment**. Most projects have one container; a monorepo can have several HTTP servers.
 
@@ -50,7 +50,7 @@ keep `STARTSHIP_HTTP_ADDR=:8081` (and, when using ACME,
 ACME validation still needs public port 80. HTTPS on default `:443` also needs
 privileged-port access.
 
-To skip the first-run screen, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` (uncomment them in `compose.yaml`); they only create the account when no user exists yet. Over the API, `GET /api/setup` returns `{"required":true}` until the first account exists, created with `POST /api/setup {"username":"admin","password":"at-least-eight-characters"}`.
+To seed your own credentials instead, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` (uncomment them in `compose.yaml`); they only create the account when no user exists yet and mark setup complete without forcing a password change. Without them, first-run credentials are printed in the server logs (`docker compose logs startship`). `GET /api/setup` reports `completed` and the legacy `required` (no users) flag. `POST /api/setup` remains supported only when there are no users; normal daemon startup now creates the administrator automatically.
 
 When `STARTSHIP_DATA` is unset, existing `./data` is preserved; otherwise new installations default to `./_data`. The underscore makes Go tooling skip the data directory even when unreadable.
 
@@ -133,7 +133,7 @@ Alternatively, terminate TLS at a trusted gateway in front of port 8080 (or 80 w
 | STARTSHIP_HTTP_ADDR | :80 |
 | STARTSHIP_HTTPS_ADDR | :443 |
 | STARTSHIP_ACME_EMAIL | empty (HTTPS disabled) |
-| STARTSHIP_ADMIN_USER / STARTSHIP_ADMIN_PASSWORD | empty (first-run setup) |
+| STARTSHIP_ADMIN_USER / STARTSHIP_ADMIN_PASSWORD | empty (random admin credentials printed in logs; change on first sign-in) |
 | STARTSHIP_DASHBOARD_DOMAIN | empty (dashboard only on port 8080) |
 | STARTSHIP_SELF_CONTAINER | detected hostname inside Docker |
 
