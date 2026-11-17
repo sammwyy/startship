@@ -267,6 +267,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .release-history { min-width: 0; }
 .project-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin: 6px 0 22px; }
 .project-heading h1 { margin: 5px 0; font-size: 26px; font-weight: 400; letter-spacing: -.9px; }
+.project-heading > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .project-heading p { margin: 0; font-size: 11px; color: var(--muted); }
 .project-deployments { display: grid; grid-template-columns: minmax(240px, .7fr) minmax(0, 1.7fr); gap: 18px; align-items: start; }
 .project-log-panel .log { min-height: 420px; height: calc(100dvh - 285px); max-height: none; }

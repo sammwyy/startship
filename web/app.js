@@ -205,7 +205,13 @@ async function projectPage(id,section='deployments',runtimeID=''){
    if(section==='deployments')$('#redeploy-release').disabled=!d.redeployable||!!busyRelease(releases[0]);
   }catch(e){if(version===viewVersion&&request===logVersion)$('#project-log').textContent=e.message}
  };
- const bindReleases=()=>document.querySelectorAll('[data-release]').forEach(b=>b.onclick=async()=>{followLatest=false;selected=b.dataset.release;$('#project-releases').innerHTML=releaseEntries(releases,selected);bindReleases();await loadLog()});
+ const renderReleases=()=>{
+  const panel=$('#project-releases'),markup=releaseEntries(releases,selected);if(panel.innerHTML===markup)return;
+  const focused=document.activeElement?.dataset.release,scroll=panel.scrollTop;
+  panel.innerHTML=markup;panel.scrollTop=scroll;bindReleases();
+  if(focused)[...document.querySelectorAll('[data-release]')].find(b=>b.dataset.release===focused)?.focus({preventScroll:true});
+ };
+ const bindReleases=()=>document.querySelectorAll('[data-release]').forEach(b=>b.onclick=async()=>{followLatest=false;selected=b.dataset.release;renderReleases();await loadLog()});
  if(section==='deployments')bindReleases();
  if(section==='logs')$('#log-source').onchange=loadLog;
  if(['logs','deployments'].includes(section))$('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#project-log').textContent);toast('Logs copied')}catch{toast('Clipboard unavailable')}};
@@ -216,7 +222,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
    if(project.active_deployment)containers=containers.filter(c=>c.active_deployment||(busyRelease(releases[0])&&c.release_id===releases[0].id));
    if(followLatest)selected=releases[0]?.id||'';
    $('#project-summary').textContent=projectSummary(containers,routes);$('#project-state').innerHTML=badge(releases[0]?.status);$('#deploy-project').disabled=!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url;
-   if(section==='deployments'){$('#project-releases').innerHTML=releaseEntries(releases,selected);$('#release-count').textContent=releases.length;bindReleases()}
+   if(section==='deployments'){renderReleases();$('#release-count').textContent=releases.length}
    if(section==='containers')$('#project-containers').innerHTML=containerEntries(project,containers);
    if(section==='logs'){const source=$('#log-source').value;$('#log-source').innerHTML='<option value="">Project build output</option>'+containers.map(c=>'<option value="'+esc(c.id)+'" '+(source===c.id?'selected':'')+'>'+esc(c.name)+' · runtime</option>').join('')}
    await loadLog();
