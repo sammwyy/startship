@@ -47,7 +47,11 @@ func TestStaticCacheRevalidation(t *testing.T) {
 				}
 				return w
 			}
-			for _, path := range []string{"", "index.html", "deep/link", "app.js", "style.css"} {
+			a.targets[0].Deployment = releases[0]
+			if redirect := request(http.MethodGet, "index.html", "", ""); redirect.Code != http.StatusMovedPermanently || redirect.Header().Get("Location") != "./" {
+				t.Fatalf("index redirect: %d %v", redirect.Code, redirect.Header())
+			}
+			for _, path := range []string{"", "deep/link", "app.js", "style.css"} {
 				t.Run(path, func(t *testing.T) {
 					a.targets[0].Deployment = releases[0]
 					first := request(http.MethodGet, path, "", "")
