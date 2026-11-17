@@ -15,6 +15,7 @@ const icons = {
  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a20 20 0 0 1 0 18 20 20 0 0 1 0-18Z"/>',
  activity: '<path d="M2 12h5l3-8 4 16 3-8h5"/>',
  terminal: '<path d="m7 8 4 4-4 4m7 0h4"/><rect x="2" y="3" width="20" height="18" rx="3"/>',
+ copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
  settings: '<path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3" fill="var(--bg)"/><circle cx="16" cy="17" r="3" fill="var(--bg)"/>',
  search: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',
  lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
@@ -66,8 +67,13 @@ function auth(setup){
 function createWorkspace(){modal('Create workspace','A home for your projects and applications.',field('Workspace name','name','','text','required'),'Create workspace',async f=>{const w=await api('workspaces',Object.fromEntries(f));nav('workspace/'+w.id);toast('Workspace created')})}
 function createProject(){modal('Create project','Group related services, sites, and domains together.',field('Project name','name','','text','required placeholder="My Website"'),'Create project',async f=>{const p=await api('projects',{name:f.get('name'),workspace_id:workspace.id});nav('project/'+p.id);toast('Project created')})}
 const types=['auto','dockerfile','static','node','python','go','rust'];
-function appFields(app={}){
- return field('Application name','name',app.name||'','text','required')+field('Git repository URL','git_url',app.git_url||'','url','required placeholder="https://github.com/you/project"')+'<div class="split">'+field('Branch','branch',app.branch||'main','text','required')+field('Root directory','root_dir',app.root_dir||'.','text','required')+'</div>'+field('Private repository token (optional; leave blank to keep existing)','git_token','','password','autocomplete="off"')+'<div class="split"><label>Build type<select name="build_type">'+types.map(t=>'<option '+((app.build_type||'auto')===t?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'+field('Internal port','port',app.port||8080,'number','required min="1" max="65535"')+'</div><label>Environment variables<textarea name="env" placeholder="NODE_ENV=production&#10;API_KEY=your-value">'+esc(Object.entries(app.env||{}).map(([k,v])=>k+'='+v).join('\n'))+'</textarea></label>'+field('Test command (optional)','test_command',app.test_command||'','text','placeholder="npm test"')+'<label><input type="checkbox" name="auto_deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy on git push</label>';
+function appFields(app={},wide=false){
+ const source=field('Application name','name',app.name||'','text','required')+field('Git repository URL','git_url',app.git_url||'','url','required placeholder="https://github.com/you/project"')+'<div class="split">'+field('Branch','branch',app.branch||'main','text','required')+field('Root directory','root_dir',app.root_dir||'.','text','required')+'</div>';
+ const access=field('Private repository token (leave blank to keep existing)','git_token','','password','autocomplete="off"');
+ const build='<div class="split"><label>Build type<select name="build_type">'+types.map(t=>'<option '+((app.build_type||'auto')===t?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'+field('Internal port','port',app.port||8080,'number','required min="1" max="65535"')+'</div>'+field('Test command (optional)','test_command',app.test_command||'','text','placeholder="npm test"');
+ const environment='<label>Environment variables<textarea name="env" placeholder="NODE_ENV=production&#10;API_KEY=your-value">'+esc(Object.entries(app.env||{}).map(([k,v])=>k+'='+v).join('\n'))+'</textarea></label>';
+ const automatic='<label class="inline-check"><input type="checkbox" name="auto_deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy on git push</label>';
+ return wide?'<div class="settings-columns"><section class="panel panel-pad"><h3>Source & build</h3>'+source+build+'</section><section class="panel panel-pad"><h3>Environment & access</h3>'+access+environment+automatic+'<p class="small muted">Use one KEY=VALUE per line. Existing repository credentials are kept when the token is blank.</p></section></div>':source+access+build+environment+automatic;
 }
 function appData(f){const v=Object.fromEntries(f);v.port=Number(v.port);v.auto_deploy=f.has('auto_deploy');v.env={};for(const line of f.get('env').split('\n')){if(!line.trim()||line.trim().startsWith('#'))continue;const i=line.indexOf('=');if(i<1||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0,i).trim()))throw Error('Environment variables must use KEY=VALUE, one per line.');v.env[line.slice(0,i).trim()]=line.slice(i+1)}if(!v.git_token)delete v.git_token;return v}
 function addApp(project){modal('Add app from Git','We’ll build your code in an isolated container.',appFields(),'Create application',async f=>{const a=await api('apps',{...appData(f),project_id:project.id});nav('app/'+a.id);toast('Application created')})}
@@ -83,58 +89,101 @@ function detectApps(project){
  toast(chosen.length+' applications created');render();
  });
 }
-function addRoute(project,apps){if(!apps.length){toast('Create an application first');return}modal('Connect a domain','Direct traffic to an app using a hostname and path prefix.',field('Hostname','host','','text','required placeholder="example.com"')+field('Path prefix','path_prefix','/','text','required')+'<label>Application<select name="app_id">'+apps.map(a=>'<option value="'+esc(a.id)+'">'+esc(a.name)+' · :'+a.port+'</option>').join('')+'</select></label><label><input type="checkbox" name="strip_prefix">Strip prefix before forwarding</label><div class="note">DNS: point the A record of this hostname to this server’s public IP.</div>','Connect domain',async f=>{await api('routes',{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')});toast('Domain connected');render()})}
-async function projectPage(id){
- const [p,apps,routes,deployments]=await Promise.all([api('projects/'+id),api('apps?project_id='+id),api('routes?project_id='+id),api('deployments')]);workspace=workspaces.find(w=>w.id===p.workspace_id);
- const status=a=>deployments.find(d=>d.id===a.active_deployment)?.status;
- shell('<a href="#workspace/'+workspace.id+'">'+esc(workspace.name)+'</a> &nbsp; / &nbsp; '+esc(p.name),
- heading('Project overview',p.name,'Applications and traffic, in one view.','<button id="detect">'+icon('search')+'Detect apps</button><button class="primary" id="add-app">'+icon('plus')+'Add app</button>')+
- '<div class="stats"><div class="stat"><div><span>Applications</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running applications</span><strong>'+apps.filter(a=>status(a)==='running').length+'</strong></div>'+icon('activity')+'</div><div class="stat"><div><span>Connected routes</span><strong>'+routes.length+'</strong></div>'+icon('globe')+'</div></div>'+
- '<div class="section-head"><h2>Applications<span class="count">'+apps.length+'</span></h2><span class="small muted">Git-connected services</span></div>'+
- (apps.length?'<div class="grid">'+apps.map(a=>'<a class="card link" href="#app/'+a.id+'"><div class="card-top"><div class="card-icon">'+icon('box')+'</div>'+badge(status(a))+'</div><h3>'+esc(a.name)+'</h3><div class="card-description">'+esc(a.git_url)+'</div><div class="app-meta"><span>'+icon('branch')+esc(a.branch)+'</span><span>'+icon('folder')+rootLabel(a.root_dir)+'</span></div><div class="card-footer"><span>'+esc(a.build_type)+' · Port '+a.port+'</span><span>View application '+icon('arrow')+'</span></div></a>').join('')+'</div>':empty('Your first app starts here','Connect a Git repository or discover apps in a monorepo.'))+
- '<section class="section"><div class="section-head"><div><h2>Domains & routes<span class="count">'+routes.length+'</span></h2><span class="small muted">Public endpoints for this project</span></div><button id="add-route">'+icon('plus')+'Connect domain</button></div>'+
- (routes.length?'<div class="panel table-panel"><table><thead><tr><th>Public router URL</th><th>Application (internal port)</th><th>Prefix</th><th>Actions</th></tr></thead><tbody>'+routes.map(r=>'<tr><td><a href="'+esc(r.url)+'" target="_blank" rel="noopener noreferrer" aria-label="Open '+esc(r.url)+'">'+esc(r.url)+' '+icon('arrow')+'</a></td><td>'+esc(apps.find(a=>a.id===r.app_id)?.name)+' <span class="muted">:'+apps.find(a=>a.id===r.app_id)?.port+'</span></td><td>'+ (r.strip_prefix?'Stripped':'Preserved')+'</td><td><button class="danger delete-route" data-id="'+r.id+'">Delete</button></td></tr>').join('')+'</tbody></table></div>':empty('No domains connected yet','Add a hostname and route traffic to your app.'))+'<details class="note"><summary>DNS & routing setup</summary><p>Point the A record of each host to this server’s public IP. Open a router URL above to visit your app; internal container ports are not published. URLs use this server’s configured router port, not the dashboard port. If a gateway maps different public ports, use its public URL instead.</p></details></section>');
- $('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p);$('#add-route').onclick=()=>addRoute(p,apps);
- document.querySelectorAll('.delete-route').forEach(b=>b.onclick=async()=>{try{await api('routes/'+b.dataset.id,null,'DELETE');render();toast('Route deleted')}catch(e){toast(e.message)}});
+function addRoute(project,apps,selectedId){if(!apps.length){toast('Create an application first');return}modal('Connect a domain','Direct traffic to an app using a hostname and path prefix.',field('Hostname','host','','text','required placeholder="example.com"')+field('Path prefix','path_prefix','/','text','required')+'<label>Application<select name="app_id">'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===selectedId?'selected':'')+'>'+esc(a.name)+' · :'+a.port+'</option>').join('')+'</select></label><label><input type="checkbox" name="strip_prefix">Strip prefix before forwarding</label><div class="note">DNS: point the A record of this hostname to this server’s public IP.</div>','Connect domain',async f=>{await api('routes',{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')});toast('Domain connected');render()})}
+const applicationTabs=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','Settings'],['webhook','branch','Git integration']];
+function deploymentStatus(app,deployments){return deployments.find(d=>d.id===app.active_deployment)?.status}
+async function projectPage(id,selectedId='',initialTab='deployments'){
+ const version=viewVersion;
+ const [p,apps,routes,deployments]=await Promise.all([api('projects/'+id),api('apps?project_id='+id),api('routes?project_id='+id),api('deployments')]);
+ if(version!==viewVersion)return;
+ workspace=workspaces.find(w=>w.id===p.workspace_id);
+ const app=apps.find(a=>a.id===selectedId)||apps[0],running=apps.filter(a=>deploymentStatus(a,deployments)==='running').length;
+ shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; '+esc(p.name),
+  heading('Project',p.name,apps.length+' app'+(apps.length===1?'':'s')+' · '+running+' running · '+routes.length+' route'+(routes.length===1?'':'s'),'<button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>')+
+  (app?'<nav class="service-switcher" aria-label="Project applications" '+(apps.length===1?'hidden':'')+'>'+apps.map(a=>'<a data-app-link="'+esc(a.id)+'" class="service-option '+(a.id===app.id?'active':'')+'" '+(a.id===app.id?'aria-current="page"':'')+' href="#app/'+esc(a.id)+'/'+esc(initialTab)+'"><span class="service-icon">'+icon('box')+'</span><span class="service-copy"><strong>'+esc(a.name)+'</strong><small>'+esc(a.root_dir==='.'?'Repository root':a.root_dir)+' · '+esc(a.build_type)+'</small></span><span data-service-status="'+esc(a.id)+'">'+badge(deploymentStatus(a,deployments))+'</span></a>').join('')+'</nav><section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
+   empty('Connect your first application','Add a Git repository, or detect the applications inside a monorepo. The same controls work for either setup.')));
+ $('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p);
+ if(app){
+  const list=$('.service-switcher'),selected=list.querySelector('[aria-current="page"]');
+  list.scrollLeft=selected.offsetLeft-list.offsetLeft;
+  await mountApplication(p,app,apps,routes,initialTab,deployments);
+ }
 }
-async function appPage(id){
- const app=await api('apps/'+id),p=await api('projects/'+app.project_id),routes=(await api('routes?project_id='+app.project_id)).filter(r=>r.app_id===id);workspace=workspaces.find(w=>w.id===p.workspace_id);
- shell('<a href="#project/'+p.id+'">'+esc(p.name)+'</a> &nbsp; / &nbsp; '+esc(app.name),
- heading('Application',app.name,app.git_url,'<span id="active-status"></span>'+(routes.length?'<a class="button" href="'+esc(routes[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button>')+
- '<div class="tabs" aria-label="Application views"><button class="active" data-tab="deployments" aria-pressed="true">'+icon('layers')+'Deployments</button><button data-tab="settings" aria-pressed="false">'+icon('settings')+'Settings</button><button data-tab="webhook" aria-pressed="false">'+icon('branch')+'Git integration</button></div><div id="tab-content"></div>');
- $('#deploy').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{const d=await api('apps/'+id+'/deploy',{});selectedDeployment=d.id;toast('Deployment queued');await showDeployments()}catch(err){toast(err.message)}finally{button.disabled=false}};
- let activeTab='deployments';
+async function appPage(id,tab='deployments'){const version=viewVersion,app=await api('apps/'+id);if(version===viewVersion)await projectPage(app.project_id,id,tab)}
+async function mountApplication(project,app,apps,allRoutes,initialTab,deployments){
+ const version=viewVersion,isCurrent=()=>version===viewVersion&&!!$('#app-workbench');
+ let activeTab='',loading=false,tabVersion=0;
+ const ownRoutes=()=>allRoutes.filter(r=>r.app_id===app.id);
+ $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><h2>'+esc(app.name)+'</h2><span id="active-status"></span><span class="repository-label" title="'+esc(app.git_url)+'">'+icon('branch')+esc(app.git_url)+'</span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
+ '<div class="app-details"><span>'+icon('branch')+'<span id="app-branch">'+esc(app.branch)+'</span></span><span>'+icon('folder')+'Root '+rootLabel(app.root_dir)+'</span><span>'+icon('server')+esc(app.build_type)+' · :'+app.port+'</span><label class="inline-check"><input type="checkbox" id="quick-auto-deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy</label></div>'+
+ '<div class="workbench-navigation"><div class="tabs" aria-label="Application views">'+applicationTabs.map(([name,shape,label])=>'<button data-tab="'+name+'" aria-pressed="false">'+icon(shape)+label+(name==='domains'?'<span class="tab-count">'+ownRoutes().length+'</span>':'')+'</button>').join('')+'</div><span class="poll-status" id="poll-status">'+icon('activity')+'Live updates · 2s</span></div><div id="tab-content"></div>';
+ $('#quick-auto-deploy').onchange=async e=>{const input=e.currentTarget,value=input.checked;input.disabled=true;try{Object.assign(app,await api('apps/'+app.id,{auto_deploy:value},'PATCH'));const field=$('#settings-form [name="auto_deploy"]');if(field)field.checked=value;toast('Auto-deploy '+(value?'enabled':'disabled'))}catch(err){input.checked=!value;toast(err.message)}finally{input.disabled=false}};
+ $('#deploy').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{const d=await api('apps/'+app.id+'/deploy',{});selectedDeployment=d.id;toast('Deployment queued');if(isCurrent())await tab('deployments',true)}catch(err){toast(err.message)}finally{button.disabled=false}};
  async function showDeployments(){
- const previousLog=$('#build-log');const previousScroll=previousLog?.scrollTop||0;const follow=!previousLog||previousLog.scrollHeight-previousLog.scrollTop-previousLog.clientHeight<40;
- const ds=await api('deployments?app_id='+id);if(activeTab!=='deployments'||!$('#tab-content'))return;
- const previousTableScroll=$('#deployment-history')?.scrollLeft||0;
- const previousTableTop=$('#deployment-history')?.scrollTop||0;
- const latest=ds.slice().reverse();if(!latest.some(d=>d.id===selectedDeployment))selectedDeployment=latest[0]?.id||'';
- $('#tab-content').innerHTML='<div class="section-head"><h2>Release history</h2><span class="small muted">Branch '+esc(app.branch)+' &nbsp; · &nbsp; Root '+rootLabel(app.root_dir)+' &nbsp; · &nbsp; Port '+app.port+'</span></div><div class="deployment-layout"><div>'+
- (latest.length?'<div class="panel table-panel" id="deployment-history"><table><thead><tr><th>Deployment</th><th>Status</th><th>Commit</th><th>Created</th></tr></thead><tbody>'+latest.map(d=>'<tr class="'+(d.id===selectedDeployment?'selected':'')+'"><td><button class="select-deploy" aria-pressed="'+(d.id===selectedDeployment)+'" data-id="'+d.id+'">'+icon('box')+d.id.slice(0,8)+'</button></td><td>'+badge(d.status)+'</td><td class="muted commit">'+esc(d.commit?.slice(0,7)||'Pending')+'</td><td class="muted">'+new Date(d.created).toLocaleString()+'</td></tr>').join('')+'</tbody></table></div>':empty('Ready when you are','Deploy your first release to see build output here.'))+
- '</div><section class="section panel"><div class="log-head"><span class="log-title">'+icon('terminal')+'Build output <span class="muted" id="log-id"></span></span><span class="live"><span class="dot"></span>Live · 2s</span></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section></div>';
- if($('#deployment-history')){$('#deployment-history').scrollLeft=previousTableScroll;$('#deployment-history').scrollTop=previousTableTop}
- document.querySelectorAll('.select-deploy').forEach(b=>b.onclick=async()=>{selectedDeployment=b.dataset.id;await showDeployments()});
- const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];$('#active-status').innerHTML=badge(current?.status);
- await updateLog();
- if(!follow&&$('#build-log'))$('#build-log').scrollTop=previousScroll;
+  if(loading)return;loading=true;
+  try{
+   const ds=await api('deployments?app_id='+app.id);if(!isCurrent()||activeTab!=='deployments')return;
+   const previousLog=$('#build-log'),previousScroll=previousLog?.scrollTop||0,follow=!previousLog||previousLog.scrollHeight-previousLog.scrollTop-previousLog.clientHeight<40;
+   const left=$('#deployment-history')?.scrollLeft||0,top=$('#deployment-history')?.scrollTop||0,focused=document.activeElement?.closest('.select-deploy')?.dataset.id,focusedControl=document.activeElement?.id;
+   const latest=ds.slice().reverse();if(!latest.some(d=>d.id===selectedDeployment))selectedDeployment=latest[0]?.id||'';
+   $('#tab-content').innerHTML='<div class="deployment-layout"><section class="release-history"><div class="section-head"><h2>Releases<span class="count">'+latest.length+'</span></h2><span class="small muted">Select a release to inspect</span></div>'+
+    (latest.length?'<div class="panel table-panel" id="deployment-history"><table><thead><tr><th>Deployment</th><th>Status</th><th>Commit</th><th>Created</th></tr></thead><tbody>'+latest.map(d=>'<tr class="'+(d.id===selectedDeployment?'selected':'')+'"><td><button class="select-deploy" aria-label="Inspect deployment '+esc(d.id.slice(0,8))+'" aria-pressed="'+(d.id===selectedDeployment)+'" data-id="'+esc(d.id)+'">'+icon('box')+esc(d.id.slice(0,8))+'</button></td><td>'+badge(d.status)+'</td><td class="muted commit">'+esc(d.commit?.slice(0,7)||'Pending')+'</td><td class="muted">'+esc(new Date(d.created).toLocaleString())+'</td></tr>').join('')+'</tbody></table></div>':empty('No releases yet','Deploy this application to see its build output.'))+
+    '<div class="release-endpoints"><div class="section-head"><h2>Public endpoints</h2><button class="text-button" id="manage-domains">'+(ownRoutes().length?'Manage':'Connect domain')+icon('arrow')+'</button></div>'+
+    (ownRoutes().length?ownRoutes().map(r=>'<a class="endpoint" href="'+esc(r.url)+'" target="_blank" rel="noreferrer">'+icon('globe')+'<span>'+esc(r.url)+'</span>'+icon('arrow')+'</a>').join(''):'<p class="small muted">No domain connected to this application.</p>')+'</div></section>'+
+    '<section class="panel log-panel"><div class="log-head"><span class="log-title">'+icon('terminal')+'Build output <span class="muted" id="log-id"></span></span><button class="text-button" id="copy-log">'+icon('copy')+'Copy</button></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section></div>';
+   const table=$('#deployment-history');if(table){table.scrollLeft=left;table.scrollTop=top}
+   document.querySelectorAll('.select-deploy').forEach(b=>b.onclick=async()=>{selectedDeployment=b.dataset.id;try{await showDeployments()}catch(err){toast(err.message)}});
+   if(focused)document.querySelector('.select-deploy[data-id="'+focused+'"]')?.focus({preventScroll:true});
+   if(['copy-log','manage-domains'].includes(focusedControl))$('#'+focusedControl)?.focus({preventScroll:true});
+   $('#manage-domains').onclick=()=>ownRoutes().length?tab('domains',true).catch(err=>toast(err.message)):addRoute(project,apps,app.id);
+   $('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#build-log').textContent);toast('Build output copied')}catch{toast('Select and copy the build output manually')}};
+   const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];
+   $('#active-status').innerHTML=badge(current?.status);document.querySelector('[data-service-status="'+app.id+'"]').innerHTML=badge(current?.status);
+   if(selectedDeployment){const d=await api('deployments/'+selectedDeployment);if(!isCurrent()||activeTab!=='deployments')return;$('#build-log').textContent=d.log||'Deployment '+d.status+'…';$('#log-id').textContent=' / '+d.id.slice(0,8);$('#build-log').scrollTop=follow?$('#build-log').scrollHeight:previousScroll}
+  }finally{loading=false}
  }
- async function updateLog(){if(activeTab!=='deployments'||!selectedDeployment||!$('#build-log'))return;const d=await api('deployments/'+selectedDeployment);if(!$('#build-log'))return;const log=$('#build-log');const atEnd=log.scrollHeight-log.scrollTop-log.clientHeight<40;log.textContent=d.log||'Deployment '+d.status+'…';$('#log-id').textContent=' / '+d.id.slice(0,8);if(atEnd)log.scrollTop=log.scrollHeight}
- async function tab(name){
- activeTab=name;clearInterval(timer);document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===name);b.setAttribute('aria-pressed',String(b.dataset.tab===name))});
- if(name==='deployments'){await showDeployments();timer=setInterval(()=>{if(location.hash==='#app/'+id)showDeployments().catch(e=>toast(e.message))},2000)}
- if(name==='settings'){$('#tab-content').innerHTML='<div class="panel panel-pad" style="max-width:730px"><h2>Application settings</h2><p class="small">Changes apply on the next deployment. Existing credentials are preserved when left blank.</p><form id="settings-form">'+appFields(app)+'<div class="form-error"></div><div class="form-actions"><button class="primary">Save changes</button></div></form></div>';$('#settings-form').onsubmit=async e=>{e.preventDefault();try{Object.assign(app,await api('apps/'+id,appData(new FormData(e.target)),'PATCH'));toast('Settings saved')}catch(err){$('.form-error').textContent=err.message}}}
- if(name==='webhook'){const url=location.origin+'/api/webhooks/github/'+id;$('#tab-content').innerHTML='<div class="panel panel-pad" style="max-width:760px"><h2>Push code. We’ll take it from here.</h2><p>Connect GitHub to automatically build and deploy every push to <strong>'+esc(app.branch)+'</strong>.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(app.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label><div class="note">In GitHub: repository → Settings → Webhooks → Add webhook. Paste this URL, choose application/json, paste the secret, and select “Just the push event”. Enable auto-deploy in application settings.<br><br>Use your publicly reachable dashboard domain for the webhook URL; localhost is not reachable by GitHub.</div></div>';document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}})}
+ function showDomains(){
+  const routes=ownRoutes();
+  $('#tab-content').innerHTML='<div class="section-head"><div><h2>Domains & routes<span class="count">'+routes.length+'</span></h2><span class="small muted">Traffic connected to '+esc(app.name)+'</span></div><button class="primary" id="add-route">'+icon('plus')+'Connect domain</button></div>'+
+   (routes.length?'<div class="panel table-panel"><table><thead><tr><th>Public router URL</th><th>Internal port</th><th>Path prefix</th><th>Forwarding</th><th>Actions</th></tr></thead><tbody>'+routes.map(r=>'<tr><td><a href="'+esc(r.url)+'" target="_blank" rel="noreferrer">'+esc(r.url)+' '+icon('arrow')+'</a></td><td>:'+app.port+'</td><td>'+esc(r.path_prefix)+'</td><td>'+(r.strip_prefix?'Strip prefix':'Preserve prefix')+'</td><td><button class="danger delete-route" data-id="'+esc(r.id)+'" aria-label="Delete route '+esc(r.url)+'">Delete</button></td></tr>').join('')+'</tbody></table></div>':empty('Give this app an address','Connect a hostname and path prefix to route public traffic here.'))+
+   '<div class="note">Point your domain’s A record to this server’s public IP. Routes use the public router address, not the internal container port.</div>';
+  $('#add-route').onclick=()=>addRoute(project,apps,app.id);
+  document.querySelectorAll('.delete-route').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('routes/'+b.dataset.id,null,'DELETE');await render();toast('Route deleted')}catch(err){b.disabled=false;toast(err.message)}});
  }
- document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab).catch(e=>toast(e.message)));
- await tab('deployments');
+ function showSettings(){
+  $('#tab-content').innerHTML='<form id="settings-form" class="settings-form"><div class="section-head"><div><h2>Application settings</h2><span class="small muted">Changes apply on the next deployment.</span></div><button class="primary" type="submit">Save changes</button></div>'+appFields(app,true)+'<div class="form-error" role="alert"></div></form>';
+  $('#settings-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('[type="submit"]');button.disabled=true;try{Object.assign(app,await api('apps/'+app.id,appData(new FormData(e.target)),'PATCH'));await render();toast('Settings saved')}catch(err){if(isCurrent())$('#settings-form .form-error').textContent=err.message}finally{button.disabled=false}};
+ }
+ function showWebhook(){
+  const url=location.origin+'/api/webhooks/github/'+app.id;
+  $('#tab-content').innerHTML='<div class="integration-layout"><div class="panel panel-pad"><h2>GitHub webhook</h2><p class="small">Deploy pushes to <strong>'+esc(app.branch)+'</strong> for '+esc(app.name)+'.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(app.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect your repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy in the toolbar above.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
+  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}});
+ }
+ async function tab(name,updateURL=false){
+  const token=++tabVersion,requested=applicationTabs.some(t=>t[0]===name)?name:'deployments';
+  activeTab=requested;clearInterval(timer);
+  if(updateURL)history.replaceState(null,'','#app/'+app.id+'/'+activeTab);
+  document.querySelectorAll('[data-app-link]').forEach(a=>a.href='#app/'+a.dataset.appLink+'/'+activeTab);
+  document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===activeTab);b.setAttribute('aria-pressed',String(b.dataset.tab===activeTab))});
+  $('#poll-status').hidden=activeTab!=='deployments';
+  if(requested==='deployments'){await showDeployments();if(token===tabVersion&&isCurrent()&&activeTab==='deployments')timer=setInterval(()=>showDeployments().catch(err=>{if(isCurrent())toast(err.message)}),2000)}
+  if(requested==='domains')showDomains();
+  if(requested==='settings')showSettings();
+  if(requested==='webhook')showWebhook();
+ }
+ document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab,true).catch(err=>toast(err.message)));
+ $('#active-status').innerHTML=badge(deploymentStatus(app,deployments)||deployments.filter(d=>d.app_id===app.id).at(-1)?.status);
+ await tab(initialTab);
 }
-function collectionCard(item,kind,apps=[]){
- const current=kind==='workspace'&&workspace?.id===item.id;
- const projectApps=apps.filter(a=>a.project_id===item.id);
+function collectionCard(item,kind,apps=[],deployments=[]){
+ const current=kind==='workspace'&&workspace?.id===item.id,projectApps=apps.filter(a=>a.project_id===item.id);
  const created=item.created?new Date(item.created).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
- const detail=kind==='workspace'?'Workspace':projectApps.length+' application'+(projectApps.length===1?'':'s')+(projectApps.length?' · '+[...new Set(projectApps.map(a=>a.build_type))].map(esc).join(', '):' · Ready to deploy');
- return '<a class="card link" href="#'+kind+'/'+esc(item.id)+'"><div class="card-top"><div class="card-icon">'+icon(kind==='workspace'?'layers':'grid')+'</div>'+(current?'<span class="badge running">Current</span>':'<span class="card-arrow">'+icon('arrow')+'</span>')+'</div><h3>'+esc(item.name)+'</h3><div class="card-description">'+detail+'</div><div class="card-footer"><span>'+(created?'Created '+esc(created):'Not deployed')+'</span><span>Open '+kind+' '+icon('arrow')+'</span></div></a>';
+ if(kind==='project'){
+  const running=projectApps.filter(a=>deploymentStatus(a,deployments)==='running').length;
+  const detail=projectApps.length+' app'+(projectApps.length===1?'':'s')+(projectApps.length?' · '+[...new Set(projectApps.map(a=>a.build_type))].map(esc).join(', '):' · Connect a repository');
+  return '<a class="project-row" data-project-name="'+esc(item.name.toLowerCase())+'" href="#project/'+esc(item.id)+'"><span class="card-icon">'+icon('grid')+'</span><span class="project-row-copy"><h3>'+esc(item.name)+'</h3><span>'+detail+'</span></span><span class="badge '+(running?'running':'idle')+'">'+(running?running+' running':projectApps.length?'Not deployed':'No apps')+'</span>'+icon('arrow')+'</a>';
+ }
+ return '<a class="card link" href="#workspace/'+esc(item.id)+'"><div class="card-top"><div class="card-icon">'+icon('layers')+'</div>'+(current?'<span class="badge running">Current</span>':'<span class="card-arrow">'+icon('arrow')+'</span>')+'</div><h3>'+esc(item.name)+'</h3><div class="card-footer"><span>'+(created?'Created '+esc(created):'Workspace')+'</span><span>Open workspace '+icon('arrow')+'</span></div></a>';
 }
 function releasePanel(deployments,apps){
  const latest=deployments.slice().sort((a,b)=>new Date(b.created)-new Date(a.created)),recent=latest.slice(0,32).reverse();
@@ -148,20 +197,22 @@ async function render(){
  const setup=await api('setup');if(version!==viewVersion)return;if(setup.required){auth(true);return}
  if(!user){try{user=await api('me')}catch{auth(false);return}}
  const parts=location.hash.slice(1).split('/');if(parts[0]==='login'){auth(false);return}
- workspaces=await api('workspaces');workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
- if(parts[0]==='project'){await projectPage(parts[1]);return}
- if(parts[0]==='app'){await appPage(parts[1]);return}
+ workspaces=await api('workspaces');if(version!==viewVersion)return;workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
+ if(parts[0]==='project'){await projectPage(parts[1],'',parts[2]);return}
+ if(parts[0]==='app'){await appPage(parts[1],parts[2]);return}
  if(parts[0]==='workspace'&&workspace){
   localStorage.setItem('workspace',workspace.id);
   const [projects,allApps,allDeployments]=await Promise.all([api('projects?workspace_id='+workspace.id),api('apps'),api('deployments')]);
+  if(version!==viewVersion)return;
   const apps=allApps.filter(a=>projects.some(p=>p.id===a.project_id));
   const deployments=allDeployments.filter(d=>apps.some(a=>a.id===d.app_id));
   const running=apps.filter(a=>deployments.find(d=>d.id===a.active_deployment)?.status==='running').length;
   shell(esc(workspace.name),
    heading('Workspace overview','Projects','Your applications, from first commit to latest release.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
    '<div class="stats"><div class="stat"><div><span>Total projects</span><strong>'+projects.length+'</strong></div>'+icon('grid')+'</div><div class="stat"><div><span>Applications</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running applications</span><strong>'+running+'</strong></div>'+icon('activity')+'</div></div>'+
-   '<div class="workspace-layout"><section><div class="section-head"><h2>All projects<span class="count">'+projects.length+'</span></h2><span class="small muted">'+esc(workspace.name)+'</span></div>'+
-   (projects.length?'<div class="grid project-grid">'+projects.map(p=>collectionCard(p,'project',apps)).join('')+'</div>':empty('No projects yet','Create a project, then connect your first repository.'))+'</section>'+releasePanel(deployments,apps)+'</div>');
+   '<div class="workspace-layout"><section><div class="section-head"><h2>All projects<span class="count">'+projects.length+'</span></h2><label class="search-field">'+icon('search')+'<input type="search" id="project-search" placeholder="Find a project…" aria-label="Find a project"></label></div>'+
+   (projects.length?'<div class="panel project-directory">'+projects.map(p=>collectionCard(p,'project',apps,deployments)).join('')+'</div><p class="note" id="no-project-matches" hidden>No projects match your search.</p>':empty('No projects yet','Create a project, then connect your first repository.'))+'</section>'+releasePanel(deployments,apps)+'</div>');
+  $('#project-search').oninput=e=>{let matches=0;document.querySelectorAll('[data-project-name]').forEach(a=>{a.hidden=!a.dataset.projectName.includes(e.target.value.trim().toLowerCase());if(!a.hidden)matches++});if($('#no-project-matches'))$('#no-project-matches').hidden=matches>0};
   $('#new-project').onclick=createProject;return;
  }
  shell('Workspaces',
@@ -169,6 +220,6 @@ async function render(){
   '<div class="section-head"><h2>All workspaces<span class="count">'+workspaces.length+'</span></h2></div>'+
   (workspaces.length?'<div class="grid">'+workspaces.map(w=>collectionCard(w,'workspace')).join('')+'</div>':empty('No workspaces yet','Create a workspace to organize your projects.')));
  $('#new-workspace').onclick=createWorkspace;
- }catch(e){$('#root').innerHTML='<div class="error-page"><h1>Something went wrong.</h1><p>'+esc(e.message)+'</p><a class="button" href="#workspaces">Back to workspaces</a></div>'}
+ }catch(e){if(version===viewVersion)$('#root').innerHTML='<div class="error-page"><h1>Something went wrong.</h1><p>'+esc(e.message)+'</p><a class="button" href="#workspaces">Back to workspaces</a></div>'}
 }
 window.addEventListener('hashchange',render);render();

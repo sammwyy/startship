@@ -14,9 +14,9 @@ docker compose up --build -d
 
 Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so use a strong, unique password and keep it safe.
 
-From there: open a workspace (or create one with **+ New workspace**; the sidebar selector switches between them), create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line. Sign out with the button next to your username at the bottom of the sidebar.
+From there: open a workspace (or create one with **+ New workspace**; the top-bar selector switches between them), create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Projects open directly into their application's controls. Multi-app projects add an application switcher; single-app projects skip that extra navigation. Both use the same deployments, domains, settings, and Git integration tabs, with live build logs and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line. Sign out with the button next to your avatar in the top-right corner. The theme button switches between light and dark and remembers your choice.
 
-Open the route's URL in the project page to visit the deployed app, not the
+Use **Open app** or a public endpoint in the application's Deployments or Domains tab to visit the deployed app, not the
 dashboard or internal container port. URLs use the configured router port and
 HTTPS when ACME is enabled; if a gateway maps different external ports, use your
 gateway's public URL instead.
