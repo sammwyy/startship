@@ -5,17 +5,25 @@ import type { Release } from "../services/types";
 import { useUI } from "../providers/UIProvider";
 import { Badge, ErrorMessage } from "./ui";
 import { Icon } from "./Icon";
+import { useLiveStatus, useLiveSubscription } from "../providers/LiveProvider";
 
 export function useLog(releaseId: string, containerId = "") {
+  const liveError = useLiveSubscription(
+    containerId
+      ? { topic: "container_log", container_id: containerId }
+      : releaseId
+        ? { topic: "release_log", release_id: releaseId }
+        : null,
+  );
   const path = containerId
     ? `containers/${containerId}/logs`
     : `releases/${releaseId}`;
-  return useQuery({
+  const query = useQuery({
     queryKey: [path],
     queryFn: ({ signal }) => request<Release>(path, undefined, "GET", signal),
     enabled: !!(releaseId || containerId),
-    refetchInterval: 2000,
   });
+  return { ...query, error: liveError || query.error };
 }
 export function LogPanel({
   log,
@@ -34,6 +42,7 @@ export function LogPanel({
     [wrap, setWrap] = useState(true),
     pre = useRef<HTMLPreElement>(null),
     ui = useUI();
+  const liveStatus = useLiveStatus();
   const output = log || "";
   const placeholder = loading
     ? "Loading logs…"
@@ -99,7 +108,13 @@ export function LogPanel({
             ? `${output.trimEnd().split("\n").length} lines`
             : "No output yet"}
         </span>
-        <span>{follow ? "Following latest output" : "Scroll paused"}</span>
+        <span>
+          {liveStatus !== "connected"
+            ? "Live stream reconnecting…"
+            : follow
+              ? "Following latest output"
+              : "Scroll paused"}
+        </span>
       </div>
     </section>
   );

@@ -11,6 +11,7 @@ import { useSession } from "./providers/SessionProvider";
 import { useDashboard, DashboardLayout } from "./layouts/DashboardLayout";
 import { ProjectLayout } from "./layouts/ProjectLayout";
 import { AuthView } from "./views/AuthView";
+import { LiveProvider } from "./providers/LiveProvider";
 import { ErrorMessage, Loading } from "./components/ui";
 import { request } from "./services/api";
 import type { Container } from "./services/types";
@@ -26,9 +27,11 @@ function SessionGate() {
   )
     return <AuthView />;
   return (
-    <Suspense fallback={<Loading />}>
-      <Outlet />
-    </Suspense>
+    <LiveProvider>
+      <Suspense fallback={<Loading />}>
+        <Outlet />
+      </Suspense>
+    </LiveProvider>
   );
 }
 function Home() {

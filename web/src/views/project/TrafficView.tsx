@@ -1,4 +1,8 @@
 import { useState } from "react";
+import {
+  useLiveStatus,
+  useLiveSubscription,
+} from "../../providers/LiveProvider";
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useProject } from "../../layouts/ProjectLayout";
@@ -271,6 +275,12 @@ export function TrafficContent({ data }: { data: Traffic }) {
 export function TrafficView() {
   const { project } = useProject(),
     [windowSeconds, setWindow] = useState(300);
+  const liveError = useLiveSubscription({
+    topic: "traffic",
+    project_id: project.id,
+    window: windowSeconds,
+  });
+  const liveStatus = useLiveStatus();
   const query = useQuery({
     queryKey: ["traffic", project.id, windowSeconds],
     queryFn: ({ signal }) =>
@@ -280,7 +290,6 @@ export function TrafficView() {
         "GET",
         signal,
       ),
-    refetchInterval: 5000,
   });
   return (
     <>
@@ -288,13 +297,17 @@ export function TrafficView() {
       <section className="traffic-page">
         <div className="traffic-toolbar">
           <div>
-            <span className={`traffic-live ${query.isError ? "offline" : ""}`}>
+            <span
+              className={`traffic-live ${query.isError || liveError || liveStatus !== "connected" ? "offline" : ""}`}
+            >
               <span className="traffic-dot" />
-              {query.isError
+              {query.isError || liveError
                 ? "Disconnected"
                 : query.isFetching
                   ? "Updating…"
-                  : "Live · 5s"}
+                  : liveStatus === "connected"
+                    ? "Live updates"
+                    : "Reconnecting…"}
             </span>
           </div>
           <div className="traffic-window" aria-label="Traffic time range">

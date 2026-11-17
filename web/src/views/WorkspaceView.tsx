@@ -12,6 +12,10 @@ import { SourceFields } from "../components/SourceFields";
 import { Heading } from "../components/Heading";
 import { Badge, Empty } from "../components/ui";
 import { Icon } from "../components/Icon";
+import {
+  useLiveProjects,
+  useLiveSubscription,
+} from "../providers/LiveProvider";
 
 export function WorkspaceView() {
   const id = useParams().workspaceId!,
@@ -25,6 +29,8 @@ export function WorkspaceView() {
       queries: [queries.projects(id), queries.containers(), queries.releases()],
     });
   const [search, setSearch] = useState("");
+  useLiveSubscription({ topic: "workspace", workspace_id: id });
+  useLiveProjects(projects.map((project) => project.id));
   const containers = allContainers.filter((c) =>
     projects.some((p) => p.id === c.project_id),
   );

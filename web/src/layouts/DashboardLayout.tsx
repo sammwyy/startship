@@ -18,6 +18,7 @@ import { Brand, Icon } from "../components/Icon";
 import { Field, ThemeButton } from "../components/ui";
 import { Popover } from "../components/Popover";
 import { SystemUpdateLink } from "../components/SystemUpdateLink";
+import { useLiveStatus, useLiveSubscription } from "../providers/LiveProvider";
 
 interface DashboardContext {
   workspace?: Workspace;
@@ -39,8 +40,14 @@ export function DashboardLayout() {
   const { data: project } = useQuery({
     ...queries.project(projectMatch?.params.projectId || ""),
     enabled: !!projectMatch,
-    refetchInterval: 2000,
   });
+  useLiveSubscription(
+    projectMatch?.params.projectId
+      ? { topic: "project", project_id: projectMatch.params.projectId }
+      : null,
+  );
+  useLiveSubscription({ topic: "system_update" });
+  const liveStatus = useLiveStatus();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("startship-sidebar-collapsed") === "true",
   );
@@ -326,7 +333,14 @@ export function DashboardLayout() {
                 Startship <span className="footer-separator">/</span> Deployment
                 platform
               </span>
-              <span>Your infrastructure. No middleman.</span>
+              <span className={`live-connection ${liveStatus}`} role="status">
+                <span />
+                {liveStatus === "connected"
+                  ? "Live updates connected"
+                  : liveStatus === "disconnected"
+                    ? "Live updates disconnected"
+                    : "Connecting live updates…"}
+              </span>
             </footer>
           </main>
         </div>

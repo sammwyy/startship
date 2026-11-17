@@ -24,7 +24,6 @@ export const queries = {
   updates: () => ({
     ...resource<UpdateInfo>("system/update"),
     retry: false,
-    refetchInterval: 60000,
   }),
   version: () => ({
     ...resource<SystemVersion>("system/version"),
