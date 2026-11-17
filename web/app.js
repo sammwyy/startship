@@ -150,7 +150,7 @@ function createProject(){
  });
 }
 const types=['auto','dockerfile','static','node','python','go','rust'];
-const projectSections=[['deployments','Deployments','activity'],['logs','Logs','terminal'],['containers','Containers','box'],['domains','Domains','globe'],['source','Source','branch'],['environment','Environment','lock'],['settings','Settings','settings']];
+const projectSections=[['deployments','Deployments','activity'],['logs','Logs','terminal'],['containers','Containers','box'],['traffic','Traffic','activity'],['domains','Domains','globe'],['source','Source','branch'],['environment','Environment','lock'],['settings','Settings','settings']];
 const busyRelease=d=>d&&['queued','building','testing','starting'].includes(d.status);
 function environmentData(value){
  const env={};for(const line of value.split('\n')){if(!line.trim()||line.trim().startsWith('#'))continue;const i=line.indexOf('=');if(i<1||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0,i).trim()))throw Error('Use KEY=VALUE, one variable per line.');env[line.slice(0,i).trim()]=line.slice(i+1)}return env;
@@ -284,7 +284,7 @@ async function render(){
  const parts=location.hash.slice(1).split('/');if(parts[0]==='login'){auth(false);return}
  workspaces=await api('workspaces');if(version!==viewVersion)return;workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
  if(!parts[0]&&workspace){nav('workspace/'+workspace.id);return}
- if(parts[0]==='project'){await projectPage(parts[1],parts[2],parts[3]);return}
+ if(parts[0]==='project'){if(parts[2]==='traffic')await trafficPage(parts[1]);else await projectPage(parts[1],parts[2],parts[3]);return}
  if(parts[0]==='app'){await appPage(parts[1],parts[2]);return}
  if(parts[0]==='workspace'&&workspace){
   localStorage.setItem('workspace',workspace.id);

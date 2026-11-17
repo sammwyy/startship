@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 type Target struct {
@@ -116,6 +117,12 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Startship: no route configured for this address.", 404)
 		return
 	}
+	started := time.Now()
+	observed := &trafficWriter{ResponseWriter: w}
+	w = observed
+	defer func() {
+		a.traffic.record(target.Route.ProjectID, r.Method, target.Route.Host+target.Route.PathPrefix, observed.statusCode(), time.Since(started), time.Now())
+	}()
 	d := target.Deployment
 	if d.Status != "running" {
 		http.Error(w, "Startship: this container has no healthy deployment yet.", 502)

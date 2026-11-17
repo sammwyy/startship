@@ -22,6 +22,7 @@ type Server struct {
 	queues  map[string]chan string
 	routeMu sync.RWMutex
 	targets []Target
+	traffic trafficMetrics
 	// dashboardDomain is served by the proxy listeners; https is set when ACME is enabled.
 	dashboardDomain string
 	https           bool
@@ -319,6 +320,10 @@ func (a *Server) api() http.Handler {
 				fail(w, 404, "not found")
 				return
 			}
+		}
+		if len(p) == 4 && kind == "projects" && p[3] == "traffic" {
+			a.projectTraffic(w, r, old)
+			return
 		}
 		if len(p) == 4 && kind == "projects" && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" {
 			a.projectDeployAPI(w, r, old, p[3])

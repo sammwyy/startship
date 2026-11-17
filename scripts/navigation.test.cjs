@@ -10,7 +10,7 @@ function fixture(hash = '#workspace/w1') {
  const element = selector => {
   if (!elements.has(selector)) elements.set(selector, {
    innerHTML: '', textContent: '', style: {}, hidden: false, dataset: {}, attributes: {},
-   classList: { toggle() {} },
+   classList: { toggle() {}, add() {}, remove() {} },
    setAttribute(name, value) { this.attributes[name] = value; },
    removeAttribute(name) { delete this.attributes[name]; },
   });
@@ -51,13 +51,35 @@ test('project sidebar exposes direct project sections and no app tabs', () => {
  const f=fixture('#project/p1/source');f.run("shell(heading('','Source',''),{id:'p1',name:'Storefront',summary:'2 containers · 2 running',deployment_status:'running'})");
  const html=f.element('#root').innerHTML;
  assert.match(html,/href="#workspace\/w1"[^>]*>.*All projects/);
- for(const section of ['deployments','logs','containers','domains','source','environment','settings'])assert.ok(html.includes('href="#project/p1/'+section+'"'));
+ for(const section of ['deployments','logs','containers','traffic','domains','source','environment','settings'])assert.ok(html.includes('href="#project/p1/'+section+'"'));
  assert.match(html,/href="#project\/p1\/source" aria-current="page"/);
  assert.doesNotMatch(html,/Applications|App settings|Workspace settings|data-tab|contextbar|breadcrumbs|project-heading/);
  const sidebar=html.slice(html.indexOf('<aside'),html.indexOf('</aside>'));
  assert.doesNotMatch(sidebar,/project-summary|project-state|deploy-project|sidebar-deployment/);
  assert.match(sidebar,/class="sidebar-source"/);
  assert.equal((html.match(/<header class="heading"/g)||[]).length,1);
+});
+
+test('traffic uses the shared project sidebar without replacing project routes',async()=>{
+ const f=fixture('#project/p1/traffic');
+ vm.runInContext(readFileSync(require('node:path').join(__dirname,'../web/traffic.js'),'utf8'),f.context);
+ f.context.fakeAPI=async path=>path==='projects/p1'?{id:'p1',name:'Repo',workspace_id:'w2'}:{};
+ f.run('api=fakeAPI;trafficContent=()=>"Metrics loaded"');
+ await f.run("trafficPage('p1')");
+ const html=f.element('#root').innerHTML;
+ assert.match(html,/href="#project\/p1\/traffic" aria-current="page"/);
+ assert.match(html,/Live traffic/);assert.doesNotMatch(html,/traffic-sidebar|traffic-layout/);
+ assert.match(html,/id="open-navigation" aria-label="Open navigation" aria-haspopup="dialog"/);
+ assert.equal((html.match(/<header class="heading"/g)||[]).length,1);
+ assert.equal((html.match(/<aside/g)||[]).length,1);
+ assert.equal(f.stored.get('workspace'),'w2');
+ assert.equal(f.element('#traffic-data').innerHTML,'Metrics loaded');
+ f.context.fakeAPI=async path=>path==='setup'?{}:path==='workspaces'?[{id:'w2',name:'Sandbox'}]:{};
+ f.run('api=fakeAPI;projectPage=async(...args)=>{globalThis.projectRoute=args}');
+ for(const [hash,section,runtime] of [['#project/p1',undefined,undefined],['#project/p1/source','source',undefined],['#project/p1/logs/c1','logs','c1']]){
+  f.context.location.hash=hash;await f.run('render()');
+  assert.deepEqual(Array.from(f.context.projectRoute),['p1',section,runtime]);
+ }
 });
 
 test('workspace and account names are escaped in menu markup', () => {
