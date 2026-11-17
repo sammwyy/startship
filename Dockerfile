@@ -3,7 +3,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -o /startshipd .
+ARG VERSION=dev
+ARG COMMIT=dev
+RUN CGO_ENABLED=0 go build -ldflags "-X github.com/sammwyy/startship/internal/version.Version=${VERSION} -X github.com/sammwyy/startship/internal/version.Commit=${COMMIT}" -o /startshipd ./cmd/startshipd
 FROM docker:29-cli
 RUN apk add --no-cache git ca-certificates
 COPY --from=build /startshipd /usr/local/bin/startshipd

@@ -1,4 +1,4 @@
-module startship
+module github.com/sammwyy/startship
 
 go 1.26
 
