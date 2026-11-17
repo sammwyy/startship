@@ -116,6 +116,57 @@ func (c *cli) printAccess(v any, columns ...string) error {
 	return w.Flush()
 }
 
+func (c *cli) memberRows(value any, workspaceID string) ([]any, error) {
+	members, ok := value.([]any)
+	if !ok {
+		return nil, errors.New("expected members list")
+	}
+	if len(members) == 0 {
+		return members, nil
+	}
+	v, err := c.request("GET", "roles", nil)
+	if err != nil {
+		return nil, err
+	}
+	roles, ok := v.([]any)
+	if !ok {
+		return nil, errors.New("expected roles list")
+	}
+	names := map[string]string{}
+	for _, row := range roles {
+		role, _ := row.(map[string]any)
+		names[field(role, "id")] = field(role, "name")
+	}
+	rows := make([]any, 0, len(members))
+	for _, row := range members {
+		member, ok := row.(map[string]any)
+		if !ok {
+			return nil, errors.New("expected member object")
+		}
+		assignments, _ := member["roles"].([]any)
+		labels := make([]string, 0, len(assignments))
+		for _, entry := range assignments {
+			assignment, _ := entry.(map[string]any)
+			roleID := field(assignment, "role_id")
+			label := names[roleID]
+			if label == "" {
+				label = roleID
+			}
+			scope, scopeID := field(assignment, "scope"), field(assignment, "scope_id")
+			if scope != "workspace" || scopeID != workspaceID {
+				target := scopeID
+				if scope == "project" && field(assignment, "project_name") != "" {
+					target = field(assignment, "project_name")
+				}
+				label += " (" + strings.TrimSpace(scope+" "+target) + ")"
+			}
+			labels = append(labels, label)
+		}
+		rows = append(rows, map[string]any{"user_id": member["user_id"], "username": member["username"], "roles": strings.Join(labels, ", ")})
+	}
+	return rows, nil
+}
+
 func (c *cli) runAccess(cmd string, args []string) (bool, error) {
 	if cmd == "workspaces" && len(args) > 0 && args[0] == "members" {
 		cmd, args = "members", args[1:]
@@ -303,8 +354,12 @@ func (c *cli) runAccess(cmd string, args []string) (bool, error) {
 			if !ok {
 				return errors.New("expected members response")
 			}
+			rows, e := c.memberRows(m["members"], id)
+			if e != nil {
+				return e
+			}
 			fmt.Fprintf(c.out, "Can manage: %v\n", m["can_manage"])
-			return c.printAccess(m["members"], "user_id", "username", "roles")
+			return c.printAccess(rows, "user_id", "username", "roles")
 		case "grant", "revoke":
 			if e := count(2); e != nil {
 				return e

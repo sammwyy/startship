@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -36,7 +37,7 @@ func TestAccessCommands(t *testing.T) {
 		{args: "revoke bob Member --workspace Team", method: "DELETE", path: "/api/assignments/a"},
 		{args: "assignments list --user bob --project Site", method: "GET", path: "/api/assignments", query: "scope=project&scope_id=p&user_id=u", response: `[]`, output: "ROLE_ID"},
 		{args: "assignments list", method: "GET", path: "/api/assignments", response: `[]`, output: "USER_ID"},
-		{args: "members Team", method: "GET", path: "/api/workspaces/w/members", response: `{"members":[{"user_id":"u","username":"bob","roles":[]}],"can_manage":true}`, output: "bob"},
+		{args: "members Team", method: "GET", path: "/api/workspaces/w/members", response: `{"members":[{"user_id":"u","username":"bob","roles":[{"role_id":"r","scope":"workspace","scope_id":"w"},{"role_id":"member","scope":"project","scope_id":"p","project_name":"web"}]}],"can_manage":true}`, output: "My Role, Member (project web)"},
 		{args: "workspaces members w", method: "GET", path: "/api/workspaces/w/members", response: `{"members":[],"can_manage":false}`, output: "USER_ID"},
 		{args: "overrides list workspace Team", method: "GET", path: "/api/overrides", query: "scope=workspace&scope_id=w", response: `[]`, output: "SUBJECT_ID"},
 		{args: "overrides set workspace Team --user bob --allow logs.view --deny deploy", method: "PUT", path: "/api/overrides", body: `{"scope":"workspace","scope_id":"w","subject_type":"user","subject_id":"u","allow":["logs.view"],"deny":["deploy"]}`},
@@ -152,6 +153,51 @@ func TestAccessResolutionFailures(t *testing.T) {
 			c := &cli{config: config{Server: s.URL}, out: &bytes.Buffer{}, client: s.Client()}
 			if _, e := c.resolve("users", "bob"); e == nil {
 				t.Fatal("expected unresolved/ambiguous error")
+			}
+		})
+	}
+}
+
+func TestMemberRolesJSONAndLookupError(t *testing.T) {
+	const response = `{"members":[{"user_id":"u","username":"bob","roles":[{"role_id":"member","scope":"project","scope_id":"p","project_name":"web"}]}],"can_manage":true}`
+	for _, raw := range []bool{false, true} {
+		t.Run(fmt.Sprint(raw), func(t *testing.T) {
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/api/workspaces":
+					w.Write([]byte(`[{"id":"w","name":"Team"}]`))
+				case "/api/workspaces/w/members":
+					w.Write([]byte(response))
+				case "/api/roles":
+					if raw {
+						t.Error("JSON must not resolve roles")
+					}
+					w.WriteHeader(403)
+					w.Write([]byte(`{"error":"roles unavailable"}`))
+				default:
+					t.Error("unexpected request", r.URL.Path)
+				}
+			}))
+			defer s.Close()
+			var out bytes.Buffer
+			c := &cli{config: config{Server: s.URL}, out: &out, client: s.Client(), raw: raw}
+			err := c.run([]string{"members", "Team"})
+			if !raw {
+				if err == nil || !strings.Contains(err.Error(), "roles unavailable") {
+					t.Fatal(err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got, want any
+			if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			json.Unmarshal([]byte(response), &want)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("JSON changed: %s", out.String())
 			}
 		})
 	}
