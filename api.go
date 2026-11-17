@@ -296,9 +296,7 @@ func (a *Server) api() http.Handler {
 		case "routes":
 			v.Parent = v.ProjectID
 			v.Host = normalizeHost(v.Host)
-			if v.PathPrefix == "" {
-				v.PathPrefix = "/"
-			}
+			v.PathPrefix = normalizePrefix(v.PathPrefix)
 			app, e := a.store.get(v.AppID)
 			if e != nil || app.Kind != "apps" || app.ProjectID != v.ProjectID || app.Owner != uid || v.Host == "" || !strings.HasPrefix(v.PathPrefix, "/") {
 				fail(w, 400, "invalid route")
