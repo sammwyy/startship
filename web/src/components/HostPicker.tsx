@@ -20,10 +20,12 @@ export function HostPicker({
   domains,
   host = "",
   admin,
+  onHostChange,
 }: {
   domains: WorkspaceDomain[];
   host?: string;
   admin?: boolean;
+  onHostChange?: (host: string) => void;
 }) {
   const exact = domains.find((d) => d.apex && d.name === host),
     wildcard =
@@ -36,9 +38,23 @@ export function HostPicker({
         : host && admin
           ? ""
           : domains.length
-            ? `${domains[0].subdomains ? "*." : ""}${domains[0].name}`
+            ? domainPatterns(domains[0])[0]
             : ""),
   );
+  const [sub, setSub] = useState(
+    wildcard ? host.slice(0, -wildcard.name.length - 1) : "",
+  );
+  const [custom, setCustom] = useState(!exact && !wildcard ? host : "");
+  function change(domain: string, prefix = sub, hostname = custom) {
+    setSelected(domain);
+    onHostChange?.(
+      domain === ""
+        ? hostname
+        : domain.startsWith("*.")
+          ? `${prefix.trim().replace(/\.$/, "")}.${domain.slice(2)}`
+          : domain,
+    );
+  }
   if (!domains.length && !admin)
     return (
       <p className="note">
@@ -56,9 +72,12 @@ export function HostPicker({
           name="sub"
           aria-label="Subdomain"
           placeholder="app"
-          defaultValue={
-            wildcard ? host.slice(0, -wildcard.name.length - 1) : ""
-          }
+          value={sub}
+          onChange={(e) => {
+            setSub(e.target.value);
+            change(selected, e.target.value);
+          }}
+          disabled={mode !== "sub"}
           required={mode === "sub"}
           autoComplete="off"
         />
@@ -67,7 +86,7 @@ export function HostPicker({
           name="domain"
           aria-label="Domain"
           value={selected}
-          onChange={(e) => setSelected(e.target.value)}
+          onChange={(e) => change(e.target.value)}
         >
           {domains.flatMap(domainPatterns).map((p) => (
             <option key={p}>{p}</option>
@@ -78,7 +97,12 @@ export function HostPicker({
           name="host"
           aria-label="Hostname"
           placeholder="example.com"
-          defaultValue={!exact && !wildcard ? host : ""}
+          value={custom}
+          onChange={(e) => {
+            setCustom(e.target.value);
+            change(selected, sub, e.target.value);
+          }}
+          disabled={mode !== "custom"}
           required={mode === "custom"}
           autoComplete="off"
         />

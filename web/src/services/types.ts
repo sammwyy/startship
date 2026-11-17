@@ -49,6 +49,7 @@ export interface DomainRoute {
   host: string;
   path_prefix: string;
   strip_prefix: boolean;
+  port?: number;
   container_id?: string;
   app_id?: string;
   url?: string;

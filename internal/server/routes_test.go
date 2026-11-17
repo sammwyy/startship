@@ -2,14 +2,77 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestRouteContainerPorts(t *testing.T) {
+	f := newRBACFixture(t)
+	upstream := func(name string) (string, int) {
+		t.Helper()
+		s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, name+":"+r.URL.RequestURI())
+		}))
+		t.Cleanup(s.Close)
+		host, port, err := net.SplitHostPort(strings.TrimPrefix(s.URL, "http://"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, _ := strconv.Atoi(port)
+		return host, p
+	}
+	ip, detected := upstream("detected")
+	_, override := upstream("override")
+	app := Record{ID: "port-container", Kind: "apps", Owner: f.aliceID, Parent: f.project.ID, ProjectID: f.project.ID, Name: "web", Port: detected, Active: "port-deployment"}
+	for _, record := range []Record{app, {ID: app.Active, Kind: "deployments", Status: "running", IP: ip}} {
+		if err := f.a.store.Save(record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	create := func(path string, port int) Record {
+		t.Helper()
+		body := fmt.Sprintf(`{"project_id":%q,"container_id":%q,"host":"ports.test","path_prefix":%q,"strip_prefix":true,"port":%d}`, f.project.ID, app.ID, path, port)
+		return decodeBody[Record](t, accountRequest(t, f.h, "POST", "routes", body, f.root, 200).Body.Bytes())
+	}
+	legacy := create("/", 0)
+	route := create("/api", override)
+	check := func(path, want string) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		f.a.ServeHTTP(w, httptest.NewRequest("GET", "http://ports.test"+path, nil))
+		if w.Code != 200 || w.Body.String() != want {
+			t.Fatalf("%s: %d %s, want %s", path, w.Code, w.Body.String(), want)
+		}
+	}
+	check("/health", "detected:/health")
+	check("/api/health?ready=1", "override:/health?ready=1")
+	for _, port := range []int{-1, 65536} {
+		accountRequest(t, f.h, "PATCH", "routes/"+route.ID, fmt.Sprintf(`{"port":%d}`, port), f.root, 400)
+	}
+	for _, port := range []int{1, 65535} {
+		accountRequest(t, f.h, "PATCH", "routes/"+route.ID, fmt.Sprintf(`{"port":%d}`, port), f.root, 200)
+	}
+	accountRequest(t, f.h, "PATCH", "routes/"+route.ID, `{"port":0}`, f.root, 200)
+	check("/api/health", "detected:/health")
+	app.Port = override
+	if err := f.a.store.Save(app); err != nil {
+		t.Fatal(err)
+	}
+	f.a.refresh()
+	check("/health", "override:/health")
+	check("/api/health", "override:/health")
+	if saved, _ := f.a.store.Get(legacy.ID); saved.Port != 0 {
+		t.Fatal("default routes must keep following the detected port")
+	}
+}
 
 func TestStaticCacheRevalidation(t *testing.T) {
 	for _, prefix := range []string{"/", "/site/"} {

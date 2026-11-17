@@ -349,7 +349,9 @@ Ownership-scoped CRUD: `workspaces`, `projects`, and `routes`. Names are require
 
 - workspace: `name`
 - project: `workspace_id, name, git_url, git_token, branch, root_dir, build_type, port, env, test_command, auto_deploy`
-- route: `project_id, container_id, host, path_prefix, strip_prefix`
+- route: `project_id, container_id, host, path_prefix, strip_prefix, port`
+
+The Domains view maps a public hostname and path to a detected container and its internal port. With one container, the destination is selected automatically. With several, choose the destination for each route. The optional route `port` overrides the container's detected port without changing its configuration or redeploying; omit it or set it to `0` to follow the detected port. Explicit ports must be between `1` and `65535`. Existing routes continue to use the detected port.
 
 Project defaults: branch `main`, root `.`, build strategy `auto`, port `0` (detect), automatic push deployment off. Env is a string map applied to all detected containers. Git tokens require HTTPS and are excluded from responses. Project responses include their signed webhook details.
 
