@@ -8,14 +8,39 @@ Requires Go 1.26+, Docker Engine and Git. No C toolchain required.
 
 ```sh
 go build -o startshipd .
-STARTSHIP_ADMIN_USER=admin STARTSHIP_ADMIN_PASSWORD='change-this-password' ./startshipd
-# or:
+# Native quick start: use an unprivileged router port (dashboard stays on 8080).
+STARTSHIP_HTTP_ADDR=:8081 ./startshipd
+```
+
+Open `http://localhost:8080` and create your administrator account. The dashboard
+is on port **8080**; deployed apps are served by the separate router on port
+**8081** in this quick start. Route `localhost` plus a path such as `/site/` to
+an app, then visit `http://localhost:8081/site/`. For a remote server, use its
+hostname instead and point DNS at it. The app's internal port is not published.
+
+On Linux, the default router ports 80/443 require permission to bind privileged
+ports. To use those defaults without running the daemon as root:
+
+```sh
+sudo setcap 'cap_net_bind_service=+ep' ./startshipd
+./startshipd
+```
+
+Reapply the capability after rebuilding or replacing the binary. Alternatively,
+keep `STARTSHIP_HTTP_ADDR=:8081` (and, when using ACME,
+`STARTSHIP_HTTPS_ADDR=:8443`) and forward public ports 80/443 at your gateway.
+ACME validation still needs public port 80. Docker socket access is also required;
+check `docker info` works as the user running Startship.
+
+Or use Docker Compose (no host Go installation required):
+
+```sh
 docker compose up --build -d
 ```
 
 Visit `GET /api/setup` on port 8080. If no seed user exists, `POST /api/setup` with `{"username":"admin","password":"at-least-eight-characters"}`. Setup closes once a user exists. Every user gets `<username>'s Workspace`. No public registration after setup.
 
-Or open `http://localhost:8080` in your browser: first-run setup and login guide you into your workspaces. Create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line.
+In the dashboard, first-run setup and login guide you into your workspaces. Create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Open the route's URL to visit the app through the router, not the dashboard or internal container port. URLs use the configured router port and HTTPS when ACME is enabled; if a gateway maps different external ports, use your gateway's public URL instead. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line.
 
 **Security:** Startship controls the Docker socket and can execute arbitrary repository code. Treat every dashboard user and repository as a server administrator, not as an untrusted tenant. Do not expose initial setup publicly. Terminate dashboard TLS at a trusted gateway or use `STARTSHIP_DASHBOARD_DOMAIN` and ACME. Restrict direct access to dashboard port 8080. Cookies are HttpOnly/SameSite=Lax and Secure on HTTPS. Build logs may include secrets printed by application commands: do not print credentials. File URLs are allowed intentionally for local deployment.
 
@@ -70,4 +95,4 @@ go vet ./... && go test ./...
 ./scripts/e2e.sh
 ```
 
-E2E requires Python 3, curl, Git and real Docker. Uses localhost ports 18080/18081, creates a local Python + static monorepo, deploys both through the API, tests longest-prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.
+E2E requires Python 3, curl, Git and real Docker. Uses localhost ports 18080/18081, creates a local Dockerfile + Python + Rust + static monorepo, auto-detects and deploys all four through the API, tests route URLs, prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.
