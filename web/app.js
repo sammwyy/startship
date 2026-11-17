@@ -117,7 +117,7 @@ async function projectPage(id,selectedId='',initialTab='deployments'){
  const app=apps.find(a=>a.id===selectedId)||apps[0],running=apps.filter(a=>deploymentStatus(a,deployments)==='running').length;
  shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; '+esc(p.name),
   heading('Project',p.name,apps.length+' app'+(apps.length===1?'':'s')+' · '+running+' running · '+routes.length+' route'+(routes.length===1?'':'s'),'<button id="edit-project-source">'+icon('branch')+'Project source</button><button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>')+
-  '<div class="project-source-summary"><span>'+icon('branch')+'<strong>Project source</strong> '+esc(p.git_url||'Not configured')+'</span><span>'+esc(p.branch||'')+'</span></div>'+(p.source_conflict?'<div class="note source-warning">Existing apps have different sources. Choose one project repository before editing or deploying apps.</div>':'')+
+  '<div class="project-source-summary"><span>'+icon('branch')+'<strong>Project source</strong> '+esc(p.git_url||'Not configured')+'</span><a class="button" href="#project/'+esc(p.id)+'/traffic">'+icon('activity')+'Live traffic</a><span>'+esc(p.branch||'')+'</span></div>'+(p.source_conflict?'<div class="note source-warning">Existing apps have different sources. Choose one project repository before editing or deploying apps.</div>':'')+
   (app?'<nav class="service-switcher" aria-label="Project applications" '+(apps.length===1?'hidden':'')+'>'+apps.map(a=>'<a data-app-link="'+esc(a.id)+'" class="service-option '+(a.id===app.id?'active':'')+'" '+(a.id===app.id?'aria-current="page"':'')+' href="#app/'+esc(a.id)+'/'+esc(initialTab)+'"><span class="service-icon">'+icon('box')+'</span><span class="service-copy"><strong>'+esc(a.name)+'</strong><small>'+esc(a.root_dir==='.'?'Repository root':a.root_dir)+' · '+esc(a.build_type)+'</small></span><span data-service-status="'+esc(a.id)+'">'+badge(deploymentStatus(a,deployments))+'</span></a>').join('')+'</nav><section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
    empty('Choose apps from this repository','Add an app at the repository root, or detect frontend, backend, and daemon folders inside this project’s monorepo.')));
  $('#edit-project-source').onclick=()=>editProjectSource(p);$('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p,apps);
@@ -224,7 +224,7 @@ async function render(){
  if(!user){try{user=await api('me')}catch{auth(false);return}}
  const parts=location.hash.slice(1).split('/');if(parts[0]==='login'){auth(false);return}
  workspaces=await api('workspaces');if(version!==viewVersion)return;workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
- if(parts[0]==='project'){await projectPage(parts[1],'',parts[2]);return}
+ if(parts[0]==='project'){if(parts[2]==='traffic')await trafficPage(parts[1]);else await projectPage(parts[1],'',parts[2]);return}
  if(parts[0]==='app'){await appPage(parts[1],parts[2]);return}
  if(parts[0]==='workspace'&&workspace){
   localStorage.setItem('workspace',workspace.id);
