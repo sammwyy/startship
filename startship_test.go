@@ -4,6 +4,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -103,6 +105,108 @@ func TestRoutes(t *testing.T) {
 		t.Fatal("strip")
 	}
 }
+func TestRoutePrefixes(t *testing.T) {
+	for _, v := range []struct{ input, want string }{{"", "/"}, {"*", "/"}, {"api", "/api"}, {"api/*", "/api/"}, {"/api/*", "/api/"}, {"/api*", "/api"}, {"/api/", "/api/"}, {" /api ", "/api"}} {
+		if got := normalizePrefix(v.input); got != v.want {
+			t.Errorf("normalizePrefix(%q) = %q, want %q", v.input, got, v.want)
+		}
+	}
+	for _, v := range []struct {
+		prefix, path string
+		want         bool
+	}{{"/", "/apiary", true}, {"/api", "/api", true}, {"/api", "/api/", true}, {"/api", "/api/health", true}, {"/api", "/apiary", false}, {"/api", "/apiculture", false}, {"/api/", "/api", false}, {"/api/", "/api/health", true}} {
+		if got := matchesPrefix(v.path, v.prefix); got != v.want {
+			t.Errorf("matchesPrefix(%q, %q) = %v", v.path, v.prefix, got)
+		}
+	}
+	ts := []Target{{Route: Record{Host: "example.com", PathPrefix: "/"}}, {Route: Record{Host: "example.com", PathPrefix: "/api"}}}
+	for _, p := range []string{"/api", "/api/health", "/apiary"} {
+		want := "/api"
+		if p == "/apiary" {
+			want = "/"
+		}
+		if got := matchRoute(ts, "example.com", p); got == nil || got.Route.PathPrefix != want {
+			t.Fatalf("route for %s: %+v", p, got)
+		}
+	}
+	for _, v := range []struct{ path, prefix, want string }{{"/api", "/api", "/"}, {"/api/", "/api", "/"}, {"/api/health", "/api", "/health"}, {"/api/health", "/api/", "/health"}} {
+		if got := stripped(v.path, v.prefix); got != v.want {
+			t.Errorf("stripped(%q, %q) = %q", v.path, v.prefix, got)
+		}
+	}
+}
+func TestListenerErrors(t *testing.T) {
+	l, err := listen("test", "127.0.0.1:0", "TEST_ADDR", ":8081")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Close()
+	for _, name := range []string{"dashboard", "proxy"} {
+		_, err := listen(name, l.Addr().String(), "TEST_ADDR", ":8081")
+		if err == nil || !strings.Contains(err.Error(), name+": cannot listen on "+l.Addr().String()) || !strings.Contains(err.Error(), "set TEST_ADDR=:8081") {
+			t.Fatal(err)
+		}
+	}
+	first, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := first.Addr().String()
+	first.Close()
+	if err := serve([]*http.Server{{Addr: addr}, {Addr: l.Addr().String()}}); err == nil || !strings.Contains(err.Error(), "STARTSHIP_HTTP_ADDR=:8081") {
+		t.Fatal(err)
+	}
+	reopened, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Fatal("listener leaked after startup failure:", err)
+	}
+	reopened.Close()
+}
+func TestRouteNormalizationAPI(t *testing.T) {
+	a := testServer(t)
+	uid, err := a.createUser("alice", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := a.api()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"alice","password":"password123"}`)))
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cookie := w.Result().Cookies()[0]
+	project := Record{ID: randomID(), Kind: "projects", Owner: uid}
+	app := Record{ID: randomID(), Kind: "apps", Owner: uid, ProjectID: project.ID}
+	for _, record := range []Record{project, app} {
+		if err := a.store.save(record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	request := func(method, path, prefix string) *httptest.ResponseRecorder {
+		body, _ := json.Marshal(map[string]string{"project_id": project.ID, "app_id": app.ID, "host": "example.com", "path_prefix": prefix})
+		r := httptest.NewRequest(method, path, strings.NewReader(string(body)))
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	w = request("POST", "/api/routes", "api/*")
+	var route Record
+	if err := json.Unmarshal(w.Body.Bytes(), &route); err != nil || w.Code != 200 || route.PathPrefix != "/api/" {
+		t.Fatal(w.Code, w.Body.String(), err)
+	}
+	if duplicate := request("POST", "/api/routes", "/api/"); duplicate.Code != 409 {
+		t.Fatal(duplicate.Code, duplicate.Body.String())
+	}
+	w = request("PATCH", "/api/routes/"+route.ID, "api")
+	if err := json.Unmarshal(w.Body.Bytes(), &route); err != nil || w.Code != 200 || route.PathPrefix != "/api" {
+		t.Fatal(w.Code, w.Body.String(), err)
+	}
+	w = request("PATCH", "/api/routes/"+route.ID, "")
+	if err := json.Unmarshal(w.Body.Bytes(), &route); err != nil || w.Code != 200 || route.PathPrefix != "/" {
+		t.Fatal(w.Code, w.Body.String(), err)
+	}
+}
 func TestSignature(t *testing.T) {
 	body := []byte("payload")
 	m := hmac.New(sha256.New, []byte("secret"))
@@ -187,5 +291,110 @@ func TestStaticProxy(t *testing.T) {
 		if w.Code != 200 || !strings.Contains(w.Body.String(), "static-ok") {
 			t.Fatal(w.Code, w.Body.String())
 		}
+	}
+}
+func setupAndLogin(t *testing.T, h http.Handler, header map[string]string) *http.Response {
+	t.Helper()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/setup", strings.NewReader(`{"username":" carol ","password":"password123"}`)))
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	req := httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"carol","password":"password123"}`))
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	return w.Result()
+}
+func TestNamesRequiredAndTrimmed(t *testing.T) {
+	a := testServer(t)
+	h := a.api()
+	cookie := setupAndLogin(t, h, nil).Cookies()[0]
+	post := func(path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest("POST", path, strings.NewReader(body))
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	for _, body := range []string{`{}`, `{"name":"   "}`} {
+		if w := post("/api/workspaces", body); w.Code != 400 || !strings.Contains(w.Body.String(), "name is required") {
+			t.Fatal(body, w.Code, w.Body.String())
+		}
+	}
+	w := post("/api/workspaces", `{"name":"  Client Sites "}`)
+	var ws Record
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &ws) != nil || ws.Name != "Client Sites" || ws.Created.IsZero() {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := post("/api/projects", `{"workspace_id":"`+ws.ID+`","name":" "}`); w.Code != 400 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w := post("/api/projects", `{"workspace_id":"`+ws.ID+`","name":"Acme"}`); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"carol","password":"wrong-password"}`)))
+	if w.Code != 401 || !strings.Contains(w.Body.String(), "invalid username or password") {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
+func TestSecureCookiesBehindTLSProxy(t *testing.T) {
+	a := testServer(t)
+	h := a.api()
+	res := setupAndLogin(t, h, map[string]string{"X-Forwarded-Proto": "https"})
+	cookie := res.Cookies()[0]
+	if !cookie.Secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatal(cookie)
+	}
+	r := httptest.NewRequest("POST", "/api/logout", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	r.AddCookie(cookie)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	cleared := w.Result().Cookies()[0]
+	if cleared.MaxAge >= 0 || !cleared.Secure || cleared.SameSite != http.SameSiteLaxMode {
+		t.Fatal(cleared)
+	}
+	r = httptest.NewRequest("GET", "/api/me", nil)
+	r.AddCookie(cookie)
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 401 {
+		t.Fatal("session survived logout", w.Code)
+	}
+}
+func TestDashboardDomainHTTPS(t *testing.T) {
+	a := testServer(t)
+	a.dashboardDomain = "Dash.Example.com"
+	a.store.save(Record{ID: "r1", Kind: "routes", Owner: "u", Host: "app.example.com", PathPrefix: "/"})
+	for host, want := range map[string]bool{"dash.example.com": true, "app.example.com": true, "other.example.com": false, "": false} {
+		if a.certAllowed(host) != want {
+			t.Fatal(host, want)
+		}
+	}
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, httptest.NewRequest("GET", "http://dash.example.com/api/setup", nil))
+	if w.Code != 200 {
+		t.Fatal("plain HTTP dashboard without ACME", w.Code)
+	}
+	a.https = true
+	w = httptest.NewRecorder()
+	a.ServeHTTP(w, httptest.NewRequest("GET", "http://dash.example.com/api/setup?x=1", nil))
+	if w.Code != http.StatusPermanentRedirect || w.Header().Get("Location") != "https://dash.example.com/api/setup?x=1" {
+		t.Fatal(w.Code, w.Header().Get("Location"))
+	}
+	w = httptest.NewRecorder()
+	a.ServeHTTP(w, httptest.NewRequest("GET", "https://dash.example.com/api/setup", nil))
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "required") {
+		t.Fatal(w.Code, w.Body.String())
 	}
 }
