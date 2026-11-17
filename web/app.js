@@ -171,6 +171,12 @@ function sourceContent(project){
  const webhook=project.webhook_secret?location.origin+'/api/webhooks/github/'+project.id:'';
  return '<div class="integration-layout"><section class="panel panel-pad"><div class="section-head"><h2>Project source</h2><button id="edit-project-source">Edit source</button></div><p class="small muted">A single repository and branch for every container.</p><dl class="source-details"><dt>Repository</dt><dd>'+esc(project.git_url||'Not connected')+'</dd><dt>Branch</dt><dd>'+esc(project.branch||'main')+'</dd><dt>Credentials</dt><dd>'+(project.has_git_token?'Token configured':'No token')+'</dd></dl></section><section class="panel panel-pad"><h2>GitHub webhook</h2><p class="small muted">A signed push queues one project deployment when automatic deployment is enabled in Settings.</p>'+field('Payload URL','webhook_url',webhook,'text','readonly')+field('Webhook secret','webhook_secret',project.webhook_secret||'Connect a source first','password','readonly')+'<button id="reveal-webhook" type="button">Show secret</button><p class="small muted">Content type: application/json · Event: push</p></section></div>';
 }
+const sectionPermissions={settings:'project.settings',environment:'project.environment',source:'project.source',domains:'domains.manage'};
+function lockSection(project,section){
+ const perm=sectionPermissions[section];if(!perm||!project.permissions||can(perm,project))return;
+ document.querySelectorAll('.content form :is(input,select,textarea,button),#add-project-domain,#edit-project-source,[data-delete-route]').forEach(el=>el.disabled=true);
+ $('.content .heading').insertAdjacentHTML('afterend','<p class="note locked-note">'+icon('lock')+'You can view this section, but your roles do not let you change it.</p>');
+}
 function projectSettings(project){
  return '<form id="project-settings" class="panel panel-pad project-form"><div class="section-head"><h2>Project settings</h2><span class="small muted">Shared by every container</span></div><div class="split">'+field('Project name','name',project.name,'text','required')+field('Repository root','root_dir',project.root_dir||'.','text','required')+'</div><div class="split"><label>Build strategy<select name="build_type">'+types.map(t=>'<option '+((project.build_type||'auto')===t?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'+field('HTTP port override (0 = detect)','port',project.port||0,'number','min="0" max="65535" required')+'</div>'+field('Test command (optional, run in each detected container)','test_command',project.test_command||'')+'<label class="inline-check"><input type="checkbox" name="auto_deploy" '+(project.auto_deploy?'checked':'')+'>Deploy project on source pushes</label><p class="note">Auto detects one server at the repository root, or multiple server folders in a monorepo. A manual build strategy treats the selected root as one container. Changes apply together on the next deployment.</p><div class="form-error" role="alert"></div><button class="primary">Save project settings</button></form>';
 }
@@ -213,6 +219,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
  const bindForm=(selector,data)=>{const form=$(selector);if(!form)return;form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{await api('projects/'+id,data(new FormData(form)),'PATCH');await render();toast('Project saved; changes apply on next deployment')}catch(err){form.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}}};
  if(section==='settings')bindForm('#project-settings',f=>({name:f.get('name'),root_dir:f.get('root_dir'),build_type:f.get('build_type'),port:Number(f.get('port')),test_command:f.get('test_command'),auto_deploy:f.has('auto_deploy')}));
  if(section==='environment')bindForm('#project-environment',f=>({env:environmentData(f.get('env'))}));
+ lockSection(project,section);
  if(section==='source'){$('#edit-project-source').onclick=()=>editProjectSource(project);$('#reveal-webhook').onclick=()=>{const input=$('[name=webhook_secret]');input.type=input.type==='password'?'text':'password';$('#reveal-webhook').textContent=input.type==='password'?'Show secret':'Hide secret'};}
  if(project.config_conflict)$('#confirm-project-config').onclick=async()=>{try{await api('projects/'+id,{config_confirmed:true},'PATCH');await render();toast('Project configuration confirmed')}catch(e){toast(e.message)}};
  if(section==='domains'){
@@ -242,7 +249,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
  if(section==='deployments')bindReleases();
  if(section==='logs')$('#log-source').onchange=loadLog;
  if(['logs','deployments'].includes(section))$('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#project-log').textContent);toast('Logs copied')}catch{toast('Clipboard unavailable')}};
- const setDeployDisabled=disabled=>{if(section==='deployments')$('#deploy-project').disabled=disabled};
+ const setDeployDisabled=disabled=>{if(section==='deployments')$('#deploy-project').disabled=disabled||(!!project.permissions&&!can('deploy',project))};
  const refresh=async()=>{
   try{
    const data=await Promise.all([api('projects/'+id),api('containers?project_id='+id),api('releases?project_id='+id+'&logs=false')]);if(version!==viewVersion)return;
