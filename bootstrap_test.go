@@ -110,3 +110,17 @@ func TestExistingUsersMigration(t *testing.T) {
 		s.db.Close()
 	}
 }
+
+func TestBootstrapKeepsInvitedUsers(t *testing.T) {
+	a := testServer(t)
+	if err := a.bootstrapAdmin("owner", "seeded-password"); err != nil {
+		t.Fatal(err)
+	}
+	h := a.api()
+	owner := accountLogin(t, h, "owner", "seeded-password")
+	accountRequest(t, h, "POST", "users", `{"username":"invited","password":"temporary-pass"}`, owner, 201)
+	if err := a.bootstrapAdmin("", ""); err != nil {
+		t.Fatal(err)
+	}
+	accountLogin(t, h, "invited", "temporary-pass")
+}
