@@ -266,6 +266,13 @@ func (a *Server) api() http.Handler {
 				a.store.db.Exec("DELETE FROM records WHERE kind='deployments' AND parent=?", old.ID)
 			}
 			a.store.db.Exec("DELETE FROM records WHERE id=?", old.ID)
+			if old.Kind == "projects" {
+				network := "startship-" + old.ID
+				if self := selfContainer(); self != "" {
+					command("", nil, "docker", "network", "disconnect", network, self)
+				}
+				command("", nil, "docker", "network", "rm", network)
+			}
 			a.refresh()
 			reply(w, 200, map[string]bool{"ok": true})
 			return

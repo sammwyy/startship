@@ -40,6 +40,7 @@ type Record struct {
 	Log            string            `json:"log,omitempty"`
 	Image          string            `json:"image,omitempty"`
 	Container      string            `json:"container,omitempty"`
+	Network        string            `json:"network,omitempty"`
 	IP             string            `json:"ip,omitempty"`
 	StaticDir      string            `json:"static_dir,omitempty"`
 	Created        time.Time         `json:"created,omitempty"`

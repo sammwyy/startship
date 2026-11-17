@@ -143,6 +143,11 @@ func (a *Server) build(appID, id string) {
 		return
 	}
 	logger.secret = source.GitToken
+	network := "startship-" + app.ProjectID
+	if e = ensureNetwork(network, logger); e != nil {
+		return
+	}
+	a.store.update(id, func(r *Record) { r.Network = network })
 	dir := filepath.Join(a.data, "builds", id)
 	if e = os.MkdirAll(filepath.Dir(dir), 0700); e != nil {
 		return
@@ -181,15 +186,12 @@ func (a *Server) build(appID, id string) {
 			if e != nil {
 				return
 			}
-			e = command(root, logger, "docker", "build", "-t", image, "-f", "Dockerfile.startship-test", ".")
+			e = buildImage(root, logger, image, "Dockerfile.startship-test")
 			if e != nil {
 				return
 			}
 			a.status(id, "testing")
-			args := []string{"run", "--rm", "--network", "startship"}
-			for k, v := range app.Env {
-				args = append(args, "-e", k+"="+v)
-			}
+			args := appRunArgs(app, network, true)
 			args = append(args, image, "sh", "-c", app.TestCommand)
 			e = command("", logger, "docker", args...)
 			os.Remove(filepath.Join(root, "Dockerfile.startship-test"))
@@ -222,15 +224,12 @@ func (a *Server) build(appID, id string) {
 	if kind != "dockerfile" {
 		dockerPath = "Dockerfile.startship"
 	}
-	if e = command(root, logger, "docker", "build", "-t", image, "-f", dockerPath, "."); e != nil {
+	if e = buildImage(root, logger, image, dockerPath); e != nil {
 		return
 	}
 	if app.TestCommand != "" {
 		a.status(id, "testing")
-		args := []string{"run", "--rm", "--network", "startship"}
-		for k, v := range app.Env {
-			args = append(args, "-e", k+"="+v)
-		}
+		args := appRunArgs(app, network, true)
 		args = append(args, image, "sh", "-c", app.TestCommand)
 		if e = command("", logger, "docker", args...); e != nil {
 			return
@@ -238,16 +237,13 @@ func (a *Server) build(appID, id string) {
 	}
 	a.status(id, "starting")
 	container = "startship-" + app.ID + "-" + id
-	args := []string{"run", "-d", "--network", "startship", "--name", container, "--restart", "unless-stopped", "--label", "startship.managed=true", "--label", "startship.app=" + app.ID, "-e", fmt.Sprintf("PORT=%d", app.Port)}
-	for k, v := range app.Env {
-		args = append(args, "-e", k+"="+v)
-	}
+	args := append(appRunArgs(app, network, false), "--name", container)
 	args = append(args, image)
 	if e = command("", logger, "docker", args...); e != nil {
 		return
 	}
 	var ip string
-	ip, e = containerIP(container)
+	ip, e = containerIP(container, network)
 	if e != nil {
 		return
 	}
@@ -364,14 +360,17 @@ func (a *Server) activate(app Record, id string) error {
 	}
 	return nil
 }
-func containerIP(id string) (string, error) {
-	b, e := exec.Command("docker", "inspect", "--format", "{{(index .NetworkSettings.Networks \"startship\").IPAddress}}", id).Output()
+func containerIP(id, network string) (string, error) {
+	if network == "" {
+		network = "startship"
+	}
+	b, e := exec.Command("docker", "inspect", "--format", fmt.Sprintf("{{(index .NetworkSettings.Networks %q).IPAddress}}", network), id).Output()
 	if e != nil {
 		return "", e
 	}
 	ip := strings.TrimSpace(string(b))
 	if net.ParseIP(ip) == nil {
-		return "", fmt.Errorf("container has no startship IP")
+		return "", fmt.Errorf("container has no %s IP", network)
 	}
 	return ip, nil
 }
@@ -387,24 +386,19 @@ func (a *Server) restore() {
 			fmt.Fprintln(os.Stderr, "Docker network unavailable:", e)
 		}
 	}
-	self := os.Getenv("STARTSHIP_SELF_CONTAINER")
-	if self == "" {
-		if _, e := os.Stat("/.dockerenv"); e == nil {
-			self, _ = os.Hostname()
-		}
-	}
-	if self != "" {
-		if _, e := containerIP(self); e != nil {
-			if e := command("", os.Stderr, "docker", "network", "connect", "startship", self); e != nil {
-				fmt.Fprintln(os.Stderr, "Ensure startshipd is already attached to startship:", e)
-			}
-		}
+	if e := connectSelf("startship"); e != nil {
+		fmt.Fprintln(os.Stderr, "Ensure startshipd is already attached to startship:", e)
 	}
 	for _, d := range a.store.list("deployments", "") {
 		switch d.Status {
 		case "running":
 			if d.Container != "" {
-				ip, e := containerIP(d.Container)
+				if d.Network != "" {
+					if e := connectSelf(d.Network); e != nil {
+						fmt.Fprintln(os.Stderr, "Cannot attach startshipd to project network:", e)
+					}
+				}
+				ip, e := containerIP(d.Container, d.Network)
 				a.store.update(d.ID, func(r *Record) {
 					if e == nil {
 						r.IP = ip

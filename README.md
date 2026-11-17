@@ -55,6 +55,42 @@ To skip the first-run screen, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PA
 
 When `STARTSHIP_DATA` is unset, existing `./data` is preserved; otherwise new installations default to `./_data`. The underscore makes Go tooling skip the data directory even when unreadable.
 
+## Container isolation and limits
+
+Each project uses a private bridge network named `startship-<projectID>`. App
+and test containers join only that network, with a lowercase, dash-separated
+app-name alias (use distinct names within a project). Siblings can connect by
+alias and internal port; other projects cannot connect directly. Internet egress
+is retained. Deployments persist their network; older deployments retain the
+legacy `startship` network until redeployed. A containerized daemon joins project
+networks on deploy and restart (`STARTSHIP_SELF_CONTAINER` overrides auto-detection).
+
+Set these environment variables on **startshipd** (add them to Compose's
+`environment` section when using Compose):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STARTSHIP_APP_MEMORY` | `512m` | App and test memory limit |
+| `STARTSHIP_APP_CPUS` | `1` | App and test CPU quota |
+| `STARTSHIP_APP_PIDS` | `512` | App and test process limit |
+| `STARTSHIP_BUILD_MEMORY` | `1g` | BuildKit worker memory limit |
+| `STARTSHIP_BUILD_CPUS` | `1` | BuildKit worker CPU quota |
+
+Builds require the Docker buildx plugin (included in `docker:29-cli`). Each build
+uses a disposable `docker-container` BuildKit builder with memory and CPU
+driver options and `--load`; ordinary `docker build --memory` is not used.
+The worker and its cache are removed after the build. Invalid limits fail the
+deployment. Apps and tests drop all capabilities except CHOWN, SETUID, SETGID,
+and NET_BIND_SERVICE and enable no-new-privileges. Their root filesystem remains
+writable; no host mounts or privileged mode are granted to them.
+
+This is defense in depth, **not a sandbox for hostile tenants**. The daemon's
+Docker socket grants host-level control; BuildKit workers use Docker's privileged
+build infrastructure. Apps can still reach the host gateway and exposed daemon
+proxy/dashboard, including publicly routed apps of other projects. Keep the
+dashboard authenticated and firewalled. Containers share the host kernel;
+legacy releases remain on the shared network until redeployed.
+
 ## HTTPS
 
 Startship gets Let's Encrypt certificates itself:

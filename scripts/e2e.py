@@ -13,6 +13,10 @@ from urllib.parse import urlsplit
 root = Path(__file__).resolve().parent.parent
 work = Path(tempfile.mkdtemp(prefix="startship-e2e-", dir=Path.home()))
 app_ids = []
+project_ids = []
+build_limits_seen = False
+deployments = {}
+test_limits_seen = set()
 process = None
 log = (work / "daemon.log").open("w")
 api = "http://127.0.0.1:18080/api/"
@@ -25,10 +29,26 @@ def request(path, body=None):
         return json.load(response)
 
 def wait_deploy(app):
+    global build_limits_seen
     deployment = request("apps/" + app["id"] + "/deploy", {})
     for _ in range(600):
+        tests = subprocess.check_output(["docker", "ps", "-q", "--filter", "label=startship.test=" + app["id"]], text=True).split()
+        if tests:
+            config = json.loads(subprocess.check_output(["docker", "inspect", tests[0]], text=True))[0]["HostConfig"]
+            assert config["Memory"] == 536870912 and config["NanoCpus"] == 1000000000 and config["PidsLimit"] == 512, config
+            assert config["CapDrop"] == ["ALL"] and "no-new-privileges" in config["SecurityOpt"], config
+            assert config["NetworkMode"] == "startship-" + app["project_id"], config
+            test_limits_seen.add(app["name"])
+        builders = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-"], text=True).split()
+        if builders and not build_limits_seen:
+            config = json.loads(subprocess.check_output(["docker", "inspect", builders[0]], text=True))[0]["HostConfig"]
+            assert config["Memory"] == 1073741824, config
+            assert config["CpuPeriod"] == 100000 and config["CpuQuota"] == 100000, config
+            print("build worker limits: " + json.dumps({k: config[k] for k in ("Memory", "CpuPeriod", "CpuQuota")}))
+            build_limits_seen = True
         result = request("deployments/" + deployment["id"])
         if result["status"] == "running":
+            deployments[app["name"]] = result
             print("deployment: running (" + app["name"] + ")")
             return result
         if result["status"] == "failed":
@@ -85,6 +105,7 @@ fn main() {
     request("login", {"username": "admin", "password": "test-password"})
     ws = request("workspaces")[0]
     project = request("projects", {"workspace_id": ws["id"], "name": "e2e", "git_url": repo.as_uri(), "branch": "main"})
+    project_ids.append(project["id"])
     detected = request("detect", {"project_id": project["id"]})
     assert {(c["root_dir"], c["build_type"]) for c in detected} == {
         (".", "python"), ("public", "static"), ("dockerapp", "dockerfile"), ("rustapp", "rust")}, detected
@@ -92,7 +113,7 @@ fn main() {
                                      ("dockerfile", "dockerapp", "/dockerfile/"), ("rust", "rustapp", "/rust/")):
         app = request("apps", {"project_id": project["id"], "name": name,
                               "root_dir": directory, "build_type": "auto", "port": 8080,
-                              "test_command": "python -c 'print(123)'" if name == "python" else "test -f index.html" if name == "static" else ""})
+                              "test_command": "sleep 3; python -c 'print(123)'" if name == "python" else "sleep 3; test -f index.html" if name == "static" else ""})
         app_ids.append(app["id"])
         wait_deploy(app)
         route = request("routes", {"project_id": project["id"], "app_id": app["id"], "host": "test.local",
@@ -137,12 +158,63 @@ fn main() {
         result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", "http://127.0.0.1:18081" + path], text=True)
         print("curl " + path + ": " + result.strip())
         assert expected in result
+    # A Dockerfile build failure must not replace the healthy release either.
+    healthy = deployments["dockerfile"]
+    dockerfile = repo / "dockerapp" / "Dockerfile"
+    original_dockerfile = dockerfile.read_text()
+    dockerfile.write_text(original_dockerfile + "RUN exit 42\n")
+    for args in (["add", "."], ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "broken build"]):
+        subprocess.run(["git", "-C", str(repo)] + args, check=True, stdout=subprocess.DEVNULL)
+    docker_app = next(a for a in request("apps") if a["name"] == "dockerfile")
+    failed = request("apps/" + docker_app["id"] + "/deploy", {})
+    for _ in range(180):
+        result = request("deployments/" + failed["id"])
+        if result["status"] == "failed":
+            break
+        time.sleep(1)
+    assert result["status"] == "failed", result
+    assert request("apps/" + docker_app["id"])["active_deployment"] == healthy["id"]
+    assert "exit code: 42" in result["log"], result["log"]
+    print("failed Dockerfile build preserves active deployment: OK")
+    dockerfile.write_text(original_dockerfile)
+    for args in (["add", "."], ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "restore build"]):
+        subprocess.run(["git", "-C", str(repo)] + args, check=True, stdout=subprocess.DEVNULL)
     # No application ports are published; requests above must pass through Startship.
     for app_id in app_ids:
         ids = subprocess.check_output(["docker", "ps", "-q", "--filter", "label=startship.app=" + app_id], text=True).split()
         if ids:
             inspected = json.loads(subprocess.check_output(["docker", "inspect"] + ids, text=True))
             assert all(not container["HostConfig"].get("PortBindings") for container in inspected)
+            for container in inspected:
+                config = container["HostConfig"]
+                assert config["Memory"] == 536870912 and config["NanoCpus"] == 1000000000 and config["PidsLimit"] == 512, config
+                assert config["CapDrop"] == ["ALL"], config
+                assert {cap.removeprefix("CAP_") for cap in config["CapAdd"]} == {"CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE"}, config
+                assert "no-new-privileges" in config["SecurityOpt"], config
+                assert not config["Privileged"] and not container["Mounts"], container
+                assert set(container["NetworkSettings"]["Networks"]) == {"startship-" + project["id"]}, container
+                deployment = next(d for d in deployments.values() if d.get("container") == container["Name"].lstrip("/"))
+                assert deployment["network"] == "startship-" + project["id"]
+                name = next(name for name, d in deployments.items() if d == deployment)
+                assert name in container["NetworkSettings"]["Networks"][deployment["network"]]["Aliases"]
+    config = json.loads(subprocess.check_output(["docker", "inspect", deployments["python"]["container"]], text=True))[0]["HostConfig"]
+    print("app HostConfig: " + json.dumps({k: config[k] for k in ("Memory", "NanoCpus", "PidsLimit", "CapDrop", "CapAdd", "SecurityOpt", "NetworkMode", "Privileged", "Binds")}))
+    print("app limits, capabilities, no-new-privileges and project-only networks: OK")
+    assert build_limits_seen, "no bounded build worker observed"
+    assert test_limits_seen == {"python", "static"}, test_limits_seen
+    print("static and app test containers have limits, dropped caps, no-new-privileges and project network: OK")
+    other = request("projects", {"workspace_id": ws["id"], "name": "isolated", "git_url": repo.as_uri(), "branch": "main"})
+    project_ids.append(other["id"])
+    other_app = request("apps", {"project_id": other["id"], "name": "outsider", "root_dir": "dockerapp", "build_type": "dockerfile", "port": 8080})
+    app_ids.append(other_app["id"])
+    outsider = wait_deploy(other_app)
+    assert outsider["network"] == "startship-" + other["id"]
+    probe = 'import socket; s=socket.create_connection(("dockerfile",8080),2); s.close(); print("sibling alias connection: OK")'
+    print(subprocess.check_output(["docker", "exec", deployments["python"]["container"], "python", "-c", probe], text=True).strip())
+    probe = ('import socket\ntry:\n s=socket.create_connection((' + repr(outsider["ip"]) + ',8080),2)\n'
+             'except OSError as e:\n print("cross-project connection blocked:", type(e).__name__, str(e))\n'
+             'else:\n s.close(); raise SystemExit("UNSAFE: cross-project connection succeeded")\n')
+    print(subprocess.check_output(["docker", "exec", deployments["python"]["container"], "python", "-c", probe], text=True).strip())
     status = subprocess.check_output(["curl", "-sS", "-o", os.devnull, "-w", "%{http_code}",
                                       "http://127.0.0.1:18081/static/"], text=True)
     assert status == "404", status
@@ -173,5 +245,7 @@ finally:
         images = subprocess.check_output(["docker", "images", "-q", "startship/" + app_id], text=True).split()
         if images:
             subprocess.run(["docker", "rmi", "-f"] + images, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for project_id in project_ids:
+        subprocess.run(["docker", "network", "rm", "startship-" + project_id], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     log.close()
     shutil.rmtree(work)
