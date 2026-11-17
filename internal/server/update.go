@@ -130,6 +130,7 @@ func (a *Server) systemAPI(w http.ResponseWriter, r *http.Request, p []string, u
 		}
 		reply(w, 200, map[string]string{"version": version.Version, "commit": version.Commit})
 	case "update":
+		defer a.live.publish(liveEvent{id: "system_update"})
 		u := a.updater()
 		switch r.Method {
 		case "GET":

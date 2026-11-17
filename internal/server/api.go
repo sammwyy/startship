@@ -28,9 +28,11 @@ type Server struct {
 	targets []Target
 	traffic trafficMetrics
 	// dashboardDomain is served by the proxy listeners; https is set when ACME is enabled.
-	dashboardDomain string
-	https           bool
-	updates         *updates
+	dashboardDomain     string
+	https               bool
+	updates             *updates
+	live                *liveHub
+	liveSessionInterval time.Duration
 }
 
 // Response-only fields must not be persisted or accepted as app configuration.
@@ -381,6 +383,10 @@ func (a *Server) api() http.Handler {
 			fail(w, 403, "change your password to complete setup before continuing")
 			return
 		}
+		if p[1] == "live" && len(p) == 2 {
+			a.liveHandler(w, r, uid)
+			return
+		}
 		x := a.access(uid)
 		if p[1] == "detect" && r.Method == "POST" {
 			a.detectAPI(w, r, x)
@@ -550,9 +556,13 @@ func (a *Server) api() http.Handler {
 					}
 				}
 				a.removeActive(old)
-				a.store.DB.Exec("DELETE FROM records WHERE kind='deployments' AND parent=?", old.ID)
+				for _, d := range a.store.List("deployments", "") {
+					if d.Parent == old.ID {
+						a.store.Delete(d)
+					}
+				}
 			}
-			a.store.DB.Exec("DELETE FROM records WHERE id=?", old.ID)
+			a.store.Delete(old)
 			if old.Kind == "workspaces" || old.Kind == "projects" {
 				a.removeScopeAccess(strings.TrimSuffix(old.Kind, "s"), old.ID)
 				a.audit(uid, strings.TrimSuffix(old.Kind, "s")+".delete", old.Name, strings.TrimSuffix(old.Kind, "s"), old.ID, map[string]string{"id": old.ID})

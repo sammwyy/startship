@@ -128,6 +128,10 @@ func (a *Server) projectTraffic(w http.ResponseWriter, r *http.Request, project 
 			return
 		}
 	}
+	w.Header().Set("Cache-Control", "no-store")
+	reply(w, 200, a.trafficData(project, seconds))
+}
+func (a *Server) trafficData(project Record, seconds int) any {
 	now := time.Now().UTC()
 	end := now.Unix() / 5 * 5
 	start := end - int64(seconds) + 5
@@ -195,10 +199,9 @@ func (a *Server) projectTraffic(w http.ResponseWriter, r *http.Request, project 
 	if status == "ok" && now.Sub(sampledAt) > 20*time.Second {
 		status = "stale"
 	}
-	w.Header().Set("Cache-Control", "no-store")
-	reply(w, 200, map[string]any{"project_id": project.ID, "now": now, "window_seconds": seconds, "interval_seconds": width,
+	return map[string]any{"project_id": project.ID, "now": now, "window_seconds": seconds, "interval_seconds": width,
 		"buckets": buckets, "total": total, "recent": recent, "containers": containers, "resource_status": status, "sampled_at": sampledAt,
-		"retention_seconds": 3600})
+		"retention_seconds": 3600}
 }
 
 // trafficWriter preserves streaming and protocol upgrades used by ReverseProxy.
