@@ -55,9 +55,7 @@ test('project sidebar exposes direct project sections and no app tabs', () => {
  assert.match(html,/href="#project\/p1\/source" aria-current="page"/);
  assert.doesNotMatch(html,/Applications|App settings|Workspace settings|data-tab|contextbar|breadcrumbs|project-heading/);
  const sidebar=html.slice(html.indexOf('<aside'),html.indexOf('</aside>'));
- assert.match(sidebar,/id="project-summary"[^>]*>2 containers · 2 running/);
- assert.match(sidebar,/id="project-state"/);
- assert.match(sidebar,/id="deploy-project"/);
+ assert.doesNotMatch(sidebar,/project-summary|project-state|deploy-project|sidebar-deployment/);
  assert.match(sidebar,/class="sidebar-source"/);
  assert.equal((html.match(/<header class="heading"/g)||[]).length,1);
 });
@@ -69,11 +67,26 @@ test('workspace and account names are escaped in menu markup', () => {
  assert.doesNotMatch(html, /<script>|<img>/);
 });
 
+test('workspace and account selectors are single-line controls without repeated captions',()=>{
+ const f=fixture();f.run("shell(heading('','Projects',''))");
+ const html=f.element('#root').innerHTML;
+ for(const id of ['workspace-switch','account-switch']){
+  const selector=html.match(new RegExp('<button[^>]*id="'+id+'"[^>]*>[\\s\\S]*?</button>'))[0];
+  assert.match(selector,/class="selector-name"/);
+  assert.match(selector,/aria-label="(?:Workspace|Account):/);
+  assert.doesNotMatch(selector,/<small>|<strong>|selector-copy|workspace-mark/);
+ }
+ assert.doesNotMatch(html,/Personal account|Self-hosted instance|sidebar-instance/);
+});
+
 test('sidebar groups project controls without viewport-sized spacer bands',()=>{
  const styles=readFileSync(require('node:path').join(__dirname,'../web/style.css'),'utf8');
  assert.match(styles,/\.sidebar \{[^}]*height: auto/);
  assert.match(styles,/\.sidebar-body \{[^}]*flex: 0 1 auto/);
- for(const name of ['sidebar-deployment','sidebar-bottom'])assert.doesNotMatch(styles.match(new RegExp('\\.'+name+' \\{([^}]+)'))[1],/margin-top: auto/);
+ assert.doesNotMatch(styles.match(/\.sidebar-bottom \{([^}]+)/)[1],/margin-top: auto/);
+ assert.match(styles,/\.sidebar-selector \{[^}]*border: 0/);
+ assert.match(styles,/#navigation-drawer \.sidebar-selector \{[^}]*min-height: 44px/);
+ assert.doesNotMatch(styles,/sidebar-deployment|sidebar-instance|selector-copy/);
  assert.match(styles,/#desktop-sidebar \{[^}]*align-self: start/);
 });
 
@@ -97,11 +110,27 @@ test('single and multiple containers have the same project-owned deployment cont
   assert.doesNotMatch(html,/application-switch|app-workbench|Add app|Create application/);
   assert.match(html,new RegExp(count+' container'));
   assert.match(html,/<h1>Deployments<\/h1>/);
-  assert.match(html,/id="deploy-project-mobile"/);
-  assert.equal(f.element('#deploy-project').disabled,f.element('#deploy-project-mobile').disabled);
+  assert.equal((html.match(/id="deploy-project"/g)||[]).length,1);
+  assert.doesNotMatch(html,/deploy-project-mobile/);
+  assert.match(html,/<p id="project-summary" aria-live="polite">/);
   assert.equal((html.match(/id="open-navigation"/g)||[]).length,1);
   assert.doesNotMatch(html,/contextbar|breadcrumbs|project-heading/);
   assert.equal(f.stored.get('workspace'),'w2');
+ }
+});
+
+test('deploy action is local to Deployments, never repeated across project sections',async()=>{
+ for(const section of ['deployments','logs','containers','domains','source','environment','settings']){
+  const f=fixture('#project/p1/'+section);f.context.fakeAPI=async path=>path==='projects/p1'?{id:'p1',name:'Repo',workspace_id:'w1',git_url:'file:///repo'}:[];
+  f.run('api=fakeAPI');await f.run("projectPage('p1','"+section+"')");
+  const html=f.element('#root').innerHTML;
+  const header=html.match(/<header class="heading">[\s\S]*?<\/header>/)[0];
+  assert.equal(header.includes('id="deploy-project"'),section==='deployments');
+  assert.doesNotMatch(html.slice(html.indexOf('<aside'),html.indexOf('</aside>')),/deploy-project/);
+  if(section!=='deployments'){
+   assert.equal(f.element('#deploy-project').onclick,undefined);
+   assert.equal(f.element('#deploy-project').disabled,undefined);
+  }
  }
 });
 test('source and old Git links work before detection without app setup',async()=>{
@@ -183,8 +212,10 @@ test('project polling updates running counts and grouped release entries without
  const calls=[];f.context.fakeAPI=async path=>{calls.push(path);if(path==='projects/p1')return{id:'p1',name:'Repo',workspace_id:'w1',git_url:'file:///repo'};if(path==='containers?project_id=p1')return f.context.liveContainers;if(path.startsWith('releases?'))return f.context.liveReleases;if(path==='releases/release1')return{...f.context.liveReleases[0],log:'output'};return[]};
  f.run('api=fakeAPI');await f.run("projectPage('p1')");
  let html=f.element('#root').innerHTML;assert.match(html,/class="release-entry select-deploy/);assert.match(html,/&lt;img&gt;/);assert.doesNotMatch(html,/<table>/);
+ assert.equal(f.element('#deploy-project').disabled,true);
  f.context.liveContainers=[{id:'c1',status:'running',active_deployment:'d1'},{id:'c2',status:'running',active_deployment:'d2'}];f.context.liveReleases[0].status='running';
  await f.context.poll();assert.equal(f.element('#project-summary').textContent,'2 containers · 2 running · 0 domain routes');
+ assert.equal(f.element('#deploy-project').disabled,false);
  f.context.liveContainers[1].status='failed';await f.context.poll();assert.equal(f.element('#project-summary').textContent,'2 containers · 1 running · 0 domain routes');
  assert.ok(calls.filter(path=>path==='releases?project_id=p1&logs=false').length>=3);
 });

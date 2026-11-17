@@ -59,12 +59,12 @@ function shell(content,project=null){
  const projectSection=location.hash.split('/')[2]||'deployments';
  const sidebarLink=(href,shape,label,active)=>'<a href="'+href+'" '+(active?'aria-current="page"':'')+'>'+icon(shape)+'<span>'+esc(label)+'</span></a>';
  const sidebar='<aside class="sidebar" aria-label="Dashboard sidebar"><div class="sidebar-top"><a href="'+workspaceURL+'" class="brand">'+brand()+'</a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">'+icon('close')+'</button></div>'+
-  '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false"><span class="workspace-mark">'+icon('layers')+'</span><span class="selector-copy"><small>Workspace</small><strong>'+esc(workspace?.name||'Choose workspace')+'</strong></span>'+icon('chevron')+'</button>'+
+  '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false" aria-label="Workspace: '+esc(workspace?.name||'Choose workspace')+'">'+icon('layers')+'<span class="selector-name">'+esc(workspace?.name||'Choose workspace')+'</span>'+icon('chevron')+'</button>'+
   '<div id="workspace-menu" class="sidebar-menu" popover><div class="menu-caption">Switch workspace</div><div class="workspace-options">'+workspaces.map(w=>'<a href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'><span class="workspace-initial">'+esc(w.name[0]?.toUpperCase())+'</span><span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot" aria-label="Current workspace"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div><button id="create-workspace">'+icon('plus')+'Create workspace</button><a href="#workspaces">'+icon('layers')+'Manage workspaces</a></div>'+
   '<div class="sidebar-body"><nav class="sidebar-nav" aria-label="'+(project?'Project':'Workspace')+' navigation">'+(project?
    sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-project"><strong>'+esc(project.name)+'</strong><a class="sidebar-source" href="#project/'+esc(project.id)+'/source" title="Project source">'+icon('branch')+'<span>'+esc(project.git_url?(project.branch||'main'):'Connect source')+'</span></a></div>'+projectSections.map(([key,label,shape])=>sidebarLink('#project/'+esc(project.id)+'/'+key,shape,label,key===projectSection)).join(''):
-   '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav>'+(project?'<section class="sidebar-deployment" aria-label="Project deployment"><div class="deployment-status"><span>Latest release</span><span id="project-state" aria-label="Latest deployment">'+badge(project.deployment_status)+'</span></div><p id="project-summary" aria-live="polite">'+esc(project.summary)+'</p><button class="primary" id="deploy-project">'+icon('plus')+'Deploy project</button></section>':'')+'</div>'+
-  '<div class="sidebar-bottom"><span class="sidebar-instance"><span class="dot"></span>Self-hosted instance</span><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-copy"><strong>'+esc(user.username)+'</strong><small>Personal account</small></span>'+icon('chevron')+'</button></div>'+
+   '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav></div>'+
+  '<div class="sidebar-bottom"><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false" aria-label="Account: '+esc(user.username)+'"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-name">'+esc(user.username)+'</span>'+icon('chevron')+'</button></div>'+
   '<div id="account-menu" class="sidebar-menu" popover><div class="menu-caption">Signed in as <strong>'+esc(user.username)+'</strong></div><button id="account-profile">'+icon('settings')+'Account settings</button>'+themeButton()+'<div class="menu-divider"></div><button id="logout">'+icon('logout')+'Sign out</button></div></aside>';
  $('#root').innerHTML='<div class="dashboard sidebar-layout"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div></div>';
  bindTheme();bindSidebar();
@@ -193,7 +193,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
  if(section==='source')content=sourceContent(project);
  if(section==='environment')content=environmentContent(project);
  if(section==='settings')content=projectSettings(project);
- shell(heading('',title,'','<button class="primary mobile-only" id="deploy-project-mobile">'+icon('plus')+'Deploy</button>','',project.name)+warning+content,{...project,summary:projectSummary(containers,routes),deployment_status:releases[0]?.status});
+ shell(heading('',title,projectSummary(containers,routes),section==='deployments'?'<button class="primary" id="deploy-project">'+icon('plus')+'Deploy</button>':'','project-summary',project.name)+warning+content,project);
  const bindForm=(selector,data)=>{const form=$(selector);if(!form)return;form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{await api('projects/'+id,data(new FormData(form)),'PATCH');await render();toast('Project saved; changes apply on next deployment')}catch(err){form.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}}};
  if(section==='settings')bindForm('#project-settings',f=>({name:f.get('name'),root_dir:f.get('root_dir'),build_type:f.get('build_type'),port:Number(f.get('port')),test_command:f.get('test_command'),auto_deploy:f.has('auto_deploy')}));
  if(section==='environment')bindForm('#project-environment',f=>({env:environmentData(f.get('env'))}));
@@ -226,14 +226,14 @@ async function projectPage(id,section='deployments',runtimeID=''){
  if(section==='deployments')bindReleases();
  if(section==='logs')$('#log-source').onchange=loadLog;
  if(['logs','deployments'].includes(section))$('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#project-log').textContent);toast('Logs copied')}catch{toast('Clipboard unavailable')}};
- const setDeployDisabled=disabled=>{$('#deploy-project').disabled=$('#deploy-project-mobile').disabled=disabled};
+ const setDeployDisabled=disabled=>{if(section==='deployments')$('#deploy-project').disabled=disabled};
  const refresh=async()=>{
   try{
    const data=await Promise.all([api('projects/'+id),api('containers?project_id='+id),api('releases?project_id='+id+'&logs=false')]);if(version!==viewVersion)return;
    [project,containers,releases]=data;sort();
    if(project.active_deployment)containers=containers.filter(c=>c.active_deployment||(busyRelease(releases[0])&&c.release_id===releases[0].id));
    if(followLatest)selected=releases[0]?.id||'';
-   $('#project-summary').textContent=projectSummary(containers,routes);$('#project-state').innerHTML=badge(releases[0]?.status);setDeployDisabled(!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url);
+   $('#project-summary').textContent=projectSummary(containers,routes);setDeployDisabled(!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url);
    if(section==='deployments'){renderReleases();$('#release-count').textContent=releases.length}
    if(section==='containers')$('#project-containers').innerHTML=containerEntries(project,containers);
    if(section==='logs'){const source=$('#log-source').value;$('#log-source').innerHTML='<option value="">Project build output</option>'+containers.map(c=>'<option value="'+esc(c.id)+'" '+(source===c.id?'selected':'')+'>'+esc(c.name)+' · runtime</option>').join('')}
@@ -241,7 +241,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
   }catch(e){if(version===viewVersion)toast(e.message)}
  };
  const deployProject=async()=>{setDeployDisabled(true);try{const d=await api('projects/'+id+'/deploy',{no_cache:section==='deployments'&&$('#no-cache').checked});selected=d.id;followLatest=true;await refresh();toast('Project deployment queued')}catch(e){toast(e.message);setDeployDisabled(false)}};
- $('#deploy-project').onclick=$('#deploy-project-mobile').onclick=deployProject;
+ if(section==='deployments')$('#deploy-project').onclick=deployProject;
  if(section==='deployments')$('#redeploy-release').onclick=async()=>{try{const d=await api('projects/'+id+'/redeploy',{deployment_id:selected});selected=d.id;followLatest=true;await refresh();toast('Project release queued without rebuilding')}catch(e){toast(e.message)}};
  setDeployDisabled(!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url);
  await loadLog();if(version===viewVersion)timer=setInterval(refresh,2000);

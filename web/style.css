@@ -318,18 +318,15 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .dashboard.sidebar-layout { display: grid; grid-template-columns: 212px minmax(0, 1fr); }
 .dashboard-body { min-width: 0; display: flex; flex-direction: column; }
 #desktop-sidebar { align-self: start; position: sticky; top: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-bottom-right-radius: 14px; background: var(--terminal); }
-.sidebar { max-height: calc(100dvh - 26px); height: auto; min-height: 0; display: flex; flex-direction: column; padding: 18px 12px 12px; }
-.sidebar-top { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 17px; }
+.sidebar { max-height: calc(100dvh - 26px); height: auto; min-height: 0; display: flex; flex-direction: column; padding: 14px 12px 10px; }
+.sidebar-top { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 12px; }
 .sidebar .brand { font-size: 16px; }
 .sidebar .mark { width: 25px; height: 25px; }
 .sidebar .mark .icon { width: 18px; height: 18px; }
-.sidebar-selector { display: flex; align-items: center; width: 100%; gap: 9px; padding: 9px; text-align: left; border-radius: 11px; border-color: var(--line); }
-.sidebar-selector > .icon { width: 13px; height: 13px; color: var(--muted); }
-.workspace-mark, .workspace-initial { display: grid; place-items: center; width: 29px; height: 29px; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--success); background: var(--accent-soft); }
-.workspace-mark .icon { width: 15px; height: 15px; }
-.selector-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.selector-copy small { color: var(--muted); font-size: 9px; font-weight: 400; }
-.selector-copy strong { font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-selector { display: flex; align-items: center; width: 100%; gap: 9px; min-height: 34px; padding: 5px 10px; text-align: left; border: 0; border-radius: 7px; }
+.sidebar-selector > .icon { width: 15px; height: 15px; color: var(--muted); flex-shrink: 0; }
+.sidebar-selector > .icon:last-child { width: 12px; height: 12px; }
+.selector-name { min-width: 0; flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-body { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; margin: 12px -4px 0; padding: 0 4px; overscroll-behavior: contain; }
 .sidebar-nav { padding-top: 0; }
 .sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin: 3px 0; color: var(--muted); border: 1px solid transparent; border-radius: 8px; font-size: 11px; }
@@ -343,14 +340,8 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .sidebar-nav .sidebar-source { margin: 3px 0 0; padding: 2px 0; border: 0; border-radius: 0; font-size: 10px; gap: 6px; }
 .sidebar-source span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-source .icon { width: 12px; height: 12px; }
-.sidebar-deployment { margin-top: 14px; border-top: 1px solid var(--line); padding: 14px 5px 4px; }
-.deployment-status { display: flex; justify-content: space-between; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; }
-.sidebar-deployment p { font-size: 10px; line-height: 1.8; margin: 10px 0 13px; }
-.sidebar-deployment > button { width: 100%; }
-.sidebar-bottom { padding-top: 16px; }
-.sidebar-instance { display: block; color: var(--muted); font-size: 9px; padding: 0 10px 10px; }
-.account-selector { border-top: 1px solid var(--line); }
-.account-selector .avatar { margin: 0; flex-shrink: 0; }
+.sidebar-bottom { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.account-selector .avatar { width: 20px; height: 20px; margin: 0; flex-shrink: 0; font-size: 9px; }
 .sidebar-menu { position: fixed; inset: auto; margin: 0; padding: 6px; width: 256px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 24px); overflow-y: auto; color: var(--text); background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 16px 50px #0004; }
 .sidebar-menu:popover-open { display: block; }
 .sidebar-menu, .workspace-options { overscroll-behavior: contain; }
@@ -364,7 +355,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .menu-caption strong { font-weight: 500; color: var(--text); }
 .menu-divider { border-top: 1px solid var(--line); margin: 6px 0; }
 .workspace-options { max-height: 230px; overflow-y: auto; }
-.workspace-initial { width: 24px; height: 24px; font-size: 10px; }
+.workspace-initial { display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--success); background: var(--accent-soft); font-size: 10px; }
 .current-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--success); margin-left: auto; flex-shrink: 0; }
 .account-details { display: flex; align-items: center; gap: 14px; margin: 24px 0; }
 .account-details .avatar { width: 42px; height: 42px; }
@@ -389,6 +380,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .mobile-only { display: none; }
 #navigation-drawer { padding: 0; margin: 0; width: 264px; max-width: calc(100vw - 48px); height: 100dvh; max-height: 100dvh; border: 0; border-right: 1px solid var(--line-strong); border-radius: 0; background: var(--terminal); overflow: visible; }
 #navigation-drawer .sidebar { height: 100dvh; max-height: 100dvh; min-height: 0; }
+#navigation-drawer .sidebar-selector { min-height: 44px; }
 @media (max-width: 1100px) {
   .workspace-layout { grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr); }
   .project-grid { grid-template-columns: minmax(0, 1fr); }
