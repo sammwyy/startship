@@ -375,3 +375,74 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
   .project-row-copy > span { font-size: 9px; }
   .app-footer { padding: 12px 0; }
 }
+
+/* One navigation surface: workspace context above, account below. */
+.sidebar-dashboard { display: grid; grid-template-columns: 222px minmax(0, 1fr); overflow: clip; }
+.dashboard-body { display: flex; flex-direction: column; min-width: 0; }
+.sidebar { position: sticky; top: 12px; height: calc(100dvh - 26px); min-height: 360px; display: flex; flex-direction: column; padding: 22px 14px 12px; background: var(--panel); border-right: 1px solid var(--line); }
+.sidebar-top { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 26px; }
+.sidebar .brand { font-size: 18px; }
+.sidebar-selector { width: 100%; border: 1px solid var(--line-strong); border-radius: 12px; padding: 10px; gap: 9px; text-align: left; justify-content: flex-start; white-space: normal; }
+.sidebar-selector[aria-expanded=true] { border-color: var(--success); background: var(--accent-soft); }
+.workspace-symbol { display: grid; place-content: center; width: 28px; height: 30px; border-radius: 8px; background: var(--raised); color: var(--success); flex-shrink: 0; }
+.selector-copy { min-width: 0; flex: 1; }
+.selector-copy strong, .selector-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selector-copy strong { font-size: 11px; font-weight: 500; }
+.selector-copy small { font-size: 9px; color: var(--muted); font-weight: 400; }
+.sidebar-selector > .icon { width: 12px; color: var(--muted); }
+.sidebar-navigation { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 0; }
+.sidebar-label { display: block; font-size: 8px; letter-spacing: 1.1px; text-transform: uppercase; color: var(--faint); margin: 0 10px 10px; }
+.sidebar-link { width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px; padding: 9px 12px; margin-bottom: 3px; border: 1px solid transparent; border-radius: 9px; font-size: 11px; color: var(--muted); min-height: 37px; }
+.sidebar-link .icon { width: 15px; height: 15px; }
+.sidebar-link:hover { color: var(--text); border-color: var(--line); background: var(--raised); }
+.sidebar-link.active { color: var(--text); background: var(--accent-soft); border-color: var(--line-strong); }
+.sidebar-link.active .icon { color: var(--success); }
+.sidebar-project { margin: 24px 10px 14px; }
+.sidebar-project .sidebar-label { margin: 0 0 4px; }
+.sidebar-project strong { display: block; font-size: 14px; font-weight: 500; letter-spacing: -.3px; overflow-wrap: anywhere; }
+.sidebar-app-picker { margin: 0 10px 22px; font-size: 9px; }
+.sidebar-app-picker .count { float: right; margin: 0; font-size: 8px; }
+.sidebar-app-picker select { margin-top: 8px; padding: 8px; font-size: 11px; background: var(--bg); }
+.project-nav-label { margin-top: 24px; }
+.sidebar-bottom { border-top: 1px solid var(--line); padding-top: 12px; }
+.sidebar-instance { display: flex; align-items: center; gap: 7px; font-size: 9px; color: var(--faint); padding: 0 10px 14px; }
+.sidebar-instance > .icon { width: 12px; height: 12px; }
+.sidebar-instance .dot { margin: 0 0 0 auto; }
+.account-selector { border-color: transparent; padding: 8px; }
+.account-selector .avatar { margin: 0; flex-shrink: 0; }
+.sidebar-dashboard .contextbar { min-height: 49px; border-bottom: 1px solid var(--line); margin-bottom: 18px; }
+.sidebar-dashboard .content { padding-top: 0; }
+.sidebar-popover { position: fixed; z-index: 80; width: min(280px, calc(100vw - 24px)); padding: 6px; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--panel); box-shadow: 0 14px 60px #0004; overflow-y: auto; }
+.popover-title { font-size: 9px; color: var(--muted); padding: 9px 10px; overflow-wrap: anywhere; }
+.popover-title strong { color: var(--text); font-weight: 500; }
+.menu-item, .sidebar-popover .theme-toggle { width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 10px; min-height: 37px; padding: 9px 10px; border: 0; border-radius: 8px; font-size: 11px; text-align: left; color: var(--text); white-space: normal; }
+.menu-item > span:not(.current-dot) { min-width: 0; overflow-wrap: anywhere; }
+.menu-item .icon, .sidebar-popover .theme-toggle .icon { width: 15px; height: 15px; color: var(--muted); }
+.menu-item:hover, .menu-item.selected { background: var(--raised); }
+.menu-divider { height: 1px; background: var(--line); margin: 5px 4px; }
+.current-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--success); margin-left: auto; flex-shrink: 0; }
+.workspace-menu-list { max-height: 40dvh; overflow-y: auto; }
+.sidebar-popover .theme-toggle span { display: inline; }
+.view-caption { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); padding: 12px 0; margin-bottom: 18px; }
+#view-title { color: var(--muted); font-size: 10px; }
+.mobile-nav-toggle, .sidebar-close { display: none; }
+.sidebar-scrim { position: fixed; inset: 0; border: 0; border-radius: 0; background: #080a0799; z-index: 40; }
+@media (min-width: 901px) and (max-width: 1250px) {
+  .sidebar-dashboard .workspace-layout { grid-template-columns: minmax(0, 1.3fr) minmax(230px, 1fr); }
+  .sidebar-dashboard .settings-columns, .sidebar-dashboard .integration-layout { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 900px) {
+  .sidebar-dashboard { display: flex; }
+  .sidebar-dashboard .sidebar { display: none; position: fixed; top: 12px; left: 12px; bottom: 12px; width: 252px; height: auto; min-height: 0; border: 1px solid var(--line-strong); border-radius: 14px; z-index: 50; box-shadow: var(--shadow); }
+  .sidebar-open .sidebar { display: flex; }
+  .mobile-nav-toggle, .sidebar-close { display: inline-flex; }
+  .sidebar-dashboard .contextbar { gap: 12px; margin-bottom: 16px; }
+  .dashboard-body { flex: 1; width: 100%; }
+}
+@media (max-width: 500px) {
+  .sidebar-dashboard .content { padding: 0 16px 24px; }
+  .sidebar-dashboard .contextbar { margin-left: 16px; margin-right: 16px; flex-wrap: nowrap; }
+  .sidebar-dashboard .sidebar { top: 8px; left: 8px; bottom: 8px; }
+  .sidebar-selector { min-height: 48px; }
+  .sidebar-link, .menu-item, .sidebar-popover .theme-toggle { min-height: 42px; }
+}

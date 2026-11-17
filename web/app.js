@@ -22,6 +22,8 @@ const icons = {
  lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
  logout: '<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4m6-13 5 5-5 5m-6-5h11"/>',
  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+ chevron: '<path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/>',
+ back: '<path d="M19 12H5m6-6-6 6 6 6"/>',
  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
  moon: '<path d="M20.7 13A9 9 0 0 1 11 3.3 9 9 0 1 0 20.7 13Z"/>',
  close: '<path d="m6 6 12 12M6 18 18 6"/>'
@@ -34,6 +36,7 @@ function themeButton(){
  return '<button class="theme-toggle" id="theme-toggle" aria-label="Switch to '+(light?'dark':'light')+' theme" title="Switch to '+(light?'dark':'light')+' theme">'+icon(light?'moon':'sun')+'<span>'+(light?'Dark':'Light')+'</span></button>';
 }
 function bindTheme(){
+ if(!$('#theme-toggle'))return;
  $('#theme-toggle').onclick=()=>{
   const theme=document.documentElement.dataset.theme==='light'?'dark':'light';
   document.documentElement.dataset.theme=theme;
@@ -52,18 +55,73 @@ function modal(title,description,fields,submit,onSubmit){
  $('#close-modal').onclick=$('#cancel-modal').onclick=()=>d.close();
  d.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=d.querySelector('[type=submit]');button.disabled=true;d.querySelector('.form-error').textContent='';try{if(await onSubmit(new FormData(e.target),e.target)!==false)d.close()}catch(err){d.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}};d.showModal();d.querySelector('form input,form select,form textarea')?.focus();
 }
-function shell(crumb,content){
- const onWorkspaces=!/^#(workspace|project|app)\//.test(location.hash);
- $('#root').innerHTML='<div class="dashboard"><header class="app-header"><a href="#workspaces" class="brand">'+brand()+'</a><nav class="primary-nav" aria-label="Main navigation"><a class="'+(onWorkspaces?'':'active')+'" '+(!onWorkspaces?'aria-current="page"':'')+' href="#workspace/'+esc(workspace?.id||'')+'">'+icon('grid')+'Projects</a><a class="'+(onWorkspaces?'active':'')+'" '+(onWorkspaces?'aria-current="page"':'')+' href="#workspaces">'+icon('layers')+'Workspaces</a></nav><div class="header-controls">'+themeButton()+'<a class="icon-button docs-link" href="https://docs.docker.com/" target="_blank" rel="noreferrer" aria-label="Docker documentation" title="Docker documentation">'+icon('server')+'</a><span class="avatar" title="'+esc(user.username)+'">'+esc(user.username[0].toUpperCase())+'</span><button class="icon-button" id="logout" title="Sign out" aria-label="Sign out">'+icon('logout')+'</button></div></header><main class="main"><div class="contextbar"><label class="workspace-picker">'+icon('layers')+'<select id="workspace-switch" aria-label="Workspace">'+workspaces.map(w=>'<option value="'+esc(w.id)+'" '+(workspace?.id===w.id?'selected':'')+'>'+esc(w.name)+'</option>').join('')+'</select></label><span class="context-divider">/</span><div class="breadcrumbs">'+crumb+'</div><span class="instance-label">'+icon('server')+'Self-hosted</span></div><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div>';
- bindTheme();
- $('#workspace-switch').onchange=e=>nav('workspace/'+e.target.value);
- $('#logout').onclick=async()=>{await api('logout',{});user=null;nav('login')};
+function sidebarNavigation({project,apps=[],app,section='deployments'}={}){
+ const item=(href,shape,label,current=false)=>'<a class="sidebar-link '+(current?'active':'')+'" '+(current?'aria-current="page"':'')+' href="'+href+'">'+icon(shape)+'<span>'+label+'</span></a>';
+ if(!project)return '<div class="sidebar-label">Workspace</div>'+item('#workspace/'+esc(workspace?.id||''),'grid','Projects',location.hash!=='#workspaces')+'<button class="sidebar-link" id="sidebar-new-project">'+icon('plus')+'New project</button>';
+ return item('#workspace/'+esc(project.workspace_id),'back','All projects')+'<div class="sidebar-project"><span class="sidebar-label">Project</span><strong title="'+esc(project.name)+'">'+esc(project.name)+'</strong></div>'+
+  (app?'<label class="sidebar-app-picker">Application <span class="count">'+apps.length+'</span><select id="sidebar-app" aria-label="Application">'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===app.id?'selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select></label><div class="sidebar-label">Application controls</div>'+applicationViews.filter(v=>v[0]!=='webhook').map(([name,shape,label])=>item('#app/'+esc(app.id)+'/'+name,shape,label,section===name)).join(''):'')+
+  '<div class="sidebar-label project-nav-label">Project controls</div>'+item('#'+(app?'app/'+esc(app.id):'project/'+esc(project.id))+'/webhook','branch','Source & Git',section==='webhook');
 }
+function shell(crumb,content,context={}){
+ const workspaceName=workspace?.name||'Choose workspace';
+ $('#root').innerHTML='<div class="dashboard sidebar-dashboard"><aside class="sidebar" id="sidebar" aria-label="Dashboard navigation"><div class="sidebar-top"><a href="#'+(workspace?'workspace/'+esc(workspace.id):'workspaces')+'" class="brand">'+brand()+'</a><button class="icon-button sidebar-close" id="close-sidebar" aria-label="Close navigation">'+icon('close')+'</button></div><button class="sidebar-selector" id="workspace-menu-toggle" aria-haspopup="dialog" aria-expanded="false" aria-controls="workspace-menu"><span class="workspace-symbol">'+icon('layers')+'</span><span class="selector-copy"><small>Workspace</small><strong>'+esc(workspaceName)+'</strong></span>'+icon('chevron')+'</button><nav class="sidebar-navigation" aria-label="'+(context.project?'Project':'Workspace')+' navigation">'+sidebarNavigation(context)+'</nav><div class="sidebar-bottom"><span class="sidebar-instance">'+icon('server')+'Self-hosted <span class="dot"></span></span><button class="sidebar-selector account-selector" id="account-menu-toggle" aria-haspopup="dialog" aria-expanded="false" aria-controls="account-menu"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-copy"><strong>'+esc(user.username)+'</strong><small>Personal account</small></span>'+icon('chevron')+'</button></div></aside><button class="sidebar-scrim" id="sidebar-scrim" aria-label="Close navigation" hidden></button><div class="dashboard-body"><main class="main"><div class="contextbar"><button class="icon-button mobile-nav-toggle" id="open-sidebar" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar">'+icon('menu')+'</button><div class="breadcrumbs">'+crumb+'</div><span class="instance-label">'+icon('lock')+'Private infrastructure</span></div><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div></div><div class="sidebar-popover" id="workspace-menu" role="dialog" aria-label="Switch workspace" hidden><div class="popover-title">Your workspaces</div><div class="workspace-menu-list">'+workspaces.map(w=>'<a class="menu-item '+(workspace?.id===w.id?'selected':'')+'" href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'>'+icon('layers')+'<span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div><button class="menu-item" id="menu-create-workspace">'+icon('plus')+'Create workspace</button><a class="menu-item" href="#workspaces">'+icon('grid')+'Manage workspaces</a></div><div class="sidebar-popover" id="account-menu" role="dialog" aria-label="Account options" hidden><div class="popover-title">Signed in as <strong>'+esc(user.username)+'</strong></div><button class="menu-item" id="account-details">'+icon('lock')+'Account details</button>'+themeButton()+'<div class="menu-divider"></div><button class="menu-item" id="logout">'+icon('logout')+'Sign out</button></div>';
+ bindSidebarMenus();bindTheme();
+ $('#sidebar-new-project')?.addEventListener('click',()=>{setSidebarOpen(false);createProject()});
+ $('#sidebar-app')?.addEventListener('change',e=>nav('app/'+e.target.value+'/'+(location.hash.split('/')[2]||context.section||'deployments')));
+ $('#menu-create-workspace').onclick=()=>{setSidebarOpen(false);createWorkspace()};
+ $('#account-details').onclick=()=>{setSidebarOpen(false);modal('Your account','Your signed-in identity on this Startship server.',field('Username','username',user.username,'text','readonly')+'<p class="small muted">Appearance is saved on this browser. Use the account menu to switch between light and dark.</p>','Done',async()=>{})};
+ $('#logout').onclick=async()=>{try{await api('logout',{});user=null;nav('login')}catch(err){toast(err.message)}};
+}
+function closeSidebarMenus(){
+ document.querySelectorAll('.sidebar-popover').forEach(p=>p.hidden=true);
+ document.querySelectorAll('.sidebar-selector').forEach(b=>b.setAttribute('aria-expanded','false'));
+}
+function positionSidebarMenu(menu,button){
+ const r=button.getBoundingClientRect(),gap=8,edge=12;
+ menu.style.maxHeight=Math.max(100,window.innerHeight-edge*2)+'px';
+ const height=menu.getBoundingClientRect().height,below=window.innerHeight-r.bottom-gap-edge,above=r.top-gap-edge;
+ let top=below>=height||below>=above?r.bottom+gap:r.top-height-gap;
+ menu.style.top=Math.max(edge,Math.min(top,window.innerHeight-height-edge))+'px';
+ menu.style.left=Math.max(edge,Math.min(r.left,window.innerWidth-menu.offsetWidth-edge))+'px';
+}
+function bindSidebarMenus(){
+ for(const name of ['workspace','account']){
+  const button=$('#'+name+'-menu-toggle'),menu=$('#'+name+'-menu');
+  button.onclick=()=>{const open=menu.hidden;closeSidebarMenus();if(open){menu.hidden=false;button.setAttribute('aria-expanded','true');positionSidebarMenu(menu,button);menu.querySelector('a,button')?.focus()}};
+  menu.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{closeSidebarMenus();setSidebarOpen(false)}));
+ }
+ $('#open-sidebar').onclick=()=>setSidebarOpen(true);
+ $('#close-sidebar').onclick=$('#sidebar-scrim').onclick=()=>setSidebarOpen(false);
+ $('.sidebar-navigation').addEventListener('click',e=>{if(e.target.closest('a'))setSidebarOpen(false)});
+}
+function setSidebarOpen(open){
+ closeSidebarMenus();$('.sidebar-dashboard')?.classList.toggle('sidebar-open',open);
+ if($('.dashboard-body'))$('.dashboard-body').inert=open;
+ if($('#sidebar-scrim'))$('#sidebar-scrim').hidden=!open;
+ $('#open-sidebar')?.setAttribute('aria-expanded',String(open));
+ if(open)$('#close-sidebar').focus();else $('#open-sidebar')?.focus();
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.sidebar-popover,.sidebar-selector'))closeSidebarMenus()});
+document.addEventListener('keydown',e=>{
+ if($('#modal').open)return;
+ if(e.key==='Escape'){
+  const open=document.querySelector('.sidebar-selector[aria-expanded="true"]');
+  if(open){closeSidebarMenus();open.focus()}else if($('.sidebar-open'))setSidebarOpen(false);
+ }
+ if(e.key==='Tab'){
+  const scope=document.querySelector('.sidebar-popover:not([hidden])')||($('.sidebar-open')?$('#sidebar'):null);
+  if(!scope)return;
+  const controls=[...scope.querySelectorAll('a,button,select')].filter(el=>el.getClientRects().length),first=controls[0],last=controls.at(-1);
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}
+  if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}
+ }
+});
+window.addEventListener('resize',()=>{closeSidebarMenus();if(window.innerWidth>900&&$('.sidebar-open'))setSidebarOpen(false)});
 function heading(kicker,title,subtitle,actions=''){return '<div class="heading"><div class="heading-copy"><div class="eyebrow">'+kicker+'</div><h1>'+esc(title)+'</h1><p>'+esc(subtitle)+'</p></div><div class="row heading-actions">'+actions+'</div></div>'}
 function auth(setup){
  $('#root').innerHTML='<div class="auth"><header class="auth-header"><a class="brand" href="#login">'+brand()+'</a>'+themeButton()+'</header><section class="auth-story"><div class="auth-index"><span>01 — YOUR INFRASTRUCTURE</span><span>BUILT TO SHIP ↗</span></div><div class="auth-message"><h1>From commit.<br>To production.<br><em>On your terms.</em></h1><p>Deploy your applications on the server you own.<br>A straight line from your code to the world.</p></div><div class="pipeline"><div class="pipeline-head"><span>THE SHORTEST PATH TO LIVE</span>'+icon('arrow')+'</div><div class="pipeline-track"><div><span class="pipeline-node">'+icon('branch')+'</span><strong>Push</strong><span>Your repository</span></div><div><span class="pipeline-node">'+icon('box')+'</span><strong>Build</strong><span>Isolated by default</span></div><div><span class="pipeline-node node-live">'+icon('globe')+'</span><strong>Ship</strong><span>Your own domain</span></div></div><div class="pipeline-command"><span>$</span> git push origin main <span class="command-cursor"></span></div></div></section><section class="auth-form"><form><span class="form-index">'+(setup?'FIRST THINGS FIRST':'YOUR CONTROL ROOM')+'</span><h2>'+(setup?'Set up your account.':'Welcome back.')+'</h2><p>'+(setup?'Create the administrator account for this server.':'Sign in to manage your applications.')+'</p>'+field('Username','username','','text','required autocomplete="username" placeholder="Enter your username"')+field('Password','password','','password','required minlength="8" autocomplete="'+(setup?'new-password':'current-password')+'" placeholder="Enter your password"')+(setup?'<p class="password-help">At least 8 characters. There is no password reset, so keep it somewhere safe.</p>':'')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">'+(setup?'Create account':'Sign in')+icon('arrow')+'</button><div class="form-footnote">'+icon('lock')+'Private access to your infrastructure.</div></form></section><footer class="auth-footer"><span>SELF-HOSTED, NOT LIMITED.</span><span>Startship / Deployment platform</span></footer></div>';
  bindTheme();
- $('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const v=Object.fromEntries(new FormData(e.target));try{if(setup)await api('setup',v);await api('login',v);user=await api('me');nav('workspaces')}catch(err){$('.form-error').textContent=err.message}finally{button.disabled=false}};
+ $('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const v=Object.fromEntries(new FormData(e.target));try{if(setup)await api('setup',v);await api('login',v);user=await api('me');nav('')}catch(err){$('.form-error').textContent=err.message}finally{button.disabled=false}};
 }
 function createWorkspace(){modal('Create workspace','A home for your projects and applications.',field('Workspace name','name','','text','required'),'Create workspace',async f=>{const w=await api('workspaces',Object.fromEntries(f));nav('workspace/'+w.id);toast('Workspace created')})}
 function sourceFields(project={}){
@@ -107,25 +165,32 @@ function detectApps(project,apps=[]){
  });
 }
 function addRoute(project,apps,selectedId){if(!apps.length){toast('Create an application first');return}modal('Connect a domain','Direct traffic to an app using a hostname and path prefix.',field('Hostname','host','','text','required placeholder="example.com"')+field('Path prefix','path_prefix','/','text','required')+'<label>Application<select name="app_id">'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===selectedId?'selected':'')+'>'+esc(a.name)+' · :'+a.port+'</option>').join('')+'</select></label><label><input type="checkbox" name="strip_prefix">Strip prefix before forwarding</label><div class="note">DNS: point the A record of this hostname to this server’s public IP.</div>','Connect domain',async f=>{await api('routes',{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')});toast('Domain connected');render()})}
-const applicationTabs=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','App settings'],['webhook','branch','Project Git']];
+const applicationViews=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','App settings'],['webhook','branch','Source & Git']];
+function projectGitContent(project){
+ const url=location.origin+'/api/webhooks/github/'+project.id;
+ return '<div class="section-head"><div><h2>Project source & Git</h2><span class="small muted">Shared by every application in this project.</span></div><button id="edit-project-source">'+icon('settings')+'Edit source</button></div><div class="integration-layout"><div class="panel panel-pad"><h2>Project GitHub webhook</h2><p class="small">One source for <strong>'+esc(project.name)+'</strong>: '+esc(project.git_url||'Not configured')+' · '+esc(project.branch||'main')+'. Pushes deploy the apps with Auto-deploy enabled.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(project.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect the project repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy for the apps that should rebuild on project pushes.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
+}
+function bindProjectGit(project){
+ $('#edit-project-source').onclick=()=>editProjectSource(project);
+ document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}});
+}
 function deploymentStatus(app,deployments){return deployments.find(d=>d.id===app.active_deployment)?.status}
 async function projectPage(id,selectedId='',initialTab='deployments'){
  const version=viewVersion;
  const [p,apps,routes,deployments]=await Promise.all([api('projects/'+id),api('apps?project_id='+id),api('routes?project_id='+id),api('deployments')]);
  if(version!==viewVersion)return;
  workspace=workspaces.find(w=>w.id===p.workspace_id);
+ if(workspace)localStorage.setItem('workspace',workspace.id);
  const app=apps.find(a=>a.id===selectedId)||apps[0],running=apps.filter(a=>deploymentStatus(a,deployments)==='running').length;
  shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; '+esc(p.name),
-  heading('Project',p.name,apps.length+' app'+(apps.length===1?'':'s')+' · '+running+' running · '+routes.length+' route'+(routes.length===1?'':'s'),'<button id="edit-project-source">'+icon('branch')+'Project source</button><button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>')+
+  heading('Project',p.name,apps.length+' app'+(apps.length===1?'':'s')+' · '+running+' running · '+routes.length+' route'+(routes.length===1?'':'s'),'<button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>')+
   '<div class="project-source-summary"><span>'+icon('branch')+'<strong>Project source</strong> '+esc(p.git_url||'Not configured')+'</span><span>'+esc(p.branch||'')+'</span></div>'+(p.source_conflict?'<div class="note source-warning">Existing apps have different sources. Choose one project repository before editing or deploying apps.</div>':'')+
-  (app?'<nav class="service-switcher" aria-label="Project applications" '+(apps.length===1?'hidden':'')+'>'+apps.map(a=>'<a data-app-link="'+esc(a.id)+'" class="service-option '+(a.id===app.id?'active':'')+'" '+(a.id===app.id?'aria-current="page"':'')+' href="#app/'+esc(a.id)+'/'+esc(initialTab)+'"><span class="service-icon">'+icon('box')+'</span><span class="service-copy"><strong>'+esc(a.name)+'</strong><small>'+esc(a.root_dir==='.'?'Repository root':a.root_dir)+' · '+esc(a.build_type)+'</small></span><span data-service-status="'+esc(a.id)+'">'+badge(deploymentStatus(a,deployments))+'</span></a>').join('')+'</nav><section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
-   empty('Choose apps from this repository','Add an app at the repository root, or detect frontend, backend, and daemon folders inside this project’s monorepo.')));
- $('#edit-project-source').onclick=()=>editProjectSource(p);$('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p,apps);
- if(app){
-  const list=$('.service-switcher'),selected=list.querySelector('[aria-current="page"]');
-  list.scrollLeft=selected.offsetLeft-list.offsetLeft;
-  await mountApplication(p,app,apps,routes,initialTab,deployments);
- }
+  (app?'<section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
+   initialTab==='webhook'?projectGitContent(p):empty('Choose apps from this repository','Add an app at the repository root, or detect frontend, backend, and daemon folders inside this project’s monorepo.')),
+  {project:p,apps,app,section:initialTab});
+ $('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p,apps);
+ if(app)await mountApplication(p,app,apps,routes,initialTab,deployments);
+ else if(initialTab==='webhook')bindProjectGit(p);
 }
 async function appPage(id,tab='deployments'){const version=viewVersion,app=await api('apps/'+id);if(version===viewVersion)await projectPage(app.project_id,id,tab)}
 async function mountApplication(project,app,apps,allRoutes,initialTab,deployments){
@@ -134,7 +199,7 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
  const ownRoutes=()=>allRoutes.filter(r=>r.app_id===app.id);
  $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><h2>'+esc(app.name)+'</h2><span id="active-status"></span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button id="redeploy" title="Restart the active release with current settings, without building">Redeploy</button><button id="rebuild-no-cache">Rebuild without cache</button><button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
  '<div class="app-details"><span>'+icon('folder')+'Root '+rootLabel(app.root_dir)+'</span><span>'+icon('server')+esc(app.build_type)+' · :'+app.port+'</span><label class="inline-check"><input type="checkbox" id="quick-auto-deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy</label></div>'+
- '<div class="workbench-navigation"><div class="tabs" aria-label="Application views">'+applicationTabs.map(([name,shape,label])=>'<button data-tab="'+name+'" aria-pressed="false">'+icon(shape)+label+(name==='domains'?'<span class="tab-count">'+ownRoutes().length+'</span>':'')+'</button>').join('')+'</div><span class="poll-status" id="poll-status">'+icon('activity')+'Live updates · 2s</span></div><div id="tab-content"></div>';
+ '<div class="view-caption"><span id="view-title"></span><span class="poll-status" id="poll-status">'+icon('activity')+'Live updates · 2s</span></div><div id="tab-content"></div>';
  $('#quick-auto-deploy').onchange=async e=>{const input=e.currentTarget,value=input.checked;input.disabled=true;try{Object.assign(app,await api('apps/'+app.id,{auto_deploy:value},'PATCH'));const field=$('#settings-form [name="auto_deploy"]');if(field)field.checked=value;toast('Auto-deploy '+(value?'enabled':'disabled'))}catch(err){input.checked=!value;toast(err.message)}finally{input.disabled=false}};
  $('#deploy').disabled=$('#rebuild-no-cache').disabled=$('#quick-auto-deploy').disabled=!project.git_url||project.source_conflict;
  $('#redeploy').disabled=!app.active_deployment;
@@ -163,7 +228,7 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
    $('#manage-domains').onclick=()=>ownRoutes().length?tab('domains',true).catch(err=>toast(err.message)):addRoute(project,apps,app.id);
    $('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#build-log').textContent);toast('Build output copied')}catch{toast('Select and copy the build output manually')}};
    const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];
-   $('#active-status').innerHTML=badge(current?.status);document.querySelector('[data-service-status="'+app.id+'"]').innerHTML=badge(current?.status);
+   $('#active-status').innerHTML=badge(current?.status);
    $('#redeploy').disabled=!latest.some(d=>d.status==='running');
    if(selectedDeployment){const d=await api('deployments/'+selectedDeployment);if(!isCurrent()||activeTab!=='deployments')return;$('#build-log').textContent=d.log||'Deployment '+d.status+'…';$('#log-id').textContent=' / '+d.id.slice(0,8);$('#build-log').scrollTop=follow?$('#build-log').scrollHeight:previousScroll;$('#redeploy-release').disabled=!d.redeployable;$('#redeploy-release').onclick=e=>queueRelease(e.currentTarget,'redeploy',{deployment_id:d.id})}
   }finally{loading=false}
@@ -181,23 +246,20 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
   $('#settings-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('[type="submit"]');button.disabled=true;try{Object.assign(app,await api('apps/'+app.id,appData(new FormData(e.target)),'PATCH'));await render();toast('Settings saved')}catch(err){if(isCurrent())$('#settings-form .form-error').textContent=err.message}finally{button.disabled=false}};
  }
  function showWebhook(){
-  const url=location.origin+'/api/webhooks/github/'+project.id;
-  $('#tab-content').innerHTML='<div class="integration-layout"><div class="panel panel-pad"><h2>Project GitHub webhook</h2><p class="small">One source for <strong>'+esc(project.name)+'</strong>: '+esc(project.git_url)+' · '+esc(project.branch)+'. Pushes deploy the apps with Auto-deploy enabled.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(project.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect the project repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy for the apps that should rebuild on project pushes.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
-  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}});
+  $('#tab-content').innerHTML=projectGitContent(project);bindProjectGit(project);
  }
  async function tab(name,updateURL=false){
-  const token=++tabVersion,requested=applicationTabs.some(t=>t[0]===name)?name:'deployments';
+  const token=++tabVersion,requested=applicationViews.some(t=>t[0]===name)?name:'deployments';
   activeTab=requested;clearInterval(timer);
   if(updateURL)history.replaceState(null,'','#app/'+app.id+'/'+activeTab);
-  document.querySelectorAll('[data-app-link]').forEach(a=>a.href='#app/'+a.dataset.appLink+'/'+activeTab);
-  document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===activeTab);b.setAttribute('aria-pressed',String(b.dataset.tab===activeTab))});
+  document.querySelectorAll('.sidebar-navigation a').forEach(a=>{const current=a.hash==='#app/'+app.id+'/'+activeTab;a.classList.toggle('active',current);if(current)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});
+  $('#view-title').textContent=applicationViews.find(v=>v[0]===activeTab)[2];
   $('#poll-status').hidden=activeTab!=='deployments';
   if(requested==='deployments'){await showDeployments();if(token===tabVersion&&isCurrent()&&activeTab==='deployments')timer=setInterval(()=>showDeployments().catch(err=>{if(isCurrent())toast(err.message)}),2000)}
   if(requested==='domains')showDomains();
   if(requested==='settings')showSettings();
   if(requested==='webhook')showWebhook();
  }
- document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab,true).catch(err=>toast(err.message)));
  $('#active-status').innerHTML=badge(deploymentStatus(app,deployments)||deployments.filter(d=>d.app_id===app.id).at(-1)?.status);
  await tab(initialTab);
 }
@@ -224,6 +286,7 @@ async function render(){
  if(!user){try{user=await api('me')}catch{auth(false);return}}
  const parts=location.hash.slice(1).split('/');if(parts[0]==='login'){auth(false);return}
  workspaces=await api('workspaces');if(version!==viewVersion)return;workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
+ if(!parts[0]&&workspace){nav('workspace/'+workspace.id);return}
  if(parts[0]==='project'){await projectPage(parts[1],'',parts[2]);return}
  if(parts[0]==='app'){await appPage(parts[1],parts[2]);return}
  if(parts[0]==='workspace'&&workspace){
