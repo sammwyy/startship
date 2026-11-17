@@ -93,6 +93,10 @@ func openStore(path string) (*Store, error) {
 		db.Close()
 		return nil, e
 	}
+	if e = s.migrateAccess(); e != nil {
+		db.Close()
+		return nil, e
+	}
 	if e = s.migrateProjectConfig(); e != nil {
 		db.Close()
 		return nil, e
