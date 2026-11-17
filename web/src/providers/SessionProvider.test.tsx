@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { request } from "../services/api";
@@ -24,6 +24,7 @@ function Probe() {
   return (
     <>
       <span>{session.user?.username}</span>
+      {!session.user && !session.loading && <span>Signed out</span>}
       {session.can("users.manage") && <span>Admin controls</span>}
       {session.user?.must_change_password && <span>Rotation required</span>}
       <button
@@ -38,6 +39,10 @@ function Probe() {
         }
       >
         Save account
+      </button>
+      <button onClick={() => void session.logout()}>Sign out</button>
+      <button onClick={() => void session.login("admin", "password123")}>
+        Sign in
       </button>
       {done && <span>Saved</span>}
     </>
@@ -62,6 +67,46 @@ beforeEach(() => {
   });
 });
 describe("account session updates", () => {
+  it("updates active session observers on logout and login, without retaining private cached resources", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Admin controls");
+    client.setQueryData(["projects"], ["private project"]);
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    await screen.findByText("Signed out");
+    expect(screen.queryByText("Admin controls")).not.toBeInTheDocument();
+    expect(client.getQueryData(["projects"])).toBeUndefined();
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText("Admin controls")).toBeInTheDocument();
+    expect(screen.queryByText("Signed out")).not.toBeInTheDocument();
+  });
+  it("transitions expired sessions back to login and permits signing in again", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <SessionProvider>
+          <Probe />
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText("Admin controls");
+    await act(async () => {
+      window.dispatchEvent(new Event("session-expired"));
+    });
+    expect(await screen.findByText("Signed out")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByText("Admin controls")).toBeInTheDocument();
+  });
   it.each([false, true])(
     "preserves privileges after PATCH /me, including when refresh fails: %s",
     async (unavailable) => {

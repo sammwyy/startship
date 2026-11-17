@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   beginSessionChange,
   request,
@@ -26,6 +27,16 @@ interface Session {
 const Context = createContext<Session | null>(null);
 export const useSession = () => useContext(Context)!;
 
+async function cacheSession(client: QueryClient, account: User | null) {
+  beginSessionChange();
+  await client.cancelQueries();
+  client.setQueryData(["setup"], { required: false });
+  client.setQueryData(["me"], account);
+  client.removeQueries({
+    predicate: (query) => !["setup", "me"].includes(String(query.queryKey[0])),
+  });
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient();
   const [temporaryPassword, setTemporaryPassword] = useState("");
@@ -43,10 +54,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   });
   useEffect(() => {
     const expire = () => {
-      beginSessionChange();
-      client.clear();
-      client.setQueryData(["setup"], { required: false });
-      client.setQueryData(["me"], null);
+      void cacheSession(client, null);
       setTemporaryPassword("");
     };
     window.addEventListener("session-expired", expire);
@@ -57,18 +65,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     if (firstRun) await request("setup", { username, password });
     await request("login", { username, password });
     beginSessionChange();
-    client.clear();
     const account = await request<User>("me");
     setTemporaryPassword(account.must_change_password ? password : "");
-    client.setQueryData(["setup"], { required: false });
-    client.setQueryData(["me"], account);
+    await cacheSession(client, account);
   }
   async function logout() {
     await request("logout", {});
-    beginSessionChange();
-    client.clear();
-    client.setQueryData(["setup"], { required: false });
-    client.setQueryData(["me"], null);
+    await cacheSession(client, null);
     setTemporaryPassword("");
   }
   async function updateAccount(changes: {
