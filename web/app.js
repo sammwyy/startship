@@ -69,6 +69,18 @@ function shell(crumb,content,project=null){
  $('#root').innerHTML='<div class="dashboard sidebar-layout"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="contextbar"><button class="icon-button mobile-only" id="open-navigation" aria-label="Open navigation" aria-haspopup="dialog">'+icon('menu')+'</button><div class="breadcrumbs">'+crumb+'</div><span class="instance-label">'+icon('server')+'Self-hosted</span></div><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div></div>';
  bindTheme();bindSidebar();
 }
+function focusMenuItem(menu,item){
+ if(!item)return;
+ item.focus({preventScroll:true});
+ for(let parent=item.parentElement;parent;parent=parent.parentElement){
+  if(parent.scrollHeight>parent.clientHeight){
+   const frame=parent.getBoundingClientRect(),rect=item.getBoundingClientRect(),top=frame.top+parent.clientTop,bottom=top+parent.clientHeight;
+   if(rect.top<top)parent.scrollTop-=top-rect.top;
+   else if(rect.bottom>bottom)parent.scrollTop+=rect.bottom-bottom;
+  }
+  if(parent===menu)break;
+ }
+}
 function bindSidebar(){
  const drawer=$('#navigation-drawer'),sidebar=$('.sidebar'),desktop=$('#desktop-sidebar');
  const closeDrawer=()=>{drawer.close();desktop.append(sidebar)};
@@ -87,8 +99,8 @@ function bindSidebar(){
    menu.style.top=(below>=height||below>=above?rect.bottom+6:Math.max(8,rect.top-height-6))+'px';
    menu.style.maxHeight=Math.max(80,(below>=height||below>=above?below:above))+'px';
   });
-  button.onkeydown=e=>{if(e.key==='ArrowDown'){e.preventDefault();menu.showPopover();menu.querySelector('a,button')?.focus()}};
-  menu.onkeydown=e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const items=[...menu.querySelectorAll('a,button')],index=items.indexOf(document.activeElement);items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:items.length-1))%items.length]?.focus()};
+  button.onkeydown=e=>{if(e.key==='ArrowDown'){e.preventDefault();menu.showPopover();focusMenuItem(menu,menu.querySelector('a,button'))}};
+  menu.onkeydown=e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const items=[...menu.querySelectorAll('a,button')],index=items.indexOf(document.activeElement);focusMenuItem(menu,items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:items.length-1))%items.length])};
  });
  $('#create-workspace').onclick=()=>{$('#workspace-menu').hidePopover();if(drawer.open)closeDrawer();createWorkspace()};
  $('#account-profile').onclick=()=>{

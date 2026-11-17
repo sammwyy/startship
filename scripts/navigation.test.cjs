@@ -62,6 +62,17 @@ test('workspace and account names are escaped in menu markup', () => {
  assert.doesNotMatch(html, /<script>|<img>/);
 });
 
+test('keyboard menu focus scrolls nested menu containers, never the background page',()=>{
+ const f=fixture();let focusOptions;
+ const menu={scrollTop:0,scrollHeight:350,clientHeight:120,clientTop:1,parentElement:null,getBoundingClientRect:()=>({top:0})};
+ const list={scrollTop:0,scrollHeight:600,clientHeight:200,clientTop:0,parentElement:menu,getBoundingClientRect:()=>({top:40-menu.scrollTop})};
+ const item={parentElement:list,focus:options=>{focusOptions=options},getBoundingClientRect:()=>({top:500-list.scrollTop-menu.scrollTop,bottom:536-list.scrollTop-menu.scrollTop})};
+ f.context.menu=menu;f.context.item=item;f.run('focusMenuItem(menu,item)');
+ assert.equal(focusOptions.preventScroll,true);assert.equal(list.scrollTop,296);assert.equal(menu.scrollTop,119);
+ assert.equal(item.getBoundingClientRect().bottom,121);
+ f.run('focusMenuItem(menu,null)');
+});
+
 test('single and multiple containers have the same project-owned deployment controls',async()=>{
  for(const count of [0,1,3]){
   const f=fixture('#project/p1');f.context.fakeAPI=async path=>path==='projects/p1'?{id:'p1',name:'Repo',workspace_id:'w2',git_url:'file:///repo'}:path==='containers?project_id=p1'?Array.from({length:count},(_,i)=>({id:'c'+i,name:'web',status:'running'})):[];
