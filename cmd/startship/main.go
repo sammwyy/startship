@@ -260,7 +260,10 @@ const usage = `startship [--json] COMMAND
   containers list [PROJECT] | containers get ID
   routes list [PROJECT] | routes add PROJECT CONTAINER HOST [PATH] | routes rm ID
   routes update ID JSON          edit an existing route
-  domains                        alias for routes (not workspace domains)
+  domains list WORKSPACE
+  domains add WORKSPACE DOMAIN [--subdomains]
+  domains rm WORKSPACE DOMAIN     domain ID or name; delete/remove also accepted
+  workspaces domains ...         alias for domains; quote wildcard names
   traffic PROJECT | detect JSON | version
 Names or IDs accepted for workspaces/projects/containers. JSON objects may be
 passed as '-' to read stdin. STARTSHIP_SERVER and STARTSHIP_TOKEN override config.
@@ -290,6 +293,12 @@ func (c *cli) run(args []string) error {
 	}
 	cmd := a[0]
 	a = a[1:]
+	if cmd == "domains" {
+		return c.runDomains(a)
+	}
+	if cmd == "workspaces" && len(a) > 0 && a[0] == "domains" {
+		return c.runDomains(a[1:])
+	}
 	if handled, err := c.runAccess(cmd, a); handled {
 		return err
 	}
@@ -446,11 +455,8 @@ func (c *cli) run(args []string) error {
 			return e
 		}
 		method, path, body = "POST", "detect", m
-	case "workspaces", "projects", "containers", "deployments", "routes", "domains":
+	case "workspaces", "projects", "containers", "deployments", "routes":
 		kind := cmd
-		if kind == "domains" {
-			kind = "routes"
-		}
 		if kind == "deployments" {
 			kind = "releases"
 		}

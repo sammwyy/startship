@@ -114,7 +114,7 @@ edited or deleted; clone one instead.
 Overrides require `workspace TARGET` or `project TARGET` and exactly one subject
 (`--role` or `--user`). `--allow` and `--deny` are comma-separated lists; each set
 replaces both lists, with omitted lists empty. Setting neither clears the
-override. Workspace domain policies are not managed by these commands.
+override.
 
 `users rename USER NAME`, `users reset-password USER`, `users delete USER`, and
 `roles delete ROLE` administer existing accounts and custom roles. Create and
@@ -122,6 +122,35 @@ reset-password prompt without terminal echo for a required temporary password
 (8–72 bytes); new/reset users must change it on login. Passwords are never command
 arguments. Keep deletions and platform role grants restricted to trusted admins;
 the server enforces last-admin and self-deletion safeguards.
+
+### Workspace domains
+
+`domains` manages the workspace's allowed hostnames; use `routes` for project
+ingress routes (the former `domains` alias for `routes` is replaced):
+
+```sh
+startship domains add Team '*.example.com'
+startship domains add Team test.example.com
+startship domains add Team services.example.net --subdomains
+startship domains list Team
+startship workspaces domains list Team --json
+startship domains rm Team '*.example.com'
+```
+
+Every command accepts a workspace name or ID. Removal accepts the domain's name
+or ID (`rm`, `remove` and `delete` are aliases). Quote wildcards so the shell does
+not expand them. An exact name allows only that host; `*.example.com` allows
+subdomains at any depth but not `example.com` itself. `--subdomains` on an exact
+name allows both the apex and subdomains. Tables show `APEX`, `SUBDOMAINS`, route
+counts and whether the caller can manage domains; `--json` preserves the API
+response. `workspaces domains ...` is an alias for all these commands.
+
+The API supports list/add/remove, not editing a domain. Remove and re-add to
+change its policy; removing a domain still required by routes is rejected.
+Workspace administrators with `workspace.domains` can add/remove domains;
+members can list them. Cross-workspace overlapping claims are rejected. Project
+route hosts must be allowed by their workspace; Platform Admins bypass this host
+restriction. Use `routes add`/`routes update` to configure actual project routing.
 
 ## Run
 
