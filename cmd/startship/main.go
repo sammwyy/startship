@@ -180,7 +180,11 @@ func (c *cli) resolve(kind, value string) (string, error) {
 		if m["id"] == value {
 			return value, nil
 		}
-		if m["name"] == value {
+		nameKey := "name"
+		if kind == "users" {
+			nameKey = "username"
+		}
+		if m[nameKey] == value {
 			if id != "" {
 				return "", fmt.Errorf("ambiguous %s name %q; use an ID", kind, value)
 			}
@@ -227,6 +231,20 @@ func (c *cli) print(v any) error {
 func field(m map[string]any, k string) string { s, _ := m[k].(string); return s }
 
 const usage = `startship [--json] COMMAND
+  users list|create USER|rename USER NAME|reset-password USER|delete USER
+  roles list|get ROLE|create NAME|edit ROLE|delete ROLE
+    --clone-of ROLE (create only) --name NAME (edit) --color HEX --icon ICON
+    --perm p,...                  repeatable; replaces permissions; '' clears
+  permissions                    permission catalog and role icons
+  grant USER ROLE [--workspace W | --project P]
+  revoke USER ROLE [--workspace W | --project P]
+  assignments list [--user U] [--workspace W | --project P]
+  members WORKSPACE | workspaces members WORKSPACE
+  overrides list workspace|project TARGET
+  overrides set workspace|project TARGET --role R|--user U [--allow p,...] [--deny p,...]
+                                 empty allow/deny clears the override
+  effective [USER] [--workspace W | --project P]
+  audit [--workspace W]
   login [SERVER]                 prompt for username and password
   logout | whoami | passwd       session and account management
   account update [USERNAME]      prompts for current password
@@ -272,6 +290,9 @@ func (c *cli) run(args []string) error {
 	}
 	cmd := a[0]
 	a = a[1:]
+	if handled, err := c.runAccess(cmd, a); handled {
+		return err
+	}
 	method, path := "GET", ""
 	var body any
 	need := func(n int) error {

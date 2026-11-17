@@ -77,7 +77,51 @@ the rotated session cookie in `$XDG_CONFIG_HOME/startship/config.json` (fallback
 `STARTSHIP_TOKEN` override saved settings. Passwords are prompted, not passed as
 command arguments; terminal echo is disabled when `stty` is available. Use
 `passwd` to complete first-run setup, and `account update NAME` to rename yourself.
-Roles, workspace membership and workspace domain policies are not added here.
+### Users, roles and workspace members from the CLI
+
+These commands use the daemon's permission checks; local socket access remains
+trusted platform administration. Use `--json` for the full API response.
+
+```sh
+startship permissions
+startship users create bob                         # prompts for temporary password
+startship users list
+startship roles create "My Role" --clone-of member --color '#336699' --icon star
+startship roles edit "My Role" --name "Support" --perm project.view,logs.view
+startship grant bob Contributor --workspace "Team"
+startship members "Team"                           # or: workspaces members Team
+startship assignments list --user bob --workspace "Team"
+startship overrides set workspace "Team" --user bob --deny deploy
+startship overrides list workspace "Team"
+startship effective bob --workspace "Team"
+startship revoke bob Contributor --workspace "Team"
+startship audit --workspace "Team"
+```
+
+`grant` and `revoke` default to platform scope; use **one** of `--workspace` or
+`--project` for a narrower assignment. Revoke matches the user, role and exact
+scope, not inherited roles. `assignments list` without filters lists all visible
+assignments. `effective` without a user checks the current account. Users accept
+username or ID, roles accept name or ID, and scope targets accept name or ID;
+ambiguous names require IDs. `roles get ROLE` shows full role details.
+
+`--perm` accepts comma-separated permission keys and can be repeated. On edit,
+it replaces the complete permission list; `--perm ''` clears it. Other role
+fields remain unchanged unless supplied. `--clone-of` is create-only. Use
+`permissions` to discover keys and supported icons. Built-in roles cannot be
+edited or deleted; clone one instead.
+
+Overrides require `workspace TARGET` or `project TARGET` and exactly one subject
+(`--role` or `--user`). `--allow` and `--deny` are comma-separated lists; each set
+replaces both lists, with omitted lists empty. Setting neither clears the
+override. Workspace domain policies are not managed by these commands.
+
+`users rename USER NAME`, `users reset-password USER`, `users delete USER`, and
+`roles delete ROLE` administer existing accounts and custom roles. Create and
+reset-password prompt without terminal echo for a required temporary password
+(8–72 bytes); new/reset users must change it on login. Passwords are never command
+arguments. Keep deletions and platform role grants restricted to trusted admins;
+the server enforces last-admin and self-deletion safeguards.
 
 ## Run
 
