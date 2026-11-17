@@ -20,7 +20,12 @@ vi.mock("../../layouts/ProjectLayout", () => ({
   useProject: () => ({
     project: { id: "p1" },
     releases: [
-      { id: "newest", status: "running", created: "2026-11-17" },
+      {
+        id: "newest",
+        status: "running",
+        created: "2026-11-17",
+        container_releases: [{ id: "c1" }],
+      },
       { id: "older", status: "failed", created: "2026-11-16" },
     ],
     refresh: vi.fn(),
@@ -42,6 +47,8 @@ describe("deployment history", () => {
     );
     expect(state.useLog).toHaveBeenLastCalledWith("older");
     expect(screen.queryByText("Project releases")).toBeNull();
+    expect(screen.getByText("1 container")).toBeTruthy();
+    expect(screen.getByText("0 containers")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /newest/ }));
     expect(state.useLog).toHaveBeenLastCalledWith("newest");
   });

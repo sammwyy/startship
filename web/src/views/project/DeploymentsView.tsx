@@ -81,7 +81,8 @@ export function DeploymentsView() {
                 <span className="release-meta">
                   <time>{new Date(r.created).toLocaleString()}</time>
                   <span>
-                    {r.container_releases?.length || 0} containers
+                    {r.container_releases?.length || 0} container
+                    {r.container_releases?.length === 1 ? "" : "s"}
                     {r.redeploy_of ? " · redeployed" : ""}
                   </span>
                 </span>
