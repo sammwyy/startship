@@ -32,6 +32,7 @@ var permissionCatalog = []Permission{
 	{"roles.manage", "Manage roles", "Create, edit and delete custom roles. Platform permissions stay reserved to Platform Admins.", "Platform", scopePlatform},
 	{"audit.view", "View audit log", "Read every change to users, roles, members and overrides.", "Platform", scopePlatform},
 	{"workspace.manage", "Manage workspace", "Rename and delete the workspace.", "Workspace", scopeWorkspace},
+	{"workspace.domains", "Manage domains", "Add and remove the domains projects in the workspace may route.", "Workspace", scopeWorkspace},
 	{"projects.create", "Create projects", "Add projects to the workspace.", "Workspace", scopeWorkspace},
 	{"members.manage", "Manage members", "Add members, assign roles and edit permission overrides.", "Workspace", scopeProject},
 	{"project.view", "View projects", "See projects, containers, releases and domains.", "Projects", scopeProject},
@@ -101,7 +102,7 @@ var (
 	projectPermissions = []string{"project.view", "logs.view", "traffic.view", "deploy", "project.settings", "project.environment", "project.source", "domains.manage"}
 	builtinRoles       = []Role{
 		{ID: platformAdminRole, Name: "Platform Admin", Color: "#f5a524", Icon: "crown", Permissions: allPermissionKeys(), Fixed: true},
-		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"workspace.manage", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
+		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
 		{ID: "contributor", Name: "Contributor", Color: "#3e63dd", Icon: "wrench", Permissions: append([]string{"projects.create"}, projectPermissions...)},
 		{ID: "member", Name: "Member", Color: "#30a46c", Icon: "eye", Permissions: []string{"project.view", "logs.view", "traffic.view"}},
 		{ID: "guest", Name: "Guest", Color: "#8b8d98", Icon: "user", Permissions: []string{}},

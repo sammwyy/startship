@@ -61,12 +61,16 @@ func (a *Server) accessAPI(w http.ResponseWriter, r *http.Request, p []string, u
 		}
 		reply(w, 200, map[string]any{"user_id": target, "permissions": a.access(target).list(wid, pid)})
 	case "workspaces":
-		if len(p) != 4 || p[3] != "members" {
+		if len(p) < 4 || p[3] != "members" && p[3] != "domains" || p[3] == "members" && len(p) != 4 || len(p) > 5 {
 			return false
 		}
 		ws, err := a.store.get(p[2])
 		if err != nil || ws.Kind != "workspaces" || !x.memberOf(ws.ID) {
 			fail(w, 404, "not found")
+			return true
+		}
+		if p[3] == "domains" {
+			a.domainsAPI(w, r, p, uid, ws, x)
 			return true
 		}
 		a.membersAPI(w, ws, x)

@@ -163,9 +163,11 @@ function environmentData(value){
  const env={};for(const line of value.split('\n')){if(!line.trim()||line.trim().startsWith('#'))continue;const i=line.indexOf('=');if(i<1||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0,i).trim()))throw Error('Use KEY=VALUE, one variable per line.');env[line.slice(0,i).trim()]=line.slice(i+1)}return env;
 }
 function projectSummary(containers,routes){return containers.length+' container'+(containers.length===1?'':'s')+' · '+containers.filter(c=>c.status==='running').length+' running · '+routes.length+' domain route'+(routes.length===1?'':'s')}
-function addRoute(project,containers,route={}){
+async function addRoute(project,containers,route={}){
  if(!containers.length){toast('Deploy the project to detect its containers first');return}
- modal(route.id?'Edit domain':'Connect domain','Hostnames and path prefixes route to the project. Longer prefixes take priority.',field('Hostname','host',route.host||'','text','required placeholder="example.com"')+field('Path prefix','path_prefix',route.path_prefix||'/','text','required')+(containers.length>1?'<label>Target container<select name="container_id">'+containers.map(c=>'<option value="'+esc(c.id)+'" '+((route.container_id||route.app_id)===c.id?'selected':'')+'>'+esc(c.name)+' · :'+c.port+'</option>').join('')+'</select></label>':'<input type="hidden" name="container_id" value="'+esc(containers[0].id)+'"><p class="small muted">Target: '+esc(containers[0].name)+'</p>')+'<label class="inline-check"><input type="checkbox" name="strip_prefix" '+(route.strip_prefix?'checked':'')+'>Strip path prefix before forwarding</label><p class="note">Point this hostname’s DNS A record to your server’s public IP.</p>',route.id?'Save domain':'Connect domain',async f=>{await api('routes'+(route.id?'/'+route.id:''),{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')},route.id?'PATCH':'POST');await render();toast('Domain saved')});
+ const {domains}=await api('workspaces/'+(project.workspace_id||workspace.id)+'/domains');
+ modal(route.id?'Edit domain':'Connect domain','Pick a hostname under one of the workspace domains. Longer path prefixes take priority.',hostField(domains,route.host||'')+field('Path prefix','path_prefix',route.path_prefix||'/','text','required')+(containers.length>1?'<label>Target container<select name="container_id">'+containers.map(c=>'<option value="'+esc(c.id)+'" '+((route.container_id||route.app_id)===c.id?'selected':'')+'>'+esc(c.name)+' · :'+c.port+'</option>').join('')+'</select></label>':'<input type="hidden" name="container_id" value="'+esc(containers[0].id)+'"><p class="small muted">Target: '+esc(containers[0].name)+'</p>')+'<label class="inline-check"><input type="checkbox" name="strip_prefix" '+(route.strip_prefix?'checked':'')+'>Strip path prefix before forwarding</label><p class="note">Point this hostname’s DNS A record to your server’s public IP.</p>',route.id?'Save domain':'Connect domain',async f=>{const {sub,domain,...body}=Object.fromEntries(f);await api('routes'+(route.id?'/'+route.id:''),{...body,host:pickedHost(f),project_id:project.id,strip_prefix:f.has('strip_prefix')},route.id?'PATCH':'POST');await render();toast('Domain saved')});
+ bindHostField($('#modal form'));
 }
 function sourceContent(project){
  const webhook=project.webhook_secret?location.origin+'/api/webhooks/github/'+project.id:'';
@@ -223,8 +225,8 @@ async function projectPage(id,section='deployments',runtimeID=''){
  if(section==='source'){$('#edit-project-source').onclick=()=>editProjectSource(project);$('#reveal-webhook').onclick=()=>{const input=$('[name=webhook_secret]');input.type=input.type==='password'?'text':'password';$('#reveal-webhook').textContent=input.type==='password'?'Show secret':'Hide secret'};}
  if(project.config_conflict)$('#confirm-project-config').onclick=async()=>{try{await api('projects/'+id,{config_confirmed:true},'PATCH');await render();toast('Project configuration confirmed')}catch(e){toast(e.message)}};
  if(section==='domains'){
-  $('#add-project-domain').onclick=()=>addRoute(project,containers);
-  document.querySelectorAll('[data-edit-route]').forEach(b=>b.onclick=()=>addRoute(project,containers,routes.find(r=>r.id===b.dataset.editRoute)));
+  $('#add-project-domain').onclick=()=>addRoute(project,containers).catch(e=>toast(e.message));
+  document.querySelectorAll('[data-edit-route]').forEach(b=>b.onclick=()=>addRoute(project,containers,routes.find(r=>r.id===b.dataset.editRoute)).catch(e=>toast(e.message)));
   document.querySelectorAll('[data-delete-route]').forEach(b=>b.onclick=async()=>{if(!confirm('Disconnect this domain route?'))return;try{await api('routes/'+b.dataset.deleteRoute,null,'DELETE');await render()}catch(e){toast(e.message)}});
  }
  const loadLog=async()=>{
@@ -287,7 +289,8 @@ function releasePanel(releases,projects){
 }
 function workspaceSettings(){
  shell(heading('Workspace','Workspace settings','A shared home for your projects.')+
-  '<form id="workspace-settings" class="panel panel-pad workspace-settings">'+field('Workspace name','name',workspace.name,'text','required')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">Save changes</button></form>');
+  '<form id="workspace-settings" class="panel panel-pad workspace-settings">'+field('Workspace name','name',workspace.name,'text','required')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">Save changes</button></form><section id="workspace-domains" class="workspace-domains"></section>');
+ workspaceDomains().catch(e=>toast(e.message));
  $('#workspace-settings').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await api('workspaces/'+workspace.id,Object.fromEntries(new FormData(e.target)),'PATCH');await render();toast('Workspace saved')}catch(err){if($('#workspace-settings'))$('#workspace-settings .form-error').textContent=err.message}finally{button.disabled=false}};
 }
 function forcePassword(){

@@ -683,6 +683,10 @@ func (a *Server) api() http.Handler {
 				fail(w, 400, "invalid route")
 				return
 			}
+			if old, e := a.store.get(v.ID); (e != nil || old.Host != v.Host) && !x.admin && !a.routeAllowed(projectWorkspace(x.project(v.ProjectID)), v.Host) {
+				fail(w, 403, v.Host+" is not one of this workspace's domains")
+				return
+			}
 			for _, other := range a.store.list("routes", "") {
 				if other.ID != v.ID && other.Host == v.Host && other.PathPrefix == v.PathPrefix {
 					fail(w, 409, "route already exists")

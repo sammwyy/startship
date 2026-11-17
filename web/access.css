@@ -91,3 +91,18 @@ input.switch:focus-visible { outline: 2px solid var(--success); outline-offset: 
 }
 .locked-note { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
 .locked-note .icon { width: 14px; height: 14px; }
+.workspace-domains { margin-top: 28px; max-width: 860px; }
+.workspace-domains .section-head h2 { margin: 0 0 2px; }
+.domain-name { display: inline-flex; align-items: center; gap: 8px; font-size: 11px; }
+.domain-name .icon { width: 14px; height: 14px; color: var(--muted); }
+.domain-pattern { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; padding: 2px 7px; border-radius: 6px; background: var(--raised); border: 1px solid var(--line); color: var(--text); }
+.domain-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 14px; margin-top: 14px; }
+.domain-form label { margin: 0; }
+.domain-form .inline-check { padding-bottom: 10px; white-space: nowrap; }
+.domain-form .form-error { grid-column: 1 / -1; }
+.host-picker { margin-bottom: 14px; }
+.host-composer { display: flex; align-items: center; gap: 6px; }
+.host-composer > * { flex: 1; }
+.host-dot { flex: 0; color: var(--muted); }
+.host-composer:not([data-mode=sub]) :is([name=sub], .host-dot), .host-composer:not([data-mode=custom]) [name=host] { display: none; }
+@media (max-width: 900px) { .domain-form { grid-template-columns: minmax(0, 1fr); } }
