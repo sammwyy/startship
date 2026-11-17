@@ -53,7 +53,7 @@ export function SourceView() {
           <h2>GitHub webhook</h2>
           <p className="small muted">
             A signed push queues one project deployment when automatic
-            deployment is enabled in Settings.
+            deployment is enabled in the project overview.
           </p>
           <Field
             label="Payload URL"

@@ -353,7 +353,7 @@ Ownership-scoped CRUD: `workspaces`, `projects`, and `routes`. Names are require
 
 Project defaults: branch `main`, root `.`, build strategy `auto`, port `0` (detect), automatic push deployment off. Env is a string map applied to all detected containers. Git tokens require HTTPS and are excluded from responses. Project responses include their signed webhook details.
 
-Read-only runtime views: `GET /api/containers?project_id=...`, `GET /api/containers/{id}`, and `GET /api/containers/{id}/logs` (last 200 runtime lines; static containers have no serving process). Grouped history: `GET /api/releases?project_id=...&logs=false` for lightweight polling and `GET /api/releases/{id}` for combined logs and `container_releases` artifact IDs. Internal per-container build records remain readable under `deployments`. Legacy `apps` endpoints and `app_id` route fields remain for compatibility, not as dashboard configuration.
+Read-only runtime views: `GET /api/containers?project_id=...`, `GET /api/containers/{id}`, and `GET /api/containers/{id}/logs` (last 200 runtime lines; static containers have no serving process). Grouped history: `GET /api/releases?project_id=...&logs=false` for metadata and `GET /api/releases/{id}` for combined logs and `container_releases` artifact IDs. Internal per-container build records remain readable under `deployments`. Legacy `apps` endpoints and `app_id` route fields remain for compatibility, not as dashboard configuration.
 
 Upgrade promotes compatible legacy source/settings to the project without interrupting traffic. Conflicting sources require choosing one source. Different legacy environments/test commands set a configuration warning and block project deployment until the shared settings and environment have been reviewed and explicitly confirmed with `config_confirmed: true`. Existing container records retain their old values for reference until a healthy project deployment replaces them.
 
@@ -408,10 +408,16 @@ building or testing Go packages that import `web`. CI, Docker and release builds
 do this automatically. The CLI alone still builds with just Go.
 
 For frontend development, run the daemon on port 8080, then `npm run dev --prefix web`.
-Vite proxies `/api` to that daemon; authentication stays same-origin. Hash routes
+Vite proxies HTTP and WebSocket `/api` requests to that daemon; authentication stays same-origin. Hash routes
 preserve existing dashboard bookmarks and need no server-side fallback. Views
-load separately, query polling is scoped to mounted views, and React owns all
-rendered markup. `npm test --prefix web` runs component/service regressions.
+load separately, and React owns all rendered markup. The project overview combines
+general configuration, recent deployments and project information.
+
+The authenticated dashboard shares one `/api/live` WebSocket. Mounted views
+subscribe to project/workspace state, build/runtime logs, traffic and update
+status; pushed snapshots and changes update the query cache without HTTP polling.
+Disconnects reconnect with backoff and fresh snapshots. REST handles initial
+loading, mutations and manual checks. `npm test --prefix web` runs component/service regressions.
 
 Release builds set
 `github.com/sammwyy/startship/internal/version.Version` and

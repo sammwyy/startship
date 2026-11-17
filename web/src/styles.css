@@ -110,7 +110,8 @@
 .sidebar-layout .heading {
   margin-bottom: 28px;
 }
-.workspace-settings {
+.workspace-settings,
+.workspace-domains {
   max-width: none;
 }
 .project-search {

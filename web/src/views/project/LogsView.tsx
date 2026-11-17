@@ -25,7 +25,7 @@ export function LogsView() {
               )
             }
           >
-            <option value="">Project build output</option>
+            <option value="">Build logs</option>
             {containers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} · runtime
@@ -40,7 +40,7 @@ export function LogsView() {
         title={
           active
             ? `${containers.find((c) => c.id === active)?.name} · runtime`
-            : "Project build output"
+            : "Build logs"
         }
         error={log.error}
         loading={log.isFetching && !log.data}
