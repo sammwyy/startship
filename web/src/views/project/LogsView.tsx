@@ -12,7 +12,7 @@ export function LogsView() {
     : "";
   const log = useLog(releases[0]?.id || "", active);
   return (
-    <>
+    <div className="logs-view">
       <ProjectHeading title="Logs" />
       <div className="logs-toolbar">
         <label className="runtime-selector">
@@ -49,6 +49,6 @@ export function LogsView() {
         error={log.error}
         loading={log.isFetching && !log.data}
       />
-    </>
+    </div>
   );
 }

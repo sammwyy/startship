@@ -312,6 +312,40 @@
   flex-wrap: wrap;
   font-size: 11px;
 }
+.sidebar-layout .main:has(.logs-view) {
+  overflow: hidden;
+}
+.sidebar-layout .content:has(> .logs-view),
+.logs-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.logs-view,
+.logs-view .project-log-panel {
+  flex: 1;
+}
+.logs-view > .heading,
+.logs-view > .logs-toolbar {
+  flex-shrink: 0;
+}
+.logs-view .project-log-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.logs-view .project-log-panel > :not(.log) {
+  flex-shrink: 0;
+}
+.logs-view .project-log-panel .log {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  max-height: none;
+  resize: none;
+  overscroll-behavior: contain;
+}
 .log-placeholder {
   color: var(--faint);
 }
