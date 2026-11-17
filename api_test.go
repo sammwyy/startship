@@ -52,9 +52,9 @@ func TestRecordCreationTimes(t *testing.T) {
 			switch kind {
 			case "projects":
 				body["workspace_id"] = ids["workspaces"]
+				body["git_url"] = "file:///local/repo"
 			case "apps":
 				body["project_id"] = ids["projects"]
-				body["git_url"] = "file:///local/repo"
 			case "routes":
 				body["project_id"] = ids["projects"]
 				body["app_id"] = ids["apps"]

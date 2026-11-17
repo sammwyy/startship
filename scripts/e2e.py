@@ -84,13 +84,13 @@ fn main() {
             time.sleep(0.2)
     request("login", {"username": "admin", "password": "test-password"})
     ws = request("workspaces")[0]
-    project = request("projects", {"workspace_id": ws["id"], "name": "e2e"})
-    detected = request("detect", {"git_url": repo.as_uri()})
+    project = request("projects", {"workspace_id": ws["id"], "name": "e2e", "git_url": repo.as_uri(), "branch": "main"})
+    detected = request("detect", {"project_id": project["id"]})
     assert {(c["root_dir"], c["build_type"]) for c in detected} == {
         (".", "python"), ("public", "static"), ("dockerapp", "dockerfile"), ("rustapp", "rust")}, detected
     for name, directory, prefix in (("python", ".", "/"), ("static", "public", "/static/"),
                                      ("dockerfile", "dockerapp", "/dockerfile/"), ("rust", "rustapp", "/rust/")):
-        app = request("apps", {"project_id": project["id"], "name": name, "git_url": repo.as_uri(),
+        app = request("apps", {"project_id": project["id"], "name": name,
                               "root_dir": directory, "build_type": "auto", "port": 8080,
                               "test_command": "python -c 'print(123)'" if name == "python" else "test -f index.html" if name == "static" else ""})
         app_ids.append(app["id"])

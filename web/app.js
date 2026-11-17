@@ -66,32 +66,48 @@ function auth(setup){
  $('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const v=Object.fromEntries(new FormData(e.target));try{if(setup)await api('setup',v);await api('login',v);user=await api('me');nav('workspaces')}catch(err){$('.form-error').textContent=err.message}finally{button.disabled=false}};
 }
 function createWorkspace(){modal('Create workspace','A home for your projects and applications.',field('Workspace name','name','','text','required'),'Create workspace',async f=>{const w=await api('workspaces',Object.fromEntries(f));nav('workspace/'+w.id);toast('Workspace created')})}
-function createProject(){modal('Create project','Group related services, sites, and domains together.',field('Project name','name','','text','required placeholder="My Website"'),'Create project',async f=>{const p=await api('projects',{name:f.get('name'),workspace_id:workspace.id});nav('project/'+p.id);toast('Project created')})}
+function sourceFields(project={}){
+ return field('Project repository URL','git_url',project.git_url||'','url','required placeholder="https://github.com/you/project"')+field('Shared branch','branch',project.branch||'main','text','required')+field('Repository token (leave blank to keep existing)','git_token','','password','autocomplete="off"');
+}
+function sourceData(f){const v={git_url:f.get('git_url'),branch:f.get('branch')};if(f.get('git_token'))v.git_token=f.get('git_token');return v}
+function editProjectSource(project){
+ modal('Project source','One repository, branch, and credential set for this project. Changes apply to every app on its next deployment.',(project.source_conflict?'<div class="note">The old configuration contains different app sources. Choose the single repository this project should use. No apps or running deployments will be deleted.</div>':'')+sourceFields(project),'Save project source',async f=>{await api('projects/'+project.id,sourceData(f),'PATCH');await render();toast('Project source saved')});
+}
+function createProject(){
+ modal('Create project','Connect one repository. A single-app project builds its root; a monorepo can define apps for frontend, backend, or daemons in that same repository.',field('Project name','name','','text','required placeholder="My Website"')+sourceFields()+'<label>Repository layout<select name="layout"><option value="single">Single application — repository root</option><option value="monorepo">Monorepo — choose app folders</option></select></label>','Create project',async(f,form)=>{
+  const p=form._project||await api('projects',{name:f.get('name'),workspace_id:workspace.id,...sourceData(f)});form._project=p;
+  if(f.get('layout')==='single'){const app=await api('apps',{project_id:p.id,name:p.name,root_dir:'.',build_type:'auto',port:8080});nav('app/'+app.id)}else nav('project/'+p.id);
+  toast('Project created');
+ });
+}
 const types=['auto','dockerfile','static','node','python','go','rust'];
 function appFields(app={},wide=false){
- const source=field('Application name','name',app.name||'','text','required')+field('Git repository URL','git_url',app.git_url||'','url','required placeholder="https://github.com/you/project"')+'<div class="split">'+field('Branch','branch',app.branch||'main','text','required')+field('Root directory','root_dir',app.root_dir||'.','text','required')+'</div>';
- const access=field('Private repository token (leave blank to keep existing)','git_token','','password','autocomplete="off"');
+ const identity=field('Application name','name',app.name||'','text','required')+field('Root directory in project repository','root_dir',app.root_dir||'.','text','required placeholder="frontend"');
  const build='<div class="split"><label>Build type<select name="build_type">'+types.map(t=>'<option '+((app.build_type||'auto')===t?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'+field('Internal port','port',app.port||8080,'number','required min="1" max="65535"')+'</div>'+field('Test command (optional)','test_command',app.test_command||'','text','placeholder="npm test"');
  const environment='<label>Environment variables<textarea name="env" placeholder="NODE_ENV=production&#10;API_KEY=your-value">'+esc(Object.entries(app.env||{}).map(([k,v])=>k+'='+v).join('\n'))+'</textarea></label>';
- const automatic='<label class="inline-check"><input type="checkbox" name="auto_deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy on git push</label>';
- return wide?'<div class="settings-columns"><section class="panel panel-pad"><h3>Source & build</h3>'+source+build+'</section><section class="panel panel-pad"><h3>Environment & access</h3>'+access+environment+automatic+'<p class="small muted">Use one KEY=VALUE per line. Existing repository credentials are kept when the token is blank.</p></section></div>':source+access+build+environment+automatic;
+ const automatic='<label class="inline-check"><input type="checkbox" name="auto_deploy" '+(app.auto_deploy?'checked':'')+'>Deploy this app on project pushes</label>';
+ return wide?'<div class="settings-columns"><section class="panel panel-pad"><h3>Build & runtime</h3>'+identity+build+'</section><section class="panel panel-pad"><h3>Environment</h3>'+environment+automatic+'<p class="small muted">Use one KEY=VALUE per line. Repository, branch, credentials, and webhook are managed once in Project source.</p></section></div>':identity+build+environment+automatic;
 }
-function appData(f){const v=Object.fromEntries(f);v.port=Number(v.port);v.auto_deploy=f.has('auto_deploy');v.env={};for(const line of f.get('env').split('\n')){if(!line.trim()||line.trim().startsWith('#'))continue;const i=line.indexOf('=');if(i<1||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0,i).trim()))throw Error('Environment variables must use KEY=VALUE, one per line.');v.env[line.slice(0,i).trim()]=line.slice(i+1)}if(!v.git_token)delete v.git_token;return v}
-function addApp(project){modal('Add app from Git','We’ll build your code in an isolated container.',appFields(),'Create application',async f=>{const a=await api('apps',{...appData(f),project_id:project.id});nav('app/'+a.id);toast('Application created')})}
-function detectApps(project){
- modal('Discover your applications','Scan the repository root and first-level folders for deployable apps.',field('Git repository URL','git_url','','url','required')+field('Branch','branch','main')+field('Private repository token (optional)','git_token','','password')+'<div id="candidates"></div>','Detect apps',async(f,form)=>{
- if(!form.dataset.scanned){
- const found=await api('detect',Object.fromEntries(f));if(!found.length)throw Error('No supported applications found.');
- $('#candidates').innerHTML='<h3>Choose apps to create</h3>'+found.map((c,i)=>'<label class="candidate"><input type="checkbox" name="candidate" value="'+i+'" checked><span>Root '+rootLabel(c.root_dir)+' <span class="badge">'+esc(c.build_type)+'</span><br><span class="muted small">Port '+c.port+'</span></span></label>').join('');
- form._candidates=found;form.dataset.scanned='yes';form.querySelector('[type=submit]').textContent='Create selected apps';return false;
- }
- const chosen=f.getAll('candidate');if(!chosen.length)throw Error('Select at least one application.');
- for(const i of chosen){const c=form._candidates[Number(i)];await api('apps',{project_id:project.id,git_url:f.get('git_url'),git_token:f.get('git_token'),branch:f.get('branch'),name:c.root_dir==='.'?project.name:c.root_dir,...c})}
- toast(chosen.length+' applications created');render();
+function appData(f){const v=Object.fromEntries(f);v.port=Number(v.port);v.auto_deploy=f.has('auto_deploy');v.env={};for(const line of f.get('env').split('\n')){if(!line.trim()||line.trim().startsWith('#'))continue;const i=line.indexOf('=');if(i<1||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0,i).trim()))throw Error('Environment variables must use KEY=VALUE, one per line.');v.env[line.slice(0,i).trim()]=line.slice(i+1)}return v}
+function addApp(project){
+ if(!project.git_url||project.source_conflict){editProjectSource(project);return}
+ modal('Add app from project repository','Choose an app or daemon inside the project’s shared repository, not a different source.','<p class="note">'+esc(project.git_url)+' · '+esc(project.branch)+'</p>'+appFields(),'Create application',async f=>{const a=await api('apps',{...appData(f),project_id:project.id});nav('app/'+a.id);toast('Application created')});
+}
+function detectApps(project,apps=[]){
+ if(!project.git_url||project.source_conflict){editProjectSource(project);return}
+ modal('Discover apps in this repository','Scan the project’s repository root and first-level folders for frontend, backend, or daemon apps.','<p class="note">'+esc(project.git_url)+' · '+esc(project.branch)+'</p><div id="candidates"></div>','Scan project repository',async(f,form)=>{
+  if(!form.dataset.scanned){
+   const found=await api('detect',{project_id:project.id});if(!found.length)throw Error('No supported applications found.');
+   $('#candidates').innerHTML='<h3>Choose apps to create</h3>'+found.map((c,i)=>{const exists=apps.some(a=>a.root_dir===c.root_dir);return '<label class="candidate"><input type="checkbox" name="candidate" value="'+i+'" '+(exists?'disabled':'checked')+'><span>Root '+rootLabel(c.root_dir)+' <span class="badge">'+esc(c.build_type)+'</span><br><span class="muted small">'+(exists?'Already added':'Port '+c.port)+'</span></span></label>'}).join('');
+   form._candidates=found;form.dataset.scanned='yes';form.querySelector('[type=submit]').textContent='Create selected apps';return false;
+  }
+  const chosen=f.getAll('candidate');if(!chosen.length)throw Error('Select at least one application.');
+  for(const i of chosen){const c=form._candidates[Number(i)];await api('apps',{project_id:project.id,name:c.root_dir==='.'?project.name:c.root_dir,...c})}
+  toast(chosen.length+' applications created');render();
  });
 }
 function addRoute(project,apps,selectedId){if(!apps.length){toast('Create an application first');return}modal('Connect a domain','Direct traffic to an app using a hostname and path prefix.',field('Hostname','host','','text','required placeholder="example.com"')+field('Path prefix','path_prefix','/','text','required')+'<label>Application<select name="app_id">'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===selectedId?'selected':'')+'>'+esc(a.name)+' · :'+a.port+'</option>').join('')+'</select></label><label><input type="checkbox" name="strip_prefix">Strip prefix before forwarding</label><div class="note">DNS: point the A record of this hostname to this server’s public IP.</div>','Connect domain',async f=>{await api('routes',{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')});toast('Domain connected');render()})}
-const applicationTabs=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','Settings'],['webhook','branch','Git integration']];
+const applicationTabs=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','App settings'],['webhook','branch','Project Git']];
 function deploymentStatus(app,deployments){return deployments.find(d=>d.id===app.active_deployment)?.status}
 async function projectPage(id,selectedId='',initialTab='deployments'){
  const version=viewVersion;
@@ -100,10 +116,11 @@ async function projectPage(id,selectedId='',initialTab='deployments'){
  workspace=workspaces.find(w=>w.id===p.workspace_id);
  const app=apps.find(a=>a.id===selectedId)||apps[0],running=apps.filter(a=>deploymentStatus(a,deployments)==='running').length;
  shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; '+esc(p.name),
-  heading('Project',p.name,apps.length+' app'+(apps.length===1?'':'s')+' · '+running+' running · '+routes.length+' route'+(routes.length===1?'':'s'),'<button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>')+
+  heading('Project',p.name,apps.length+' app'+(apps.length===1?'':'s')+' · '+running+' running · '+routes.length+' route'+(routes.length===1?'':'s'),'<button id="edit-project-source">'+icon('branch')+'Project source</button><button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>')+
+  '<div class="project-source-summary"><span>'+icon('branch')+'<strong>Project source</strong> '+esc(p.git_url||'Not configured')+'</span><span>'+esc(p.branch||'')+'</span></div>'+(p.source_conflict?'<div class="note source-warning">Existing apps have different sources. Choose one project repository before editing or deploying apps.</div>':'')+
   (app?'<nav class="service-switcher" aria-label="Project applications" '+(apps.length===1?'hidden':'')+'>'+apps.map(a=>'<a data-app-link="'+esc(a.id)+'" class="service-option '+(a.id===app.id?'active':'')+'" '+(a.id===app.id?'aria-current="page"':'')+' href="#app/'+esc(a.id)+'/'+esc(initialTab)+'"><span class="service-icon">'+icon('box')+'</span><span class="service-copy"><strong>'+esc(a.name)+'</strong><small>'+esc(a.root_dir==='.'?'Repository root':a.root_dir)+' · '+esc(a.build_type)+'</small></span><span data-service-status="'+esc(a.id)+'">'+badge(deploymentStatus(a,deployments))+'</span></a>').join('')+'</nav><section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
-   empty('Connect your first application','Add a Git repository, or detect the applications inside a monorepo. The same controls work for either setup.')));
- $('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p);
+   empty('Choose apps from this repository','Add an app at the repository root, or detect frontend, backend, and daemon folders inside this project’s monorepo.')));
+ $('#edit-project-source').onclick=()=>editProjectSource(p);$('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p,apps);
  if(app){
   const list=$('.service-switcher'),selected=list.querySelector('[aria-current="page"]');
   list.scrollLeft=selected.offsetLeft-list.offsetLeft;
@@ -115,10 +132,11 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
  const version=viewVersion,isCurrent=()=>version===viewVersion&&!!$('#app-workbench');
  let activeTab='',loading=false,tabVersion=0,expandedLog=false;
  const ownRoutes=()=>allRoutes.filter(r=>r.app_id===app.id);
- $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><h2>'+esc(app.name)+'</h2><span id="active-status"></span><span class="repository-label" title="'+esc(app.git_url)+'">'+icon('branch')+esc(app.git_url)+'</span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
- '<div class="app-details"><span>'+icon('branch')+'<span id="app-branch">'+esc(app.branch)+'</span></span><span>'+icon('folder')+'Root '+rootLabel(app.root_dir)+'</span><span>'+icon('server')+esc(app.build_type)+' · :'+app.port+'</span><label class="inline-check"><input type="checkbox" id="quick-auto-deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy</label></div>'+
+ $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><h2>'+esc(app.name)+'</h2><span id="active-status"></span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
+ '<div class="app-details"><span>'+icon('folder')+'Root '+rootLabel(app.root_dir)+'</span><span>'+icon('server')+esc(app.build_type)+' · :'+app.port+'</span><label class="inline-check"><input type="checkbox" id="quick-auto-deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy</label></div>'+
  '<div class="workbench-navigation"><div class="tabs" aria-label="Application views">'+applicationTabs.map(([name,shape,label])=>'<button data-tab="'+name+'" aria-pressed="false">'+icon(shape)+label+(name==='domains'?'<span class="tab-count">'+ownRoutes().length+'</span>':'')+'</button>').join('')+'</div><span class="poll-status" id="poll-status">'+icon('activity')+'Live updates · 2s</span></div><div id="tab-content"></div>';
  $('#quick-auto-deploy').onchange=async e=>{const input=e.currentTarget,value=input.checked;input.disabled=true;try{Object.assign(app,await api('apps/'+app.id,{auto_deploy:value},'PATCH'));const field=$('#settings-form [name="auto_deploy"]');if(field)field.checked=value;toast('Auto-deploy '+(value?'enabled':'disabled'))}catch(err){input.checked=!value;toast(err.message)}finally{input.disabled=false}};
+ $('#deploy').disabled=$('#quick-auto-deploy').disabled=!project.git_url||project.source_conflict;
  $('#deploy').onclick=async e=>{const button=e.currentTarget;button.disabled=true;try{const d=await api('apps/'+app.id+'/deploy',{});selectedDeployment=d.id;toast('Deployment queued');if(isCurrent())await tab('deployments',true)}catch(err){toast(err.message)}finally{button.disabled=false}};
  async function showDeployments(){
   if(loading)return;loading=true;
@@ -158,8 +176,8 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
   $('#settings-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('[type="submit"]');button.disabled=true;try{Object.assign(app,await api('apps/'+app.id,appData(new FormData(e.target)),'PATCH'));await render();toast('Settings saved')}catch(err){if(isCurrent())$('#settings-form .form-error').textContent=err.message}finally{button.disabled=false}};
  }
  function showWebhook(){
-  const url=location.origin+'/api/webhooks/github/'+app.id;
-  $('#tab-content').innerHTML='<div class="integration-layout"><div class="panel panel-pad"><h2>GitHub webhook</h2><p class="small">Deploy pushes to <strong>'+esc(app.branch)+'</strong> for '+esc(app.name)+'.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(app.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect your repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy in the toolbar above.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
+  const url=location.origin+'/api/webhooks/github/'+project.id;
+  $('#tab-content').innerHTML='<div class="integration-layout"><div class="panel panel-pad"><h2>Project GitHub webhook</h2><p class="small">One source for <strong>'+esc(project.name)+'</strong>: '+esc(project.git_url)+' · '+esc(project.branch)+'. Pushes deploy the apps with Auto-deploy enabled.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(project.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect the project repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy for the apps that should rebuild on project pushes.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
   document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}});
  }
  async function tab(name,updateURL=false){

@@ -230,6 +230,11 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .project-row h3 { font-size: 12px; margin: 0 0 3px; }
 .project-row-copy > span { font-size: 10px; color: var(--muted); }
 .service-switcher { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; padding: 3px; }
+.project-source-summary { display: flex; align-items: center; gap: 12px; color: var(--muted); margin: -4px 0 14px; font-size: 11px; }
+.project-source-summary > span:first-child { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+.project-source-summary strong { color: var(--text); white-space: nowrap; font-weight: 500; }
+.project-source-summary > span:last-child { margin-left: auto; overflow-wrap: anywhere; }
+.source-warning { color: var(--warning); background: var(--warning-bg); padding: 12px; border-radius: 8px; }
 .service-option { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); flex: 1 1 220px; max-width: 340px; min-width: 0; }
 .service-option:hover { border-color: var(--muted); }
 .service-option.active { border-color: var(--success); background: var(--accent-soft); }
