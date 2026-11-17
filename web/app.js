@@ -49,7 +49,7 @@ function toast(text){$('#toast').textContent=text;$('#toast').style.display='blo
 function badge(status){return '<span class="badge '+esc(status||'idle')+'">'+esc(status||'Not deployed')+'</span>'}
 function empty(title,text){return '<div class="panel empty"><span class="card-icon">'+icon('box')+'</span><strong>'+esc(title)+'</strong>'+esc(text)+'</div>'}
 function field(label,name,value='',type='text',extra=''){return '<label>'+esc(label)+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+extra+'></label>'}
-function nav(hash){if(location.hash==='#'+hash)render();else location.hash=hash}
+function nav(hash){if(location.hash.replace(/^#/,'')===hash)render();else location.hash=hash}
 function modal(title,description,fields,submit,onSubmit){
  const d=$('#modal');d.setAttribute('aria-labelledby','modal-title');d.innerHTML='<div class="row"><h2 id="modal-title">'+esc(title)+'</h2><button class="icon-button" type="button" id="close-modal" aria-label="Close">'+icon('close')+'</button></div><p class="small">'+esc(description)+'</p><form><div class="modal-body">'+fields+'<div class="form-error" role="alert"></div></div><div class="form-actions"><button type="button" id="cancel-modal">Cancel</button><button class="primary" type="submit">'+esc(submit)+'</button></div></form>';
  $('#close-modal').onclick=$('#cancel-modal').onclick=()=>d.close();
