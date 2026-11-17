@@ -22,16 +22,26 @@ export function LogPanel({
   status,
   title,
   error,
+  loading = false,
 }: {
   log?: string;
   status?: string;
   title?: string;
   error?: unknown;
+  loading?: boolean;
 }) {
   const [follow, setFollow] = useState(true),
+    [wrap, setWrap] = useState(true),
     pre = useRef<HTMLPreElement>(null),
     ui = useUI();
-  const output = log || "Select a release or deploy your project.";
+  const output = log || "";
+  const placeholder = loading
+    ? "Loading logs…"
+    : status && ["queued", "building", "testing", "starting"].includes(status)
+      ? "Waiting for build output…"
+      : status
+        ? "No output was recorded for this deployment."
+        : "Deploy your project to see its build output here.";
   useEffect(() => {
     if (follow && pre.current) pre.current.scrollTop = pre.current.scrollHeight;
   }, [follow, output]);
@@ -40,10 +50,17 @@ export function LogPanel({
       <div className="log-head">
         <div className="log-title">
           <Icon name="terminal" />
-          <strong>{title || "Project build output"}</strong>
+          <strong>{title || "Build logs"}</strong>
           <Badge status={status} />
         </div>
         <div className="log-actions">
+          <button
+            className="log-toggle"
+            aria-pressed={wrap}
+            onClick={() => setWrap(!wrap)}
+          >
+            Wrap
+          </button>
           <label className="inline-check">
             <input
               type="checkbox"
@@ -55,6 +72,7 @@ export function LogPanel({
           <button
             className="icon-button"
             aria-label="Copy logs"
+            disabled={!output}
             onClick={() =>
               ui.run(async () => {
                 await navigator.clipboard.writeText(output);
@@ -67,9 +85,22 @@ export function LogPanel({
         </div>
       </div>
       <ErrorMessage error={error} />
-      <pre className="log" ref={pre} aria-label="Project logs">
-        {output}
+      <pre
+        className={`log${wrap ? "" : " log-no-wrap"}${output ? "" : " log-placeholder"}`}
+        ref={pre}
+        aria-label="Project logs"
+        aria-busy={loading}
+      >
+        {output || placeholder}
       </pre>
+      <div className="log-footer">
+        <span>
+          {output
+            ? `${output.trimEnd().split("\n").length} lines`
+            : "No output yet"}
+        </span>
+        <span>{follow ? "Following latest output" : "Scroll paused"}</span>
+      </div>
     </section>
   );
 }

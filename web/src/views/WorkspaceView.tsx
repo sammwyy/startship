@@ -99,14 +99,12 @@ export function WorkspaceView() {
       </div>
       <div className="workspace-layout">
         <section>
-          <div className="section-head">
-            <h2>
-              Projects <span className="count">{projects.length}</span>
-            </h2>
-            <label className="search">
+          <div className="project-search">
+            <label className="search-field">
               <Icon name="search" />
               <input
                 aria-label="Search projects"
+                type="search"
                 placeholder="Find a project"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -194,7 +192,7 @@ export function WorkspaceView() {
               <Link
                 key={r.id}
                 className="release-item"
-                to={`/project/${r.project_id}`}
+                to={`/project/${r.project_id}/deployments?release=${encodeURIComponent(r.id)}`}
               >
                 <div>
                   <strong>

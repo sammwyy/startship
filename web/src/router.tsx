@@ -62,7 +62,7 @@ function LegacyContainer() {
   return (
     <Navigate
       replace
-      to={`/project/${data.project_id}/${section === "settings" ? "settings" : section === "domains" ? "domains" : `logs/${data.id}`}`}
+      to={`/project/${data.project_id}/${section === "settings" ? "overview" : section === "domains" ? "domains" : `logs/${data.id}`}`}
     />
   );
 }
@@ -133,7 +133,14 @@ export const router = createHashRouter([
             path: "project/:projectId",
             element: <ProjectLayout />,
             children: [
-              { index: true, element: <Navigate to="deployments" replace /> },
+              { index: true, element: <Navigate to="overview" replace /> },
+              {
+                path: "overview",
+                lazy: async () => ({
+                  Component: (await import("./views/project/OverviewView"))
+                    .OverviewView,
+                }),
+              },
               {
                 path: "deployments",
                 lazy: async () => ({
@@ -178,10 +185,7 @@ export const router = createHashRouter([
               },
               {
                 path: "settings",
-                lazy: async () => ({
-                  Component: (await import("./views/project/SettingsView"))
-                    .SettingsView,
-                }),
+                element: <Navigate to="../overview" replace />,
               },
               {
                 path: "traffic",
@@ -192,7 +196,7 @@ export const router = createHashRouter([
               },
               { path: "git", element: <Navigate to="../source" replace /> },
               { path: "webhook", element: <Navigate to="../source" replace /> },
-              { path: "*", element: <Navigate to="../deployments" replace /> },
+              { path: "*", element: <Navigate to="../overview" replace /> },
             ],
           },
           { path: "*", element: <Navigate to="/workspaces" replace /> },

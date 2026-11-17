@@ -1,19 +1,17 @@
-import { useProject } from "../../layouts/ProjectLayout";
-import { useSession } from "../../providers/SessionProvider";
-import { useUI } from "../../providers/UIProvider";
-import { request } from "../../services/api";
-import { text } from "../../lib/project";
-import { ProjectHeading } from "../../components/ProjectHeading";
-import { AsyncForm, Field } from "../../components/ui";
+import { useProject } from "../layouts/ProjectLayout";
+import { useSession } from "../providers/SessionProvider";
+import { useUI } from "../providers/UIProvider";
+import { request } from "../services/api";
+import { text } from "../lib/project";
+import { AsyncForm, Field } from "./ui";
 
-export function SettingsView() {
+export function ProjectSettingsForm() {
   const { project, refresh } = useProject(),
     { can } = useSession(),
     ui = useUI();
   const editable = can("project.settings", project);
   return (
     <>
-      <ProjectHeading title="Settings" />
       {!editable && (
         <p className="note locked-note">
           You can view this section, but your roles do not let you change it.
@@ -41,8 +39,10 @@ export function SettingsView() {
         }}
       >
         <div className="section-head">
-          <h2>Project settings</h2>
-          <span className="small muted">Shared by every container</span>
+          <div>
+            <h2>General configuration</h2>
+            <p className="small">Shared by every container in this project.</p>
+          </div>
         </div>
         <div className="split">
           <Field
@@ -101,12 +101,19 @@ export function SettingsView() {
           />
           Deploy project on source pushes
         </label>
-        <p className="note">
-          Auto detects one server at the repository root, or multiple server
-          folders in a monorepo. A manual build strategy treats the selected
-          root as one container. Changes apply together on the next deployment.
-        </p>
-        <button className="primary">Save project settings</button>
+        <details className="configuration-help">
+          <summary>How build settings work</summary>
+          <p>
+            Auto detects one server at the repository root, or multiple server
+            folders in a monorepo. A manual build strategy treats the selected
+            root as one container. Changes apply together on the next
+            deployment.
+          </p>
+        </details>
+        <div className="configuration-actions">
+          <span>Applies on the next deployment.</span>
+          <button className="primary">Save changes</button>
+        </div>
       </AsyncForm>
     </>
   );

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useProject } from "../../layouts/ProjectLayout";
 import { useSession } from "../../providers/SessionProvider";
 import { useUI } from "../../providers/UIProvider";
@@ -13,10 +14,13 @@ export function DeploymentsView() {
   const { project, releases, refresh } = useProject(),
     { can } = useSession(),
     ui = useUI();
-  const [chosen, setChosen] = useState<string | null>(null),
-    [noCache, setNoCache] = useState(false),
+  const [params, setParams] = useSearchParams();
+  const [noCache, setNoCache] = useState(false),
     [pending, setPending] = useState(false);
-  const selected = chosen ?? releases[0]?.id ?? "";
+  const selected =
+    releases.find((r) => r.id === params.get("release"))?.id ??
+    releases[0]?.id ??
+    "";
   const log = useLog(selected);
   const busy = busyRelease(releases[0]) || pending;
   async function deploy(redeploy = false) {
@@ -26,7 +30,7 @@ export function DeploymentsView() {
         `projects/${project.id}/${redeploy ? "redeploy" : "deploy"}`,
         redeploy ? { deployment_id: selected } : { no_cache: noCache },
       );
-      setChosen(null);
+      setParams({}, { replace: true });
       await refresh();
       ui.notify("Project deployment queued");
     } finally {
@@ -55,18 +59,14 @@ export function DeploymentsView() {
         }
       />
       <div className="project-deployments">
-        <section className="release-history">
-          <div className="section-head">
-            <h2>Project releases</h2>
-            <span className="count">{releases.length}</span>
-          </div>
+        <section className="release-history" aria-label="Deployment history">
           <div className="panel release-directory">
             {releases.map((r) => (
               <button
                 key={r.id}
                 className={`release-entry select-deploy ${selected === r.id ? "selected" : ""}`}
                 aria-pressed={selected === r.id}
-                onClick={() => setChosen(r.id)}
+                onClick={() => setParams({ release: r.id }, { replace: true })}
               >
                 <span className="release-main">
                   <span className="release-id">
@@ -113,6 +113,7 @@ export function DeploymentsView() {
           log={log.data?.log}
           status={log.data?.status}
           error={log.error}
+          loading={log.isFetching && !log.data}
         />
       </div>
     </>

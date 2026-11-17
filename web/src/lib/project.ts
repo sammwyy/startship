@@ -1,6 +1,7 @@
 import type { Container, Release } from "../services/types";
 
 export const projectSections = [
+  ["overview", "Overview", "grid"],
   ["deployments", "Deployments", "activity"],
   ["logs", "Logs", "terminal"],
   ["containers", "Containers", "box"],
@@ -8,7 +9,6 @@ export const projectSections = [
   ["domains", "Domains", "globe"],
   ["source", "Source", "branch"],
   ["environment", "Environment", "lock"],
-  ["settings", "Settings", "settings"],
 ] as const;
 export const busyRelease = (release?: Release) =>
   !!release &&

@@ -14,8 +14,7 @@ export function LogsView() {
   return (
     <>
       <ProjectHeading title="Logs" />
-      <div className="section-head">
-        <h2>Logs</h2>
+      <div className="logs-toolbar">
         <label className="runtime-selector">
           Log source
           <select
@@ -44,6 +43,7 @@ export function LogsView() {
             : "Project build output"
         }
         error={log.error}
+        loading={log.isFetching && !log.data}
       />
     </>
   );

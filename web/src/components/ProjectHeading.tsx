@@ -19,7 +19,8 @@ export function ProjectHeading({
     <>
       <Heading
         title={title}
-        project={project.name}
+        project={title === project.name ? undefined : project.name}
+        kicker={title === project.name ? "Project overview" : undefined}
         subtitle={projectSummary(containers, routes)}
         actions={actions}
       />
@@ -33,8 +34,8 @@ export function ProjectHeading({
         <div className="note">
           Legacy containers used different settings. Review{" "}
           <Link to="../environment">Environment</Link> and{" "}
-          <Link to="../settings">Settings</Link>, then confirm one shared
-          configuration. Existing deployments stay online.
+          <Link to="../overview">General configuration</Link>, then confirm one
+          shared configuration. Existing deployments stay online.
           <button
             onClick={() =>
               ui.run(async () => {

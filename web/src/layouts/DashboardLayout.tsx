@@ -316,7 +316,9 @@ export function DashboardLayout() {
         </dialog>
         <div className="dashboard-body">
           <main className="main">
-            <div className="content">
+            <div
+              className={`content${/\/(source|environment|system)$/.test(location.pathname) || /^\/workspace\/[^/]+\/settings$/.test(location.pathname) ? " content-compact" : ""}`}
+            >
               <Outlet />
             </div>
             <footer className="app-footer">
