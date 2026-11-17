@@ -28,6 +28,35 @@ configuration and the service user. Without running systemd the installer writes
 the unit but reports that it cannot start it. `STARTSHIP_DOWNLOAD_URL` can override
 the release asset base URL for testing.
 
+## Updates
+
+The daemon checks GitHub releases at start and every 12 hours, logs when a newer
+version exists, and reports it at `GET /api/system/update` (`?refresh=1` checks
+now). Set `STARTSHIP_UPDATE_CHECK=off` to disable the background check.
+
+```sh
+startship update check          # CLI, daemon and latest release versions
+sudo startship update           # install the latest CLI + daemon and restart the service
+sudo startship update v1.2.3    # install a specific release (also downgrades)
+startship update daemon         # ask the connected (local or remote) daemon to update itself
+```
+
+`startship update` replaces `startship` and the `startshipd` beside it after
+verifying `checksums.txt`, and restarts `startshipd.service` when it is running.
+The daemon runs unprivileged and cannot replace its own binaries, so
+`POST /api/system/update` (Platform Admins; optional `{"version":"vX.Y.Z"}`,
+default latest) writes `$STARTSHIP_DATA/update/request.json`; the installer's
+root-only `startship-update.path` unit sees it and runs `startship update
+apply-request`, which installs that release, writes `update/status.json`
+(`state` running, succeeded or failed) and restarts the daemon. Installs from
+before this feature get the updater by re-running the installer once.
+
+| Endpoint | Access | Response |
+| --- | --- | --- |
+| `GET /api/system/version` | signed in | `version`, `commit` |
+| `GET /api/system/update` | signed in | `current`, `latest`, `update_available`, `development`, `release_url`, `notes`, `checked_at`, `check_error`, `self_update`, `pending`, `update` |
+| `POST /api/system/update` | Platform Admin | 202 with the queued `version`; 409 when already on it, an update is running or self-update is not installed |
+
 ## CLI
 
 On the daemon's machine, root or members of the `startship` group can use the

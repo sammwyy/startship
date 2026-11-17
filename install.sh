@@ -7,8 +7,8 @@ data=${STARTSHIP_DATA:-/var/lib/startship}
 case "$data" in /*) ;; *) die 'STARTSHIP_DATA must be absolute' ;; esac
 case "$data" in *[!a-zA-Z0-9_./-]*) die 'STARTSHIP_DATA contains unsupported characters' ;; esac
 if [ "${1:-}" = --uninstall ]; then
-    if [ -d /run/systemd/system ]; then systemctl disable --now startshipd.service; fi
-    rm -f /etc/systemd/system/startshipd.service /usr/local/bin/startship /usr/local/bin/startshipd
+    if [ -d /run/systemd/system ]; then systemctl disable --now startship-update.path startshipd.service || true; fi
+    rm -f /etc/systemd/system/startshipd.service /etc/systemd/system/startship-update.path /etc/systemd/system/startship-update.service /usr/local/bin/startship /usr/local/bin/startshipd
     if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
     printf '%s\n' 'Uninstalled binaries and service; data, configuration and service user preserved.'
     exit 0
@@ -38,6 +38,7 @@ if ! id startship >/dev/null 2>&1; then useradd --system --home-dir "$data" --sh
 usermod -a -G docker startship
 install -d -m 0755 /usr/local/bin /etc/startship
 install -d -o startship -g startship -m 0700 "$data"
+install -d -o startship -g startship -m 0750 "$data/update"
 for bin in startship startshipd; do
     install -m 0755 "$tmp/${bin}_linux_${arch}" "/usr/local/bin/.$bin.new"
     mv -f "/usr/local/bin/.$bin.new" "/usr/local/bin/$bin"
@@ -47,12 +48,15 @@ if [ ! -f /etc/startship/startshipd.env ]; then
     chmod 0600 /etc/startship/startshipd.env
 fi
 install -d -m 0755 /etc/systemd/system
-printf '%s\n' '[Unit]' 'Description=Startship deployment daemon' 'After=network-online.target docker.service' 'Wants=network-online.target' 'Requires=docker.service' '' '[Service]' 'Type=simple' 'User=startship' 'Group=startship' 'RuntimeDirectory=startship' 'RuntimeDirectoryMode=0750' 'SupplementaryGroups=docker' 'EnvironmentFile=/etc/startship/startshipd.env' 'WorkingDirectory=/var/lib/startship' 'ExecStart=/usr/local/bin/startshipd' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startshipd.service
+printf '%s\n' '[Unit]' 'Description=Startship deployment daemon' 'After=network-online.target docker.service' 'Wants=network-online.target' 'Requires=docker.service' '' '[Service]' 'Type=simple' 'User=startship' 'Group=startship' 'RuntimeDirectory=startship' 'RuntimeDirectoryMode=0750' 'SupplementaryGroups=docker' 'EnvironmentFile=/etc/startship/startshipd.env' 'WorkingDirectory=/var/lib/startship' 'Environment=STARTSHIP_UPDATE_REQUEST=/var/lib/startship/update/request.json' 'Environment=STARTSHIP_UPDATE_STATUS=/var/lib/startship/update/status.json' 'ExecStart=/usr/local/bin/startshipd' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startshipd.service
+# The daemon cannot replace root-owned binaries; it queues a request that this root-only updater applies.
+printf '%s\n' '[Unit]' 'Description=Startship update request watcher' '' '[Path]' 'PathExists=/var/lib/startship/update/request.json' 'Unit=startship-update.service' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startship-update.path
+printf '%s\n' '[Unit]' 'Description=Install the Startship release requested from the dashboard or CLI' 'After=network-online.target' 'Wants=network-online.target' '' '[Service]' 'Type=oneshot' 'Environment=STARTSHIP_UPDATE_REQUEST=/var/lib/startship/update/request.json' 'Environment=STARTSHIP_UPDATE_STATUS=/var/lib/startship/update/status.json' 'ExecStart=/usr/local/bin/startship update apply-request' > /etc/systemd/system/startship-update.service
 # The data directory may be overridden on first install.
-sed -i "s|WorkingDirectory=/var/lib/startship|WorkingDirectory=$data|" /etc/systemd/system/startshipd.service
+sed -i "s|/var/lib/startship|$data|g" /etc/systemd/system/startshipd.service /etc/systemd/system/startship-update.path /etc/systemd/system/startship-update.service
 if [ -d /run/systemd/system ]; then
     systemctl daemon-reload
-    systemctl enable --now startshipd.service
+    systemctl enable --now startshipd.service startship-update.path
     systemctl restart startshipd.service
 else
     printf '%s\n' 'systemd is not running; service installed but not started. On boot: systemctl enable --now startshipd'
