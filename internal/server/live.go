@@ -18,14 +18,15 @@ type liveEvent struct {
 	id, text     string
 	subscription *liveSub
 	active       string
+	end          int
 }
 type liveHub struct {
 	mu      sync.Mutex
+	logMu   sync.Mutex
 	clients map[*liveClient]bool
 }
 type liveClient struct {
 	events  chan liveEvent
-	changes chan struct{}
 	pending map[string]liveEvent
 	cancel  context.CancelFunc
 }
@@ -43,10 +44,6 @@ func (h *liveHub) publish(e liveEvent) {
 	for c := range h.clients {
 		if e.record.ID != "" {
 			c.pending[e.record.ID] = e
-			select {
-			case c.changes <- struct{}{}:
-			default:
-			}
 			continue
 		}
 		select {
@@ -72,6 +69,21 @@ type liveSub struct {
 	active      string
 	cancel      context.CancelFunc
 	next        time.Time
+	logEnd      int
+}
+
+func (s *liveSub) relevant(r Record) bool {
+	switch s.Topic {
+	case "project":
+		return r.ID == s.ProjectID || r.ProjectID == s.ProjectID
+	case "workspace":
+		return r.ID == s.WorkspaceID || r.Kind == "projects" && r.WorkspaceID == s.WorkspaceID
+	case "release_log":
+		return r.ID == s.ReleaseID
+	case "container_log":
+		return r.ID == s.ContainerID
+	}
+	return false
 }
 
 func (s *liveSub) message(t string) map[string]any {
@@ -90,7 +102,7 @@ func liveKind(r Record) string {
 	}
 	return ""
 }
-func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map[string]apiRecord, Record, string) {
+func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 	x := a.access(uid)
 	id, kind, perm := "", "", ""
 	switch s.Topic {
@@ -102,7 +114,7 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 				s.Window = 300
 			}
 			if s.Window != 300 && s.Window != 900 && s.Window != 3600 {
-				return nil, nil, Record{}, "invalid subscription"
+				return x, Record{}, "invalid subscription"
 			}
 		}
 	case "workspace":
@@ -112,19 +124,29 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 	case "container_log":
 		id, kind, perm = s.ContainerID, "apps", "logs.view"
 	case "system_update":
-		return a.updater().info(ctx, false), nil, Record{}, ""
+		return x, Record{}, ""
 	default:
-		return nil, nil, Record{}, "invalid subscription"
+		return x, Record{}, "invalid subscription"
 	}
 	if id == "" {
-		return nil, nil, Record{}, "invalid subscription"
+		return x, Record{}, "invalid subscription"
 	}
 	r, err := a.store.Get(id)
 	if err != nil || kind != "" && r.Kind != kind || s.Topic == "release_log" && r.Kind != "releases" && r.Kind != "deployments" {
-		return nil, nil, r, "not found"
+		return x, r, "not found"
 	}
 	if !x.visible(r) || perm != "" && !x.can(r, perm) {
-		return nil, nil, r, "forbidden"
+		return x, r, "forbidden"
+	}
+	return x, r, ""
+}
+func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map[string]apiRecord, Record, string) {
+	x, r, why := a.liveAccess(uid, s)
+	if why != "" {
+		return nil, nil, r, why
+	}
+	if s.Topic == "system_update" {
+		return a.updater().info(ctx, false), nil, r, ""
 	}
 	records := map[string]apiRecord{}
 	convert := func(v Record) apiRecord {
@@ -165,7 +187,7 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 	case "workspace":
 		projects := []apiRecord{}
 		for _, v := range a.store.List("projects", "") {
-			if v.WorkspaceID == id && x.visible(v) {
+			if v.WorkspaceID == s.WorkspaceID && x.visible(v) {
 				projects = append(projects, convert(v))
 			}
 		}
@@ -175,7 +197,7 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		for _, k := range []string{"apps", "releases", "routes"} {
 			out := []apiRecord{}
 			for _, v := range a.store.List(k, "") {
-				if v.ProjectID == id && x.visible(v) {
+				if v.ProjectID == s.ProjectID && x.visible(v) {
 					out = append(out, convert(v))
 				}
 			}
@@ -202,7 +224,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 	conn.SetReadLimit(8192)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	c := &liveClient{events: make(chan liveEvent, 128), changes: make(chan struct{}, 1), pending: map[string]liveEvent{}, cancel: cancel}
+	c := &liveClient{events: make(chan liveEvent, 1024), pending: map[string]liveEvent{}, cancel: cancel}
 	a.live.mu.Lock()
 	a.live.clients[c] = true
 	a.live.mu.Unlock()
@@ -296,7 +318,6 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 	}
 	session := time.NewTicker(interval)
 	defer session.Stop()
-	dirty := false
 	for {
 		select {
 		case <-ctx.Done():
@@ -305,6 +326,11 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 			if a.user(r) != uid {
 				conn.Close(websocket.StatusCode(4401), "session expired")
 				return
+			}
+			for _, s := range subs {
+				if _, _, why := a.liveAccess(uid, s); why != "" {
+					drop(s, why)
+				}
 			}
 			go func() {
 				pingCtx, stop := context.WithTimeout(ctx, 5*time.Second)
@@ -333,6 +359,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				continue
 			}
 			s := &req
+			s.logEnd = len(record.Log)
 			subs[s.ID] = s
 			remember(s, records)
 			m := s.message("snapshot")
@@ -350,8 +377,6 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 			if s.Topic == "container_log" {
 				startStream(s, record)
 			}
-		case <-c.changes:
-			dirty = true
 		case event := <-c.events:
 			if event.id == "system_update" {
 				for _, s := range subs {
@@ -363,13 +388,18 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 			}
 			for _, s := range subs {
 				if (s.Topic == "release_log" && s.ReleaseID == event.id) || (s.Topic == "container_log" && s == event.subscription && s.active == event.active) {
-					_, _, _, why := a.liveData(ctx, uid, s)
-					if why != "" {
-						drop(s, why)
+					if s.Topic == "release_log" && event.end <= s.logEnd {
 						continue
 					}
+					text := event.text
+					if s.Topic == "release_log" {
+						if overlap := s.logEnd - (event.end - len(text)); overlap > 0 {
+							text = text[overlap:]
+						}
+						s.logEnd = event.end
+					}
 					m := s.message("log")
-					m["data"], m["reset"] = event.text, false
+					m["data"], m["reset"] = text, false
 					if !send(m) {
 						return
 					}
@@ -396,7 +426,14 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 			}
 			for _, s := range subs {
 				periodic := s.Topic == "system_update" && now.After(s.next) || s.Topic == "traffic" && now.After(s.next)
-				if !dirty && !periodic {
+				relevant := false
+				for _, e := range pending {
+					if s.relevant(e.record) {
+						relevant = true
+						break
+					}
+				}
+				if !relevant && !periodic {
 					continue
 				}
 				if (s.Topic == "traffic" || s.Topic == "system_update") && !periodic {
@@ -457,7 +494,6 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				}
 				remember(s, records)
 			}
-			dirty = false
 		}
 	}
 }

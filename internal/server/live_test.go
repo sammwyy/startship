@@ -128,6 +128,23 @@ func TestLive(t *testing.T) {
 	if m := read(); m["type"] != "log" || m["data"] != "[REDACTED] message" {
 		t.Fatal(m)
 	}
+	send(map[string]any{"type": "subscribe", "id": "l", "topic": "release_log", "release_id": release.ID})
+	m := read()
+	if m["type"] != "snapshot" {
+		t.Fatal(m)
+	}
+	log := m["data"].(map[string]any)["log"].(string)
+	if !strings.HasSuffix(log, "[REDACTED] message") {
+		t.Fatal(log)
+	}
+	// Model a persisted chunk whose publication lost the race to the snapshot.
+	a.live.publish(liveEvent{id: release.ID, text: "[REDACTED] message", end: len(log)})
+	if _, err = logger.Write([]byte("next")); err != nil {
+		t.Fatal(err)
+	}
+	if m := read(); m["type"] != "log" || m["data"] != "next" {
+		t.Fatalf("duplicated snapshot log: %v", m)
+	}
 	send(map[string]any{"type": "unsubscribe", "id": "l"})
 	send(map[string]any{"type": "unsubscribe", "id": "p"})
 	release.Status = "running"
@@ -232,5 +249,110 @@ func TestLiveData(t *testing.T) {
 	data, _, _, why = a.liveData(ctx, uid, &s)
 	if why != "" || data.(map[string]string)["log"] != "Static container: files are served directly; no runtime process logs." {
 		t.Fatal(data, why)
+	}
+}
+
+func TestLiveRelevant(t *testing.T) {
+	for _, tt := range []struct {
+		s    liveSub
+		r    Record
+		want bool
+	}{
+		{liveSub{Topic: "project", ProjectID: "p"}, Record{ID: "p"}, true},
+		{liveSub{Topic: "project", ProjectID: "p"}, Record{ProjectID: "p", Kind: "releases"}, true},
+		{liveSub{Topic: "project", ProjectID: "p"}, Record{ProjectID: "other"}, false},
+		{liveSub{Topic: "workspace", WorkspaceID: "w"}, Record{ID: "w"}, true},
+		{liveSub{Topic: "workspace", WorkspaceID: "w"}, Record{Kind: "projects", WorkspaceID: "w"}, true},
+		{liveSub{Topic: "workspace", WorkspaceID: "w"}, Record{Kind: "releases", WorkspaceID: "w"}, false},
+		{liveSub{Topic: "release_log", ReleaseID: "r"}, Record{ID: "r"}, true},
+		{liveSub{Topic: "release_log", ReleaseID: "r"}, Record{ID: "other"}, false},
+		{liveSub{Topic: "container_log", ContainerID: "c"}, Record{ID: "c"}, true},
+		{liveSub{Topic: "container_log", ContainerID: "c"}, Record{ID: "r", ContainerID: "c"}, false},
+		{liveSub{Topic: "project", ProjectID: "p"}, Record{}, false},
+	} {
+		if got := tt.s.relevant(tt.r); got != tt.want {
+			t.Fatalf("%+v %+v: got %v", tt.s, tt.r, got)
+		}
+	}
+}
+
+func TestLiveLogOffsets(t *testing.T) {
+	a := testServer(t)
+	for _, id := range []string{"r", "group"} {
+		if err := a.store.Save(Record{ID: id, Kind: "releases"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := &liveClient{events: make(chan liveEvent, 4), pending: map[string]liveEvent{}, cancel: func() { t.Error("overflow") }}
+	a.live.clients[c] = true
+	l := logWriter{a: a, id: "r", group: "group", secret: "token"}
+	for _, text := range []string{"token", "next"} {
+		if _, err := l.Write([]byte(text)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, want := range []liveEvent{{id: "r", text: "[REDACTED]", end: 10}, {id: "group", text: "[REDACTED]", end: 10}, {id: "r", text: "next", end: 14}, {id: "group", text: "next", end: 14}} {
+		got := <-c.events
+		if got.id != want.id || got.text != want.text || got.end != want.end {
+			t.Fatalf("got %+v want %+v", got, want)
+		}
+	}
+	l.id = "missing"
+	if _, err := l.Write([]byte("not saved")); err == nil {
+		t.Fatal("expected missing record error")
+	}
+	if len(c.events) != 0 {
+		t.Fatal("published failed append")
+	}
+}
+
+func TestLiveIdleAccessRevoked(t *testing.T) {
+	a := testServer(t)
+	a.liveSessionInterval = 50 * time.Millisecond
+	uid, err := a.createUser("alice", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Record{ID: randomID(), Kind: "projects", Owner: uid}
+	if err = a.store.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	sid := randomID()
+	if _, err = a.store.DB.Exec("INSERT INTO sessions VALUES(?,?,?)", sid, uid, time.Now().Add(time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(a.api())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + sid}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	if _, _, err = c.Read(ctx); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := json.Marshal(map[string]string{"type": "subscribe", "id": "p", "topic": "project", "project_id": p.ID})
+	if err = c.Write(ctx, websocket.MessageText, b); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = c.Read(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Revoke legacy ownership without a store event to exercise idle validation.
+	if _, err = a.store.DB.Exec("UPDATE records SET owner=? WHERE id=?", "other", p.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, b, err = c.Read(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]any
+	if err = json.Unmarshal(b, &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["type"] != "error" || m["error"] != "forbidden" || m["id"] != "p" {
+		t.Fatal(string(b))
 	}
 }
