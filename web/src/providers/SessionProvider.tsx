@@ -79,9 +79,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setCredentialRotation(true);
     try {
       await client.cancelQueries();
-      const account = await request<User>("me", changes, "PATCH");
-      client.setQueryData(["me"], account);
+      const account = await request<Pick<User, "id" | "username">>(
+        "me",
+        changes,
+        "PATCH",
+      );
+      client.setQueryData<User | null>(["me"], (current) =>
+        current
+          ? {
+              ...current,
+              ...account,
+              must_change_password: changes.new_password
+                ? false
+                : current.must_change_password,
+            }
+          : current,
+      );
       setTemporaryPassword("");
+      await client.invalidateQueries({ queryKey: ["me"], exact: true });
     } finally {
       setCredentialRotation(false);
     }
