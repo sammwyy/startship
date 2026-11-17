@@ -289,7 +289,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .dashboard.sidebar-layout { display: grid; grid-template-columns: 212px minmax(0, 1fr); }
 .dashboard-body { min-width: 0; display: flex; flex-direction: column; }
 #desktop-sidebar { border-right: 1px solid var(--line); background: var(--terminal); }
-.sidebar { position: sticky; top: 0; height: calc(100dvh - 26px); min-height: 430px; display: flex; flex-direction: column; padding: 18px 12px 12px; }
+.sidebar { position: sticky; top: 0; height: calc(100dvh - 26px); min-height: 0; display: flex; flex-direction: column; padding: 18px 12px 12px; }
 .sidebar-top { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 23px; }
 .sidebar .brand { font-size: 16px; }
 .sidebar .mark { width: 25px; height: 25px; }
@@ -301,7 +301,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .selector-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .selector-copy small { color: var(--muted); font-size: 9px; font-weight: 400; }
 .selector-copy strong { font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-nav { padding-top: 20px; overflow-y: auto; flex: 1; min-height: 90px; }
+.sidebar-nav { padding-top: 20px; overflow-y: auto; flex: 1; min-height: 0; }
 .sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin: 3px 0; color: var(--muted); border: 1px solid transparent; border-radius: 8px; font-size: 11px; }
 .sidebar-nav a:hover { color: var(--text); background: var(--raised); }
 .sidebar-nav a[aria-current] { color: var(--text); background: var(--accent-soft); border-color: var(--line-strong); }
@@ -320,6 +320,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .sidebar-menu a:hover, .sidebar-menu button:hover, .sidebar-menu a[aria-current] { background: var(--raised); }
 .sidebar-menu a > span:not(.workspace-initial):not(.current-dot) { min-width: 0; overflow-wrap: anywhere; }
 .sidebar-menu .icon { width: 14px; height: 14px; }
+.sidebar-menu .theme-toggle span { display: inline; }
 .menu-caption { padding: 7px 10px; font-size: 9px; color: var(--muted); overflow-wrap: anywhere; }
 .menu-caption strong { font-weight: 500; color: var(--text); }
 .menu-divider { border-top: 1px solid var(--line); margin: 6px 0; }
