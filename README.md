@@ -16,7 +16,7 @@ docker compose up --build -d
 
 The proxy binds :80 (and :443 when ACME is enabled). The capability above is recommended to avoid root-owned data; reapply it after rebuilding. Alternatively run as root, or use `STARTSHIP_HTTP_ADDR=:8000 ./startshipd` for a local HTTP trial. `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` are optional seed credentials: omit both for browser first-run setup.
 
-Data defaults to `./_data`, which Go tooling skips even when unreadable. For an existing `./data`, stop the daemon and run `mv data _data && ln -s _data data`; the compatibility symlink preserves stored paths and is also skipped by Go. If previously run as root, restore ownership with `sudo chown -R "$(id -un):$(id -gn)" _data` before running as your normal user. Custom `STARTSHIP_DATA` directories should be outside the source tree or start with `_`.
+When `STARTSHIP_DATA` is unset, existing `./data` is preserved; otherwise new installations default to `./_data`. The underscore makes Go tooling skip the data directory even when unreadable.
 
 Visit `GET /api/setup` on port 8080. If no seed user exists, `POST /api/setup` with `{"username":"admin","password":"at-least-eight-characters"}`. Setup closes once a user exists. Every user gets `<username>'s Workspace`. No public registration after setup.
 

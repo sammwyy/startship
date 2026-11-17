@@ -21,8 +21,19 @@ func env(k, d string) string {
 	}
 	return d
 }
+func dataDirectory() string {
+	if configured := os.Getenv("STARTSHIP_DATA"); configured != "" {
+		return configured
+	}
+	if _, err := os.Stat("./data"); !os.IsNotExist(err) {
+		log.Print("Using existing ./data; consider renaming it to ./_data so Go tooling skips it")
+		return "./data"
+	}
+	return "./_data"
+}
+
 func main() {
-	data, e := filepath.Abs(env("STARTSHIP_DATA", "./_data"))
+	data, e := filepath.Abs(dataDirectory())
 	if e != nil {
 		log.Fatal(e)
 	}

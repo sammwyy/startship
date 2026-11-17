@@ -15,6 +15,30 @@ import (
 	"testing"
 )
 
+func TestDataDirectory(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("STARTSHIP_DATA", "")
+	if got := dataDirectory(); got != "./_data" {
+		t.Fatalf("fresh install: got %q", got)
+	}
+	if err := os.Mkdir("data", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if got := dataDirectory(); got != "./data" {
+		t.Fatalf("existing install: got %q", got)
+	}
+	if err := os.Mkdir("_data", 0700); err != nil {
+		t.Fatal(err)
+	}
+	if got := dataDirectory(); got != "./data" {
+		t.Fatalf("both directories exist: got %q", got)
+	}
+	t.Setenv("STARTSHIP_DATA", "custom-data")
+	if got := dataDirectory(); got != "custom-data" {
+		t.Fatalf("explicit override: got %q", got)
+	}
+}
+
 func TestBindServers(t *testing.T) {
 	occupied, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
