@@ -54,7 +54,7 @@ func (a *Server) createUser(user, pass string) (string, error) {
 	if _, e = tx.Exec("INSERT INTO users VALUES(?,?,?)", id, user, string(hash)); e != nil {
 		return "", e
 	}
-	ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace"}
+	ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace", Created: time.Now()}
 	b, _ := json.Marshal(ws)
 	if _, e = tx.Exec("INSERT INTO records VALUES(?,?,?,?,?)", ws.ID, ws.Kind, id, "", string(b)); e != nil {
 		return "", e
@@ -256,10 +256,12 @@ func (a *Server) api() http.Handler {
 		v.Owner = uid
 		if old.ID == "" {
 			v.ID = randomID()
+			v.Created = time.Now()
 			v.Active = ""
 			v.WebhookSecret = ""
 		} else {
 			v.ID = old.ID
+			v.Created = old.Created
 			v.Active = old.Active
 			v.WebhookSecret = old.WebhookSecret
 		}
@@ -294,9 +296,7 @@ func (a *Server) api() http.Handler {
 		case "routes":
 			v.Parent = v.ProjectID
 			v.Host = normalizeHost(v.Host)
-			if v.PathPrefix == "" {
-				v.PathPrefix = "/"
-			}
+			v.PathPrefix = normalizePrefix(v.PathPrefix)
 			app, e := a.store.get(v.AppID)
 			if e != nil || app.Kind != "apps" || app.ProjectID != v.ProjectID || app.Owner != uid || v.Host == "" || !strings.HasPrefix(v.PathPrefix, "/") {
 				fail(w, 400, "invalid route")

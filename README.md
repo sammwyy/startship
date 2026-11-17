@@ -4,9 +4,11 @@ Self-hosted deployment platform, single Go binary `startshipd`. A dark, responsi
 
 ## Run
 
-Requires [Go 1.26+](https://go.dev/dl/), Docker Engine and Git, with access to the Docker socket (for example via the docker group). No C toolchain required.
+Requires [Go 1.26+](https://go.dev/dl/), [Docker Engine](https://docs.docker.com/engine/install/) and [Git](https://git-scm.com/downloads). Install these first and ensure your user can access the Docker socket (for example via the docker group). No C toolchain required.
 
 ```sh
+git clone https://github.com/sammwyy/startship.git
+cd startship
 go build -o startshipd .
 sudo setcap cap_net_bind_service=+ep ./startshipd
 ./startshipd
@@ -14,7 +16,7 @@ sudo setcap cap_net_bind_service=+ep ./startshipd
 docker compose up --build -d
 ```
 
-The proxy binds :80 (and :443 when ACME is enabled). The capability above is recommended to avoid root-owned data; reapply it after rebuilding. Alternatively run as root, or use `STARTSHIP_HTTP_ADDR=:8000 ./startshipd` for a local HTTP trial. `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` are optional seed credentials: omit both for browser first-run setup.
+The proxy binds :80 (and :443 when ACME is enabled). The capability above is recommended to avoid root-owned data; reapply it after rebuilding. Alternatively run as root, use Docker Compose, or use `STARTSHIP_HTTP_ADDR=:8000 ./startshipd` for an unprivileged local HTTP trial (the dashboard remains on 8080). `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` are optional seed credentials: omit both for browser first-run setup, and use a strong, unique admin password.
 
 When `STARTSHIP_DATA` is unset, existing `./data` is preserved; otherwise new installations default to `./_data`. The underscore makes Go tooling skip the data directory even when unreadable.
 
@@ -66,7 +68,9 @@ Generated Node images select the highest matching major from 18, 20, 22, 24 and 
 
 Static test commands run in a disposable Alpine image containing the site; no container runs to serve the site. Healthy means the application container accepts TCP connections within 60 seconds. After success, active deployment switches transactionally and the old container is removed. Failed builds preserve the previous deployment. Startup re-inspects running containers; interrupted builds are marked failed rather than replayed. Build checkouts are removed after completion. Deployment metadata, images, logs, and static files are retained; manage disk usage accordingly.
 
-Routing matches case-insensitive host without port, then longest literal path prefix. `/api/` avoids accidentally matching `/apiculture`; use `/api` if that literal behavior is desired. `strip_prefix` removes the matched prefix. Proxy supports WebSockets and supplies forwarded headers. Static sites support index.html fallback for client-side routes.
+Routing matches case-insensitive host without port, then the longest segment-aware path prefix. `/api` matches `/api` and `/api/...`, but not `/apiary`. `/api/` matches paths beginning with `/api/`. On save, missing leading slashes are added and a trailing `*` is removed: enter an `example.com/api/*` style rule as hostname `example.com` and path prefix `/api/*` in **Connect domain**; it is saved as `/api/`. Do not put the hostname in the path field.
+
+For a monorepo, connect `api.example.com` with prefix `/` to the backend, `example.com` with prefix `/` to the frontend, and `example.com` with prefix `/api/*` to the backend. Leave **Strip prefix before forwarding** unchecked if the backend handles `/api/health`. Enable it if the backend expects `/health` instead. `strip_prefix` removes the matched prefix and ensures a leading slash; stripping exact `/api` forwards `/`. Proxy supports WebSockets and supplies forwarded headers. Static sites support index.html fallback for client-side routes.
 
 ## Checks
 

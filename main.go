@@ -32,6 +32,36 @@ func dataDirectory() string {
 	return "./_data"
 }
 
+func listen(name, addr, variable, fallback string) (net.Listener, error) {
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("%s: cannot listen on %s (%w); set %s=%s or grant privileged-port access with sudo setcap cap_net_bind_service=+ep ./startshipd", name, addr, err, variable, fallback)
+	}
+	return l, nil
+}
+func serve(servers []*http.Server) error {
+	names := []string{"dashboard", "proxy", "HTTPS proxy"}
+	listeners, err := bindServers(servers)
+	if err != nil {
+		return err
+	}
+	for i, srv := range servers {
+		l := listeners[i]
+		go func() {
+			var err error
+			if srv.TLSConfig != nil {
+				err = srv.ServeTLS(l, "", "")
+			} else {
+				err = srv.Serve(l)
+			}
+			if err != nil && err != http.ErrServerClosed {
+				log.Fatal(err)
+			}
+		}()
+		log.Printf("Startship %s listening on %s", names[i], l.Addr())
+	}
+	return nil
+}
 func main() {
 	data, e := filepath.Abs(dataDirectory())
 	if e != nil {
@@ -73,26 +103,9 @@ func main() {
 		https.TLSConfig.MinVersion = tls.VersionTLS12
 		servers = append(servers, https)
 	}
-	listeners, e := bindServers(servers)
-	if e != nil {
+	if e := serve(servers); e != nil {
 		log.Fatal(e)
 	}
-	for i, srv := range servers {
-		ln := listeners[i]
-		go func() {
-			var err error
-			if srv.TLSConfig != nil {
-				err = srv.ServeTLS(ln, "", "")
-			} else {
-				err = srv.Serve(ln)
-			}
-			if err != nil && err != http.ErrServerClosed {
-				log.Fatal(err)
-			}
-		}()
-	}
-	log.Printf("Startship dashboard listening on %s", dash.Addr)
-	log.Printf("Startship proxy listening on %s", proxy.Addr)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c
@@ -104,14 +117,17 @@ func main() {
 }
 
 func bindServers(servers []*http.Server) ([]net.Listener, error) {
+	names := []string{"dashboard", "proxy", "HTTPS proxy"}
+	variables := []string{"STARTSHIP_DASHBOARD_ADDR", "STARTSHIP_HTTP_ADDR", "STARTSHIP_HTTPS_ADDR"}
+	fallbacks := []string{":18080", ":8081", ":8443"}
 	var listeners []net.Listener
-	for _, srv := range servers {
-		ln, err := net.Listen("tcp", srv.Addr)
+	for i, srv := range servers {
+		ln, err := listen(names[i], srv.Addr, variables[i], fallbacks[i])
 		if err != nil {
 			for _, opened := range listeners {
 				opened.Close()
 			}
-			return nil, fmt.Errorf("listen on %s: %w; ports below 1024 require root or cap_net_bind_service (sudo setcap cap_net_bind_service=+ep ./startshipd); for a local trial set STARTSHIP_HTTP_ADDR=:8000", srv.Addr, err)
+			return nil, err
 		}
 		listeners = append(listeners, ln)
 	}
