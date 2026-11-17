@@ -16,6 +16,11 @@ Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit ask
 
 From there: open a workspace (or create one with **+ New workspace**; the sidebar selector switches between them), create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line. Sign out with the button next to your username at the bottom of the sidebar.
 
+Open the route's URL in the project page to visit the deployed app, not the
+dashboard or internal container port. URLs use the configured router port and
+HTTPS when ACME is enabled; if a gateway maps different external ports, use your
+gateway's public URL instead.
+
 Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/doc/install), Git and Docker Engine required; no C toolchain):
 
 ```sh
@@ -23,7 +28,26 @@ go build -o startshipd .
 STARTSHIP_HTTP_ADDR=:8081 ./startshipd
 ```
 
-The proxy defaults to `:80`, which requires root or `CAP_NET_BIND_SERVICE` on Linux; the command above uses unprivileged port 8081 instead, and the dashboard stays on 8080. For standard ports, grant the binary that capability or use Docker Compose. HTTPS on the default `:443` also needs privileged-port access.
+The proxy defaults to `:80`, which requires root or `CAP_NET_BIND_SERVICE` on Linux;
+the command above uses unprivileged port **8081** instead, and the dashboard stays
+on **8080**. Route `localhost` plus a path such as `/site/` to an app, then visit
+`http://localhost:8081/site/`. For a remote server, use its hostname and point DNS
+at it. The app's internal port is not published. Check `docker info` works as the
+user running Startship.
+
+To use standard ports without running the daemon as root, grant the binary the
+Linux bind capability (or use Docker Compose):
+
+```sh
+sudo setcap 'cap_net_bind_service=+ep' ./startshipd
+./startshipd
+```
+
+Reapply the capability after rebuilding or replacing the binary. Alternatively,
+keep `STARTSHIP_HTTP_ADDR=:8081` (and, when using ACME,
+`STARTSHIP_HTTPS_ADDR=:8443`) and forward public ports 80/443 at your gateway.
+ACME validation still needs public port 80. HTTPS on default `:443` also needs
+privileged-port access.
 
 To skip the first-run screen, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` (uncomment them in `compose.yaml`); they only create the account when no user exists yet. Over the API, `GET /api/setup` returns `{"required":true}` until the first account exists, created with `POST /api/setup {"username":"admin","password":"at-least-eight-characters"}`.
 
@@ -94,4 +118,4 @@ go vet ./... && go test ./...
 ./scripts/e2e.sh
 ```
 
-E2E requires Python 3, curl, Git and real Docker. Uses localhost ports 18080/18081, creates a local Python + static monorepo, deploys both through the API, tests longest-prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.
+E2E requires Python 3, curl, Git and real Docker. Uses localhost ports 18080/18081, creates a local Dockerfile + Python + Rust + static monorepo, auto-detects and deploys all four through the API, tests route URLs, prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.

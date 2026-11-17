@@ -19,6 +19,21 @@ type Target struct {
 	Port       int
 }
 
+func routeURL(route Record) string {
+	scheme, addr, defaultPort := "http", env("STARTSHIP_HTTP_ADDR", ":80"), "80"
+	if os.Getenv("STARTSHIP_ACME_EMAIL") != "" {
+		scheme, addr, defaultPort = "https", env("STARTSHIP_HTTPS_ADDR", ":443"), "443"
+	}
+	_, port, _ := net.SplitHostPort(addr)
+	host := strings.Trim(normalizeHost(route.Host), "[]")
+	if port != "" && port != defaultPort {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return (&url.URL{Scheme: scheme, Host: host, Path: route.PathPrefix}).String()
+}
+
 func normalizeHost(h string) string {
 	if host, _, e := net.SplitHostPort(h); e == nil {
 		h = host
