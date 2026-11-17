@@ -75,10 +75,15 @@ func (a *Server) clone(app Record, dir string, out io.Writer) error {
 	return command("", out, "git", "clone", "--depth", "1", "--branch", app.Branch, "--", raw, dir)
 }
 func (a *Server) enqueue(app Record) (Record, error) {
-	if _, e := a.projectSource(app); e != nil {
-		return Record{}, e
+	return a.enqueueDeployment(app, Record{})
+}
+func (a *Server) enqueueDeployment(app Record, d Record) (Record, error) {
+	if d.RedeployOf == "" {
+		if _, e := a.projectSource(app); e != nil {
+			return Record{}, e
+		}
 	}
-	d := Record{ID: randomID(), Kind: "deployments", Owner: app.Owner, Parent: app.ID, AppID: app.ID, Status: "queued", Created: time.Now()}
+	d.ID, d.Kind, d.Owner, d.Parent, d.AppID, d.Status, d.Created = randomID(), "deployments", app.Owner, app.ID, app.ID, "queued", time.Now()
 	if e := a.store.save(d); e != nil {
 		return d, e
 	}
@@ -126,16 +131,34 @@ func (a *Server) build(appID, id string) {
 		return
 	}
 	logger := &logWriter{a: a, id: id, secret: app.GitToken}
-	var container string
 	defer func() {
 		if e != nil {
 			a.store.update(id, func(r *Record) { r.Status = "failed"; now := time.Now(); r.Finished = &now })
-			if container != "" {
-				command("", logger, "docker", "rm", "-f", container)
-			}
 		}
 		a.logDeploymentResult(logger, app, e)
 	}()
+	d, err := a.store.get(id)
+	if err != nil {
+		e = err
+		return
+	}
+	if d.RedeployOf != "" {
+		fmt.Fprintf(logger, "Redeploying release %s (no clone, build or tests)\n", d.RedeployOf)
+		if e = releaseAvailable(d); e != nil {
+			return
+		}
+		network := "startship-" + app.ProjectID
+		if e = ensureNetwork(network, logger); e != nil {
+			return
+		}
+		a.store.update(id, func(r *Record) { r.Network = network })
+		if d.StaticDir != "" {
+			e = a.activate(app, id)
+		} else {
+			e = a.startRelease(app, id, d.Image, network, logger)
+		}
+		return
+	}
 	a.status(id, "building")
 	source, sourceErr := a.projectSource(app)
 	if sourceErr != nil {
@@ -143,6 +166,11 @@ func (a *Server) build(appID, id string) {
 		return
 	}
 	logger.secret = source.GitToken
+	network := "startship-" + app.ProjectID
+	if e = ensureNetwork(network, logger); e != nil {
+		return
+	}
+	a.store.update(id, func(r *Record) { r.Network = network })
 	dir := filepath.Join(a.data, "builds", id)
 	if e = os.MkdirAll(filepath.Dir(dir), 0700); e != nil {
 		return
@@ -181,15 +209,12 @@ func (a *Server) build(appID, id string) {
 			if e != nil {
 				return
 			}
-			e = command(root, logger, "docker", "build", "-t", image, "-f", "Dockerfile.startship-test", ".")
+			e = buildImage(root, logger, app.ProjectID, image, "Dockerfile.startship-test", d.NoCache)
 			if e != nil {
 				return
 			}
 			a.status(id, "testing")
-			args := []string{"run", "--rm", "--network", "startship"}
-			for k, v := range app.Env {
-				args = append(args, "-e", k+"="+v)
-			}
+			args := appRunArgs(app, network, true)
 			args = append(args, image, "sh", "-c", app.TestCommand)
 			e = command("", logger, "docker", args...)
 			os.Remove(filepath.Join(root, "Dockerfile.startship-test"))
@@ -222,32 +247,49 @@ func (a *Server) build(appID, id string) {
 	if kind != "dockerfile" {
 		dockerPath = "Dockerfile.startship"
 	}
-	if e = command(root, logger, "docker", "build", "-t", image, "-f", dockerPath, "."); e != nil {
+	if e = buildImage(root, logger, app.ProjectID, image, dockerPath, d.NoCache); e != nil {
 		return
 	}
 	if app.TestCommand != "" {
 		a.status(id, "testing")
-		args := []string{"run", "--rm", "--network", "startship"}
-		for k, v := range app.Env {
-			args = append(args, "-e", k+"="+v)
-		}
+		args := appRunArgs(app, network, true)
 		args = append(args, image, "sh", "-c", app.TestCommand)
 		if e = command("", logger, "docker", args...); e != nil {
 			return
 		}
 	}
-	a.status(id, "starting")
-	container = "startship-" + app.ID + "-" + id
-	args := []string{"run", "-d", "--network", "startship", "--name", container, "--restart", "unless-stopped", "--label", "startship.managed=true", "--label", "startship.app=" + app.ID, "-e", fmt.Sprintf("PORT=%d", app.Port)}
-	for k, v := range app.Env {
-		args = append(args, "-e", k+"="+v)
+	e = a.startRelease(app, id, image, network, logger)
+}
+
+func releaseAvailable(d Record) error {
+	if d.StaticDir != "" {
+		info, err := os.Stat(d.StaticDir)
+		if err != nil || !info.IsDir() {
+			return fmt.Errorf("release static directory is gone; rebuild the app")
+		}
+		return nil
 	}
+	if d.Image == "" || exec.Command("docker", "image", "inspect", d.Image).Run() != nil {
+		return fmt.Errorf("release image is gone; rebuild the app")
+	}
+	return nil
+}
+
+func (a *Server) startRelease(app Record, id, image, network string, logger io.Writer) (e error) {
+	a.status(id, "starting")
+	container := "startship-" + app.ID + "-" + id
+	defer func() {
+		if e != nil {
+			command("", logger, "docker", "rm", "-f", container)
+		}
+	}()
+	args := append(appRunArgs(app, network, false), "--name", container)
 	args = append(args, image)
 	if e = command("", logger, "docker", args...); e != nil {
 		return
 	}
 	var ip string
-	ip, e = containerIP(container)
+	ip, e = containerIP(container, network)
 	if e != nil {
 		return
 	}
@@ -267,7 +309,7 @@ func (a *Server) build(appID, id string) {
 		time.Sleep(300 * time.Millisecond)
 	}
 	a.store.update(id, func(r *Record) { r.Container = container; r.IP = ip })
-	e = a.activate(app, id)
+	return a.activate(app, id)
 }
 
 func (a *Server) logDeploymentResult(out io.Writer, app Record, err error) {
@@ -364,14 +406,17 @@ func (a *Server) activate(app Record, id string) error {
 	}
 	return nil
 }
-func containerIP(id string) (string, error) {
-	b, e := exec.Command("docker", "inspect", "--format", "{{(index .NetworkSettings.Networks \"startship\").IPAddress}}", id).Output()
+func containerIP(id, network string) (string, error) {
+	if network == "" {
+		network = "startship"
+	}
+	b, e := exec.Command("docker", "inspect", "--format", fmt.Sprintf("{{(index .NetworkSettings.Networks %q).IPAddress}}", network), id).Output()
 	if e != nil {
 		return "", e
 	}
 	ip := strings.TrimSpace(string(b))
 	if net.ParseIP(ip) == nil {
-		return "", fmt.Errorf("container has no startship IP")
+		return "", fmt.Errorf("container has no %s IP", network)
 	}
 	return ip, nil
 }
@@ -387,24 +432,19 @@ func (a *Server) restore() {
 			fmt.Fprintln(os.Stderr, "Docker network unavailable:", e)
 		}
 	}
-	self := os.Getenv("STARTSHIP_SELF_CONTAINER")
-	if self == "" {
-		if _, e := os.Stat("/.dockerenv"); e == nil {
-			self, _ = os.Hostname()
-		}
-	}
-	if self != "" {
-		if _, e := containerIP(self); e != nil {
-			if e := command("", os.Stderr, "docker", "network", "connect", "startship", self); e != nil {
-				fmt.Fprintln(os.Stderr, "Ensure startshipd is already attached to startship:", e)
-			}
-		}
+	if e := connectSelf("startship"); e != nil {
+		fmt.Fprintln(os.Stderr, "Ensure startshipd is already attached to startship:", e)
 	}
 	for _, d := range a.store.list("deployments", "") {
 		switch d.Status {
 		case "running":
 			if d.Container != "" {
-				ip, e := containerIP(d.Container)
+				if d.Network != "" {
+					if e := connectSelf(d.Network); e != nil {
+						fmt.Fprintln(os.Stderr, "Cannot attach startshipd to project network:", e)
+					}
+				}
+				ip, e := containerIP(d.Container, d.Network)
 				a.store.update(d.ID, func(r *Record) {
 					if e == nil {
 						r.IP = ip

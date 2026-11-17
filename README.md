@@ -55,6 +55,73 @@ To skip the first-run screen, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PA
 
 When `STARTSHIP_DATA` is unset, existing `./data` is preserved; otherwise new installations default to `./_data`. The underscore makes Go tooling skip the data directory even when unreadable.
 
+## Container isolation and limits
+
+Each project uses a private bridge network named `startship-<projectID>`. App
+and test containers join only that network, with a lowercase, dash-separated
+app-name alias (use distinct names within a project). Siblings can connect by
+alias and internal port; other projects cannot connect directly. Internet egress
+is retained. Deployments persist their network; older deployments retain the
+legacy `startship` network until redeployed. A containerized daemon joins project
+networks on deploy and restart (`STARTSHIP_SELF_CONTAINER` overrides auto-detection).
+
+Set these environment variables on **startshipd** (add them to Compose's
+`environment` section when using Compose):
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `STARTSHIP_APP_MEMORY` | `512m` | App and test memory limit |
+| `STARTSHIP_APP_CPUS` | `1` | App and test CPU quota |
+| `STARTSHIP_APP_PIDS` | `512` | App and test process limit |
+| `STARTSHIP_BUILD_MEMORY` | `1g` | BuildKit worker memory limit |
+| `STARTSHIP_BUILD_CPUS` | `1` | BuildKit worker CPU quota |
+| `STARTSHIP_BUILD_CACHE` | `5g` | Best-effort retained build cache per project |
+
+Builds require the Docker buildx plugin (included in `docker:29-cli`). Each project
+reuses a persistent `docker-container` BuildKit builder with memory and CPU
+driver options and `--load`; ordinary `docker build --memory` is not used.
+Builds in one project are serialized, including builder creation and cache
+pruning; different projects can build concurrently. Changing build memory/CPU
+limits replaces the project's builder and its cache on the next build. After
+each build, best-effort pruning keeps cache near `STARTSHIP_BUILD_CACHE` (not a
+hard disk quota). Project deletion removes its builder and network. Invalid
+limits fail the deployment. Apps and tests drop all capabilities except CHOWN, SETUID, SETGID,
+and NET_BIND_SERVICE and enable no-new-privileges. Their root filesystem remains
+writable; no host mounts or privileged mode are granted to them.
+
+This is defense in depth, **not a sandbox for hostile tenants**. The daemon's
+Docker socket grants host-level control; BuildKit workers use Docker's privileged
+build infrastructure. Apps can still reach the host gateway and exposed daemon
+proxy/dashboard, including publicly routed apps of other projects. Keep the
+dashboard authenticated and firewalled. Containers share the host kernel;
+legacy releases remain on the shared network until redeployed.
+
+### Deploy, rebuild, or redeploy
+
+**Deploy now** builds the project's current branch with cached layers.
+**Rebuild without cache** rebuilds without reusing executable build layers (base
+images and metadata-only steps may still be cached by BuildKit). **Redeploy** starts the active release without cloning, building,
+or running tests, using the app's current environment and port. The release
+inspector's **Redeploy this release** can roll back to an older successful release
+while its image or static directory still exists. All container starts retain the
+same limits, capabilities, project network, and health check. A failed start keeps
+the old active release. Static redeploys share the existing static files without
+deleting them when the previous release is superseded.
+
+API equivalents:
+
+```text
+POST /api/apps/<id>/deploy     {}                   # cached build
+POST /api/apps/<id>/deploy     {"no_cache": true}   # uncached build
+POST /api/apps/<id>/redeploy   {}                   # active release
+POST /api/apps/<id>/redeploy   {"deployment_id": "<release-id>"}
+```
+
+Redeploy returns HTTP 409 if there is no active release, the selected release was
+not successful, or its image/static directory is gone; rebuild instead. The new
+deployment records `redeploy_of` and copies the source commit, and still activates
+atomically. Deployments are queued per app as before.
+
 ## HTTPS
 
 Startship gets Let's Encrypt certificates itself:
