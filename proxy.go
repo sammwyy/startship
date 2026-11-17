@@ -25,12 +25,19 @@ func normalizeHost(h string) string {
 	}
 	return strings.TrimSuffix(strings.ToLower(h), ".")
 }
+func normalizePrefix(prefix string) string {
+	prefix = strings.TrimSuffix(strings.TrimSpace(prefix), "*")
+	return "/" + strings.TrimLeft(prefix, "/")
+}
+func matchesPrefix(p, prefix string) bool {
+	return p == prefix || strings.HasPrefix(p, strings.TrimSuffix(prefix, "/")+"/")
+}
 func matchRoute(targets []Target, host, p string) *Target {
 	host = normalizeHost(host)
 	var best *Target
 	for i := range targets {
 		t := &targets[i]
-		if normalizeHost(t.Route.Host) == host && strings.HasPrefix(p, t.Route.PathPrefix) && (best == nil || len(t.Route.PathPrefix) > len(best.Route.PathPrefix)) {
+		if normalizeHost(t.Route.Host) == host && matchesPrefix(p, t.Route.PathPrefix) && (best == nil || len(t.Route.PathPrefix) > len(best.Route.PathPrefix)) {
 			best = t
 		}
 	}

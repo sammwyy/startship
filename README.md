@@ -4,23 +4,26 @@ Self-hosted deployment platform, single Go binary `startshipd`. A dark, responsi
 
 ## Run
 
-Requires Docker Engine with Compose. Ports 80, 443 and 8080 must be free on the host.
+Requires [Docker Engine](https://docs.docker.com/engine/install/) with Compose and [Git](https://git-scm.com/downloads); your user must be able to access the Docker daemon. Ports 80, 443 and 8080 must be free on the host.
 
 ```sh
-git clone https://github.com/sammwyy/startship && cd startship
+git clone https://github.com/sammwyy/startship.git
+cd startship
 docker compose up --build -d
 ```
 
-Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so keep the password safe.
+Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so use a strong, unique password and keep it safe.
 
 From there: open a workspace (or create one with **+ New workspace**; the sidebar selector switches between them), create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line. Sign out with the button next to your username at the bottom of the sidebar.
 
-Without Docker Compose, build the binary (Go 1.26+, Git and Docker Engine required; no C toolchain):
+Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/doc/install), Git and Docker Engine required; no C toolchain):
 
 ```sh
 go build -o startshipd .
-./startshipd   # listens on :8080 (dashboard), :80 and :443; port 80 usually needs root
+STARTSHIP_HTTP_ADDR=:8081 ./startshipd
 ```
+
+The proxy defaults to `:80`, which requires root or `CAP_NET_BIND_SERVICE` on Linux; the command above uses unprivileged port 8081 instead, and the dashboard stays on 8080. For standard ports, grant the binary that capability or use Docker Compose. HTTPS on the default `:443` also needs privileged-port access.
 
 To skip the first-run screen, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` (uncomment them in `compose.yaml`); they only create the account when no user exists yet. Over the API, `GET /api/setup` returns `{"required":true}` until the first account exists, created with `POST /api/setup {"username":"admin","password":"at-least-eight-characters"}`.
 
@@ -80,7 +83,9 @@ Generated Node images install dependencies (npm ci with lockfile), run a build s
 
 Static test commands run in a disposable Alpine image containing the site; no container runs to serve the site. Healthy means the application container accepts TCP connections within 60 seconds. After success, active deployment switches transactionally and the old container is removed. Failed builds preserve the previous deployment. Startup re-inspects running containers; interrupted builds are marked failed rather than replayed. Build checkouts are removed after completion. Deployment metadata, images, logs, and static files are retained; manage disk usage accordingly.
 
-Routing matches case-insensitive host without port, then longest literal path prefix. `/api/` avoids accidentally matching `/apiculture`; use `/api` if that literal behavior is desired. `strip_prefix` removes the matched prefix. Proxy supports WebSockets and supplies forwarded headers. Static sites support index.html fallback for client-side routes.
+Routing matches case-insensitive host without port, then the longest segment-aware path prefix. `/api` matches `/api` and `/api/...`, but not `/apiary`. `/api/` matches paths beginning with `/api/`. On save, missing leading slashes are added and a trailing `*` is removed: enter an `example.com/api/*` style rule as hostname `example.com` and path prefix `/api/*` in **Connect domain**; it is saved as `/api/`. Do not put the hostname in the path field.
+
+For a monorepo, connect `api.example.com` with prefix `/` to the backend, `example.com` with prefix `/` to the frontend, and `example.com` with prefix `/api/*` to the backend. Leave **Strip prefix before forwarding** unchecked if the backend handles `/api/health`. Enable it if the backend expects `/health` instead. `strip_prefix` removes the matched prefix and ensures a leading slash; stripping exact `/api` forwards `/`. Proxy supports WebSockets and supplies forwarded headers. Static sites support index.html fallback for client-side routes.
 
 ## Checks
 

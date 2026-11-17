@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"golang.org/x/crypto/acme/autocert"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -18,6 +20,45 @@ func env(k, d string) string {
 		return v
 	}
 	return d
+}
+func listen(name, addr, variable, fallback string) (net.Listener, error) {
+	l, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("%s: cannot listen on %s (%w); set %s=%s or run with CAP_NET_BIND_SERVICE for privileged ports", name, addr, err, variable, fallback)
+	}
+	return l, nil
+}
+func serve(servers []*http.Server) error {
+	names := []string{"dashboard", "proxy", "HTTPS proxy"}
+	variables := []string{"STARTSHIP_DASHBOARD_ADDR", "STARTSHIP_HTTP_ADDR", "STARTSHIP_HTTPS_ADDR"}
+	fallbacks := []string{":18080", ":8081", ":8443"}
+	listeners := make([]net.Listener, 0, len(servers))
+	for i, srv := range servers {
+		l, err := listen(names[i], srv.Addr, variables[i], fallbacks[i])
+		if err != nil {
+			for _, opened := range listeners {
+				opened.Close()
+			}
+			return err
+		}
+		listeners = append(listeners, l)
+	}
+	for i, srv := range servers {
+		l := listeners[i]
+		go func() {
+			var err error
+			if srv.TLSConfig != nil {
+				err = srv.ServeTLS(l, "", "")
+			} else {
+				err = srv.Serve(l)
+			}
+			if err != nil && err != http.ErrServerClosed {
+				log.Fatal(err)
+			}
+		}()
+		log.Printf("Startship %s listening on %s", names[i], l.Addr())
+	}
+	return nil
 }
 func main() {
 	data, e := filepath.Abs(env("STARTSHIP_DATA", "./data"))
@@ -58,23 +99,10 @@ func main() {
 		https := &http.Server{Addr: env("STARTSHIP_HTTPS_ADDR", ":443"), Handler: a, TLSConfig: m.TLSConfig(), ReadHeaderTimeout: 10 * time.Second}
 		https.TLSConfig.MinVersion = tls.VersionTLS12
 		servers = append(servers, https)
-		go func() {
-			if e := https.ListenAndServeTLS("", ""); e != nil && e != http.ErrServerClosed {
-				log.Fatal(e)
-			}
-		}()
 	}
-	go func() {
-		if e := dash.ListenAndServe(); e != nil && e != http.ErrServerClosed {
-			log.Fatal(e)
-		}
-	}()
-	go func() {
-		if e := proxy.ListenAndServe(); e != nil && e != http.ErrServerClosed {
-			log.Fatal(e)
-		}
-	}()
-	log.Printf("Startship dashboard listening on %s", dash.Addr)
+	if e := serve(servers); e != nil {
+		log.Fatal(e)
+	}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c
