@@ -243,7 +243,9 @@ func testServer(t *testing.T) *Server {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { s.DB.Close() })
-	return &Server{store: s, data: t.TempDir(), queues: make(map[string]chan string)}
+	a := &Server{store: s, data: t.TempDir(), queues: make(map[string]chan string)}
+	a.initLive()
+	return a
 }
 func TestSetupAndOwnership(t *testing.T) {
 	a := testServer(t)

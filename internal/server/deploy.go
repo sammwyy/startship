@@ -41,6 +41,10 @@ func (l *logWriter) Write(b []byte) (int, error) {
 	if l.secret != "" {
 		s = strings.ReplaceAll(s, l.secret, "[REDACTED]")
 	}
+	l.a.live.publish(liveEvent{id: l.id, text: s})
+	if l.group != "" {
+		l.a.live.publish(liveEvent{id: l.group, text: s})
+	}
 	e := l.a.store.Update(l.id, func(r *Record) { r.Log += s })
 	if e == nil && l.group != "" {
 		e = l.a.store.Update(l.group, func(r *Record) { r.Log += s })

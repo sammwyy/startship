@@ -54,7 +54,8 @@ type Record struct {
 	Finished          *time.Time        `json:"finished,omitempty"`
 }
 type Store struct {
-	DB *sql.DB
+	DB       *sql.DB
+	OnChange func(Record, bool)
 	sync.Mutex
 }
 
@@ -102,7 +103,17 @@ func (s *Store) Save(r Record) error {
 		return e
 	}
 	_, e = s.DB.Exec("INSERT INTO records VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body, parent=excluded.parent", r.ID, r.Kind, r.Owner, r.Parent, string(b))
+	if e == nil && s.OnChange != nil {
+		s.OnChange(r, false)
+	}
 	return e
+}
+func (s *Store) Delete(r Record) error {
+	_, err := s.DB.Exec("DELETE FROM records WHERE id=?", r.ID)
+	if err == nil && s.OnChange != nil {
+		s.OnChange(r, true)
+	}
+	return err
 }
 func (s *Store) Get(id string) (Record, error) {
 	var r Record

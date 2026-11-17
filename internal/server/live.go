@@ -1,0 +1,467 @@
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"os/exec"
+	"sync"
+	"time"
+
+	"github.com/coder/websocket"
+	"github.com/sammwyy/startship/internal/version"
+)
+
+type liveEvent struct {
+	record       Record
+	deleted      bool
+	id, text     string
+	subscription *liveSub
+	active       string
+}
+type liveHub struct {
+	mu      sync.Mutex
+	clients map[*liveClient]bool
+}
+type liveClient struct {
+	events  chan liveEvent
+	changes chan struct{}
+	pending map[string]liveEvent
+	cancel  context.CancelFunc
+}
+
+func (a *Server) initLive() {
+	a.live = &liveHub{clients: make(map[*liveClient]bool)}
+	a.store.OnChange = func(r Record, deleted bool) { a.live.publish(liveEvent{record: r, deleted: deleted}) }
+}
+func (h *liveHub) publish(e liveEvent) {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for c := range h.clients {
+		if e.record.ID != "" {
+			c.pending[e.record.ID] = e
+			select {
+			case c.changes <- struct{}{}:
+			default:
+			}
+			continue
+		}
+		select {
+		case c.events <- e:
+		default:
+			c.cancel()
+		}
+	}
+}
+
+type liveSub struct {
+	Type        string `json:"type"`
+	ID          string `json:"id"`
+	Topic       string `json:"topic"`
+	ProjectID   string `json:"project_id"`
+	WorkspaceID string `json:"workspace_id"`
+	ReleaseID   string `json:"release_id"`
+	ContainerID string `json:"container_id"`
+	Window      int    `json:"window"`
+	last        map[string]json.RawMessage
+	kinds       map[string]string
+	update      string
+	active      string
+	cancel      context.CancelFunc
+	next        time.Time
+}
+
+func (s *liveSub) message(t string) map[string]any {
+	return map[string]any{"type": t, "id": s.ID, "topic": s.Topic}
+}
+func liveKind(r Record) string {
+	switch r.Kind {
+	case "apps":
+		return "container"
+	case "deployments", "releases":
+		return "release"
+	case "projects":
+		return "project"
+	case "routes":
+		return "route"
+	}
+	return ""
+}
+func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map[string]apiRecord, Record, string) {
+	x := a.access(uid)
+	id, kind, perm := "", "", ""
+	switch s.Topic {
+	case "project", "traffic":
+		id, kind = s.ProjectID, "projects"
+		if s.Topic == "traffic" {
+			perm = "traffic.view"
+			if s.Window == 0 {
+				s.Window = 300
+			}
+			if s.Window != 300 && s.Window != 900 && s.Window != 3600 {
+				return nil, nil, Record{}, "invalid subscription"
+			}
+		}
+	case "workspace":
+		id, kind = s.WorkspaceID, "workspaces"
+	case "release_log":
+		id, perm = s.ReleaseID, "logs.view"
+	case "container_log":
+		id, kind, perm = s.ContainerID, "apps", "logs.view"
+	case "system_update":
+		return a.updater().info(ctx, false), nil, Record{}, ""
+	default:
+		return nil, nil, Record{}, "invalid subscription"
+	}
+	if id == "" {
+		return nil, nil, Record{}, "invalid subscription"
+	}
+	r, err := a.store.Get(id)
+	if err != nil || kind != "" && r.Kind != kind || s.Topic == "release_log" && r.Kind != "releases" && r.Kind != "deployments" {
+		return nil, nil, r, "not found"
+	}
+	if !x.visible(r) || perm != "" && !x.can(r, perm) {
+		return nil, nil, r, "forbidden"
+	}
+	records := map[string]apiRecord{}
+	convert := func(v Record) apiRecord {
+		v.Log = ""
+		out := x.publicRecord(v)
+		if v.Kind == "apps" {
+			out = a.containerRecord(v)
+		}
+		records[v.ID] = out
+		return out
+	}
+	switch s.Topic {
+	case "traffic":
+		return a.trafficData(r, s.Window), nil, r, ""
+	case "container_log":
+		if s.last != nil && s.active == r.Active {
+			return nil, nil, r, ""
+		}
+		text, e := a.containerLogText(ctx, r)
+		if e != nil {
+			return nil, nil, r, "not found"
+		}
+		return map[string]string{"log": text}, nil, r, ""
+	case "release_log":
+		full := x.publicRecord(r)
+		if r.Status == "running" || r.Status == "superseded" {
+			if r.Kind == "releases" {
+				full.Redeployable = a.projectReleaseAvailable(r) == nil
+			} else {
+				full.Redeployable = releaseAvailable(r) == nil
+			}
+		}
+		convert(r)
+		upsert := full
+		upsert.Log = ""
+		records[r.ID] = upsert
+		return full, records, r, ""
+	case "workspace":
+		projects := []apiRecord{}
+		for _, v := range a.store.List("projects", "") {
+			if v.WorkspaceID == id && x.visible(v) {
+				projects = append(projects, convert(v))
+			}
+		}
+		return map[string]any{"projects": projects}, records, r, ""
+	default:
+		data := map[string]any{"project": convert(r)}
+		for _, k := range []string{"apps", "releases", "routes"} {
+			out := []apiRecord{}
+			for _, v := range a.store.List(k, "") {
+				if v.ProjectID == id && x.visible(v) {
+					out = append(out, convert(v))
+				}
+			}
+			key := k
+			if k == "apps" {
+				key = "containers"
+			}
+			data[key] = out
+		}
+		return data, records, r, ""
+	}
+}
+func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string) {
+	origin := r.Header.Get("Origin")
+	if origin != "" && origin != "http://"+r.Host && origin != "https://"+r.Host {
+		fail(w, 403, "forbidden")
+		return
+	}
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+	if err != nil {
+		return
+	}
+	defer conn.CloseNow()
+	conn.SetReadLimit(8192)
+	ctx, cancel := context.WithCancel(r.Context())
+	defer cancel()
+	c := &liveClient{events: make(chan liveEvent, 128), changes: make(chan struct{}, 1), pending: map[string]liveEvent{}, cancel: cancel}
+	a.live.mu.Lock()
+	a.live.clients[c] = true
+	a.live.mu.Unlock()
+	defer func() { a.live.mu.Lock(); delete(a.live.clients, c); a.live.mu.Unlock() }()
+	send := func(v any) bool {
+		b, e := json.Marshal(v)
+		if e != nil {
+			return false
+		}
+		writeCtx, stop := context.WithTimeout(ctx, 3*time.Second)
+		defer stop()
+		return conn.Write(writeCtx, websocket.MessageText, b) == nil
+	}
+	if !send(map[string]any{"type": "ready", "user_id": uid, "version": version.Version, "commit": version.Commit}) {
+		return
+	}
+	input := make(chan liveSub, 16)
+	go func() {
+		defer cancel()
+		for {
+			_, b, e := conn.Read(ctx)
+			if e != nil {
+				return
+			}
+			var s liveSub
+			if json.Unmarshal(b, &s) != nil {
+				s.Type = "invalid"
+			}
+			select {
+			case input <- s:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	subs := map[string]*liveSub{}
+	defer func() {
+		for _, s := range subs {
+			if s.cancel != nil {
+				s.cancel()
+			}
+		}
+	}()
+	drop := func(s *liveSub, why string) {
+		m := s.message("error")
+		m["error"] = why
+		send(m)
+		if s.cancel != nil {
+			s.cancel()
+		}
+		delete(subs, s.ID)
+	}
+	remember := func(s *liveSub, records map[string]apiRecord) {
+		s.last = map[string]json.RawMessage{}
+		s.kinds = map[string]string{}
+		for id, v := range records {
+			s.last[id], _ = json.Marshal(v)
+			s.kinds[id] = liveKind(v.Record)
+		}
+	}
+	startStream := func(s *liveSub, r Record) {
+		if s.cancel != nil {
+			s.cancel()
+		}
+		streamCtx, stop := context.WithCancel(ctx)
+		s.cancel = stop
+		s.active = r.Active
+		d, e := a.store.Get(r.Active)
+		if e != nil || d.Container == "" || d.StaticDir != "" {
+			return
+		}
+		go func() {
+			cmd := exec.CommandContext(streamCtx, "docker", "logs", "--tail", "0", "-f", d.Container)
+			cmd.Stdout = liveLogOutput{func(b []byte) {
+				select {
+				case c.events <- liveEvent{subscription: s, active: r.Active, text: string(b)}:
+				case <-streamCtx.Done():
+				default:
+					cancel()
+				}
+			}}
+			cmd.Stderr = cmd.Stdout
+			_ = cmd.Run()
+		}()
+	}
+	flush := time.NewTicker(150 * time.Millisecond)
+	defer flush.Stop()
+	interval := a.liveSessionInterval
+	if interval == 0 {
+		interval = 30 * time.Second
+	}
+	session := time.NewTicker(interval)
+	defer session.Stop()
+	dirty := false
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-session.C:
+			if a.user(r) != uid {
+				conn.Close(websocket.StatusCode(4401), "session expired")
+				return
+			}
+			go func() {
+				pingCtx, stop := context.WithTimeout(ctx, 5*time.Second)
+				defer stop()
+				if conn.Ping(pingCtx) != nil {
+					cancel()
+				}
+			}()
+		case req := <-input:
+			if old := subs[req.ID]; old != nil {
+				if old.cancel != nil {
+					old.cancel()
+				}
+				delete(subs, req.ID)
+			}
+			if req.Type == "unsubscribe" {
+				continue
+			}
+			if req.Type != "subscribe" || req.ID == "" || len(subs) >= 64 {
+				drop(&req, "invalid subscription")
+				continue
+			}
+			data, records, record, why := a.liveData(ctx, uid, &req)
+			if why != "" {
+				drop(&req, why)
+				continue
+			}
+			s := &req
+			subs[s.ID] = s
+			remember(s, records)
+			m := s.message("snapshot")
+			m["data"] = data
+			if !send(m) {
+				return
+			}
+			delay := 5 * time.Second
+			if s.Topic == "system_update" {
+				delay = 2 * time.Second
+			}
+			s.next = time.Now().Add(delay)
+			b, _ := json.Marshal(data)
+			s.update = string(b)
+			if s.Topic == "container_log" {
+				startStream(s, record)
+			}
+		case <-c.changes:
+			dirty = true
+		case event := <-c.events:
+			if event.id == "system_update" {
+				for _, s := range subs {
+					if s.Topic == "system_update" {
+						s.next = time.Time{}
+					}
+				}
+				continue
+			}
+			for _, s := range subs {
+				if (s.Topic == "release_log" && s.ReleaseID == event.id) || (s.Topic == "container_log" && s == event.subscription && s.active == event.active) {
+					_, _, _, why := a.liveData(ctx, uid, s)
+					if why != "" {
+						drop(s, why)
+						continue
+					}
+					m := s.message("log")
+					m["data"], m["reset"] = event.text, false
+					if !send(m) {
+						return
+					}
+				}
+			}
+		case now := <-flush.C:
+			a.live.mu.Lock()
+			pending := c.pending
+			c.pending = map[string]liveEvent{}
+			a.live.mu.Unlock()
+			for _, event := range pending {
+				if event.deleted {
+					for _, s := range subs {
+						if s.Topic == "project" && s.ProjectID == event.record.ID {
+							m := s.message("delete")
+							m["kind"], m["record_id"] = "project", event.record.ID
+							if !send(m) {
+								return
+							}
+							delete(subs, s.ID)
+						}
+					}
+				}
+			}
+			for _, s := range subs {
+				periodic := s.Topic == "system_update" && now.After(s.next) || s.Topic == "traffic" && now.After(s.next)
+				if !dirty && !periodic {
+					continue
+				}
+				if (s.Topic == "traffic" || s.Topic == "system_update") && !periodic {
+					continue
+				}
+				data, records, r, why := a.liveData(ctx, uid, s)
+				if why != "" {
+					drop(s, why)
+					continue
+				}
+				if periodic {
+					b, _ := json.Marshal(data)
+					if s.Topic == "traffic" || string(b) != s.update {
+						m := s.message("snapshot")
+						m["data"] = data
+						if !send(m) {
+							return
+						}
+						s.update = string(b)
+					}
+					delay := 5 * time.Second
+					if s.Topic == "system_update" {
+						delay = 2 * time.Second
+					}
+					s.next = now.Add(delay)
+					continue
+				}
+				if s.Topic == "container_log" {
+					if r.Active != s.active {
+						startStream(s, r)
+						m := s.message("log")
+						m["reset"] = true
+						m["data"] = data.(map[string]string)["log"]
+						if !send(m) {
+							return
+						}
+					}
+					continue
+				}
+				for id, v := range records {
+					b, _ := json.Marshal(v)
+					if string(b) != string(s.last[id]) {
+						m := s.message("upsert")
+						m["kind"], m["record"] = liveKind(v.Record), v
+						if !send(m) {
+							return
+						}
+					}
+				}
+				for id := range s.last {
+					if _, ok := records[id]; !ok {
+						m := s.message("delete")
+						m["kind"], m["record_id"] = s.kinds[id], id
+						if !send(m) {
+							return
+						}
+					}
+				}
+				remember(s, records)
+			}
+			dirty = false
+		}
+	}
+}
+
+type liveLogOutput struct{ write func([]byte) }
+
+func (w liveLogOutput) Write(b []byte) (int, error) { w.write(b); return len(b), nil }
