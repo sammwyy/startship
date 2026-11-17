@@ -21,7 +21,7 @@ dashboard or internal container port. URLs use the configured router port and
 HTTPS when ACME is enabled; if a gateway maps different external ports, use your
 gateway's public URL instead.
 
-Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/doc/install), Git and Docker Engine required; no C toolchain):
+Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/dl/), Git and Docker Engine required; no C toolchain):
 
 ```sh
 go build -o startshipd .
@@ -51,6 +51,8 @@ privileged-port access.
 
 To skip the first-run screen, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` (uncomment them in `compose.yaml`); they only create the account when no user exists yet. Over the API, `GET /api/setup` returns `{"required":true}` until the first account exists, created with `POST /api/setup {"username":"admin","password":"at-least-eight-characters"}`.
 
+When `STARTSHIP_DATA` is unset, existing `./data` is preserved; otherwise new installations default to `./_data`. The underscore makes Go tooling skip the data directory even when unreadable.
+
 ## HTTPS
 
 Startship gets Let's Encrypt certificates itself:
@@ -69,7 +71,7 @@ Alternatively, terminate TLS at a trusted gateway in front of port 8080 (or 80 w
 
 | Environment | Default |
 |---|---|
-| STARTSHIP_DATA | ./data |
+| STARTSHIP_DATA | ./_data |
 | STARTSHIP_DASHBOARD_ADDR | :8080 |
 | STARTSHIP_HTTP_ADDR | :80 |
 | STARTSHIP_HTTPS_ADDR | :443 |
@@ -103,7 +105,7 @@ GitHub webhook: `POST /api/webhooks/github/{appID}`; set the app's webhook secre
 
 Auto detection order: Dockerfile, Node package.json, Python requirements.txt/pyproject.toml, Go go.mod, Rust Cargo.toml, static index.html. Each app builds serially; different apps build concurrently. Repositories are cloned shallowly at the configured branch. Roots cannot escape the checkout. For complex build workflows supply a Dockerfile.
 
-Generated Node images install dependencies (npm ci with lockfile), run a build script if present, and use npm start. A Procfile `web:` command overrides the launch command for Node and Python. Python installs requirements or pyproject.toml when present, then selects main.py, app.py, or manage.py (Django runserver on 0.0.0.0:$PORT), in that order; without an entrypoint it requests a Procfile instead of guessing. Standalone Python entrypoint files are also detected. Go builds the root main package; Rust expects one executable target. All generated images set PORT; your app must bind on 0.0.0.0. Test commands execute inside a disposable image container with app env. Static apps copy their root without .git (symlinks rejected).
+Generated Node images select the highest matching major from 18, 20, 22, 24 and 26 using `engines.node` major ranges (including `||`, `>=`, `^` and exact majors); absent or unsupported ranges fall back to 22. They install dependencies (`npm ci` with a lockfile, otherwise `npm install`), run a build script if present, and use npm start. A Procfile `web:` command overrides the launch command for Node and Python. Python installs requirements or pyproject.toml when present, then selects main.py, app.py, or manage.py (Django runserver on 0.0.0.0:$PORT), in that order; without an entrypoint it requests a Procfile instead of guessing. Standalone Python entrypoint files are also detected. Go builds the root main package; Rust expects one executable target. All generated images set PORT; your app must bind on 0.0.0.0. Test commands execute inside a disposable image container with app env. Static apps copy their root without .git (symlinks rejected).
 
 Static test commands run in a disposable Alpine image containing the site; no container runs to serve the site. Healthy means the application container accepts TCP connections within 60 seconds. After success, active deployment switches transactionally and the old container is removed. Failed builds preserve the previous deployment. Startup re-inspects running containers; interrupted builds are marked failed rather than replayed. Build checkouts are removed after completion. Deployment metadata, images, logs, and static files are retained; manage disk usage accordingly.
 

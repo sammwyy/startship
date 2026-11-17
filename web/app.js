@@ -10,7 +10,7 @@ function empty(title,text){return '<div class="panel empty"><strong>'+esc(title)
 function field(label,name,value='',type='text',extra=''){return '<label>'+esc(label)+'<input name="'+name+'" type="'+type+'" value="'+esc(value)+'" '+extra+'></label>'}
 function nav(hash){if(location.hash==='#'+hash)render();else location.hash=hash}
 function modal(title,description,fields,submit,onSubmit){
- const d=$('#modal');d.innerHTML='<div class="row"><h2>'+esc(title)+'</h2><button type="button" id="close-modal" aria-label="Close">×</button></div><p class="small">'+esc(description)+'</p><form>'+fields+'<div class="form-error" role="alert"></div><div class="form-actions"><button type="button" id="cancel-modal">Cancel</button><button class="primary" type="submit">'+esc(submit)+'</button></div></form>';
+ const d=$('#modal');d.innerHTML='<div class="row"><h2>'+esc(title)+'</h2><button type="button" id="close-modal" aria-label="Close">×</button></div><p class="small">'+esc(description)+'</p><form><div class="modal-body">'+fields+'<div class="form-error" role="alert"></div></div><div class="form-actions"><button type="button" id="cancel-modal">Cancel</button><button class="primary" type="submit">'+esc(submit)+'</button></div></form>';
  $('#close-modal').onclick=$('#cancel-modal').onclick=()=>d.close();
  d.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=d.querySelector('[type=submit]');button.disabled=true;d.querySelector('.form-error').textContent='';try{if(await onSubmit(new FormData(e.target),e.target)!==false)d.close()}catch(err){d.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}};d.showModal();d.querySelector('form input,form select,form textarea')?.focus();
 }
@@ -60,9 +60,9 @@ async function projectPage(id){
  document.querySelectorAll('.delete-route').forEach(b=>b.onclick=async()=>{try{await api('routes/'+b.dataset.id,null,'DELETE');render();toast('Route deleted')}catch(e){toast(e.message)}});
 }
 async function appPage(id){
- const app=await api('apps/'+id),p=await api('projects/'+app.project_id);workspace=workspaces.find(w=>w.id===p.workspace_id);
+ const app=await api('apps/'+id),p=await api('projects/'+app.project_id),routes=(await api('routes?project_id='+app.project_id)).filter(r=>r.app_id===id);workspace=workspaces.find(w=>w.id===p.workspace_id);
  shell('<a href="#project/'+p.id+'">'+esc(p.name)+'</a> &nbsp; / &nbsp; '+esc(app.name),
- heading('Application',app.name,app.git_url,'<span id="active-status"></span><button class="primary" id="deploy">↑ Deploy now</button>')+
+ heading('Application',app.name,app.git_url,'<span id="active-status"></span>'+(routes.length?'<a class="button" href="'+esc(routes[0].url)+'" target="_blank" rel="noreferrer">Open app ↗</a>':'')+'<button class="primary" id="deploy">↑ Deploy now</button>')+
  '<div class="tabs"><button class="active" data-tab="deployments">Deployments</button><button data-tab="settings">Settings</button><button data-tab="webhook">Git integration</button></div><div id="tab-content"></div>');
  $('#deploy').onclick=async e=>{e.target.disabled=true;try{const d=await api('apps/'+id+'/deploy',{});selectedDeployment=d.id;toast('Deployment queued');await showDeployments()}catch(err){toast(err.message)}finally{e.target.disabled=false}};
  let activeTab='deployments';
@@ -74,7 +74,7 @@ async function appPage(id){
  (latest.length?'<div class="panel"><table><thead><tr><th>Deployment</th><th>Status</th><th>Commit</th><th>Created</th></tr></thead><tbody>'+latest.map(d=>'<tr style="'+(d.id===selectedDeployment?'background:#1a2530':'')+'"><td><button class="select-deploy" data-id="'+d.id+'">↳ '+d.id.slice(0,8)+'</button></td><td>'+badge(d.status)+'</td><td class="muted">'+esc(d.commit?.slice(0,7)||'Pending')+'</td><td class="muted">'+new Date(d.created).toLocaleString()+'</td></tr>').join('')+'</tbody></table></div>':empty('Ready when you are','Deploy your first release to see build output here.'))+
  '<section class="section panel"><div class="log-head"><span>▤ &nbsp; Build output <span class="muted" id="log-id"></span></span><span class="live"><span class="dot"></span>Live · polling every 2s</span></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section>';
  document.querySelectorAll('.select-deploy').forEach(b=>b.onclick=async()=>{selectedDeployment=b.dataset.id;await showDeployments()});
- const current=ds.find(d=>d.status==='running');$('#active-status').innerHTML=badge(current?.status);
+ const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];$('#active-status').innerHTML=badge(current?.status);
  await updateLog();
  if(!follow&&$('#build-log'))$('#build-log').scrollTop=previousScroll;
  }

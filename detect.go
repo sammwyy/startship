@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -86,7 +88,10 @@ func dockerfile(kind string, port int, dir string) (string, error) {
 		if _, e := os.Stat(filepath.Join(dir, "package-lock.json")); e == nil {
 			install = "npm ci"
 		}
-		var p struct{ Scripts map[string]string }
+		var p struct {
+			Scripts map[string]string
+			Engines struct{ Node string }
+		}
 		b, _ := os.ReadFile(filepath.Join(dir, "package.json"))
 		json.Unmarshal(b, &p)
 		build := ""
@@ -97,7 +102,7 @@ func dockerfile(kind string, port int, dir string) (string, error) {
 		if web := procfileWeb(dir); web != "" {
 			cmd = launchCMD(web)
 		}
-		return "FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nRUN " + install + "\n" + build + base + cmd, nil
+		return fmt.Sprintf("FROM node:%d-alpine\n", nodeMajor(p.Engines.Node)) + "WORKDIR /app\nCOPY . .\nRUN " + install + "\n" + build + base + cmd, nil
 	case "python":
 		install := ""
 		if _, e := os.Stat(filepath.Join(dir, "pyproject.toml")); e == nil {
@@ -128,6 +133,49 @@ func dockerfile(kind string, port int, dir string) (string, error) {
 		return "FROM rust:1-slim AS build\nWORKDIR /src\nCOPY . .\nRUN cargo build --release && mkdir /out && find target/release -maxdepth 1 -type f -executable -exec cp {} /out/app \\;\nFROM debian:trixie-slim\nCOPY --from=build /out/app /app\n" + base + "CMD [\"/app\"]\n", nil
 	}
 	return "", fmt.Errorf("unsupported build type %q", kind)
+}
+
+var nodeConstraint = regexp.MustCompile(`^(>=|<=|>|<|\^|~|=)?(\d+)(?:\.(?:x|\*|\d+)(?:\.(?:x|\*|\d+))?)?$`)
+var nodeOperatorSpace = regexp.MustCompile(`(>=|<=|>|<|\^|~|=)\s+`)
+
+func nodeMajor(engine string) int {
+	engine = nodeOperatorSpace.ReplaceAllString(engine, "$1")
+	if strings.TrimSpace(engine) == "" {
+		return 22
+	}
+	for _, major := range []int{26, 24, 22, 20, 18} {
+		for _, alternative := range strings.Split(engine, "||") {
+			parts := strings.Fields(strings.ReplaceAll(strings.TrimSpace(alternative), ",", " "))
+			match := len(parts) > 0
+			for _, part := range parts {
+				if part == "*" || part == "x" {
+					continue
+				}
+				m := nodeConstraint.FindStringSubmatch(part)
+				if m == nil {
+					match = false
+					break
+				}
+				n, _ := strconv.Atoi(m[2])
+				ok := major == n
+				switch m[1] {
+				case ">=":
+					ok = major >= n
+				case ">":
+					ok = major > n
+				case "<=":
+					ok = major <= n
+				case "<":
+					ok = major < n
+				}
+				match = match && ok
+			}
+			if match {
+				return major
+			}
+		}
+	}
+	return 22
 }
 func validateGit(raw string) error {
 	u, e := url.Parse(raw)

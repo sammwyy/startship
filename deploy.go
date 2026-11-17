@@ -22,6 +22,16 @@ type logWriter struct {
 	mu     sync.Mutex
 }
 
+type commandTail struct{ text string }
+
+func (t *commandTail) Write(b []byte) (int, error) {
+	t.text += string(b)
+	if len(t.text) > 2048 {
+		t.text = t.text[len(t.text)-2048:]
+	}
+	return len(b), nil
+}
+
 func (l *logWriter) Write(b []byte) (int, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -38,9 +48,16 @@ func command(dir string, out io.Writer, name string, args ...string) error {
 	c := exec.CommandContext(ctx, name, args...)
 	c.Dir = dir
 	c.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if out == nil {
+		out = io.Discard
+	}
+	tail := &commandTail{}
 	c.Stdout = out
-	c.Stderr = out
-	return c.Run()
+	c.Stderr = io.MultiWriter(out, tail)
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("%s: %w: %s", name, err, strings.Join(strings.Fields(tail.text), " "))
+	}
+	return nil
 }
 func (a *Server) clone(app Record, dir string, out io.Writer) error {
 	raw := app.GitURL
@@ -83,6 +100,22 @@ func (a *Server) enqueue(app Record) (Record, error) {
 		return d, fmt.Errorf("deployment queue full")
 	}
 }
+func checkoutRoot(dir, rootDir string) (string, error) {
+	checkout, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", err
+	}
+	root, err := filepath.EvalSymlinks(filepath.Join(dir, rootDir))
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(checkout, root)
+	if err != nil || !safeRoot(rel) {
+		return "", fmt.Errorf("root directory escapes repository")
+	}
+	return root, nil
+}
+
 func (a *Server) status(id, status string) { a.store.update(id, func(r *Record) { r.Status = status }) }
 func (a *Server) build(appID, id string) {
 	app, e := a.store.get(appID)
@@ -93,12 +126,12 @@ func (a *Server) build(appID, id string) {
 	var container string
 	defer func() {
 		if e != nil {
-			fmt.Fprintf(logger, "Deployment failed: %v\n", e)
 			a.store.update(id, func(r *Record) { r.Status = "failed"; now := time.Now(); r.Finished = &now })
 			if container != "" {
 				command("", logger, "docker", "rm", "-f", container)
 			}
 		}
+		a.logDeploymentResult(logger, app, e)
 	}()
 	a.status(id, "building")
 	dir := filepath.Join(a.data, "builds", id)
@@ -118,18 +151,11 @@ func (a *Server) build(appID, id string) {
 	if e = os.RemoveAll(filepath.Join(dir, ".git")); e != nil {
 		return
 	}
-	root := filepath.Join(dir, app.RootDir)
-	var resolved string
-	resolved, e = filepath.EvalSymlinks(root)
+	var root string
+	root, e = checkoutRoot(dir, app.RootDir)
 	if e != nil {
 		return
 	}
-	rel, er := filepath.Rel(dir, resolved)
-	if er != nil || !safeRoot(rel) {
-		e = fmt.Errorf("root directory escapes repository")
-		return
-	}
-	root = resolved
 	kind := app.BuildType
 	if kind == "auto" {
 		kind = detect(root)
@@ -226,12 +252,31 @@ func (a *Server) build(appID, id string) {
 		}
 		if time.Now().After(deadline) {
 			command("", logger, "docker", "logs", "--tail", "100", container)
+			e = fmt.Errorf("health check timed out after 60s on port %d: %w", app.Port, e)
 			return
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
 	a.store.update(id, func(r *Record) { r.Container = container; r.IP = ip })
 	e = a.activate(app, id)
+}
+
+func (a *Server) logDeploymentResult(out io.Writer, app Record, err error) {
+	if err != nil {
+		fmt.Fprintf(out, "Deployment failed: %v\n", err)
+		return
+	}
+	var hosts []string
+	for _, route := range a.store.list("routes", "") {
+		if route.AppID == app.ID {
+			hosts = append(hosts, route.Host+route.PathPrefix)
+		}
+	}
+	target := app.Name
+	if len(hosts) > 0 {
+		target = strings.Join(hosts, ", ")
+	}
+	fmt.Fprintf(out, "Deployment healthy; now serving %s\n", target)
 }
 func copyStatic(src, dest string) error {
 	return filepath.WalkDir(src, func(p string, d os.DirEntry, e error) error {
