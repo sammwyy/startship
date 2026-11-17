@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 )
@@ -26,11 +29,49 @@ type config struct {
 }
 type cli struct {
 	config
-	path   string
-	in     *bufio.Reader
-	out    io.Writer
-	client *http.Client
-	raw    bool
+	path                   string
+	in                     *bufio.Reader
+	out                    io.Writer
+	client                 *http.Client
+	raw                    bool
+	socketPermissionDenied bool
+}
+
+func (c *cli) transport() (string, *http.Client, error) {
+	server := c.Server
+	if server == "" {
+		path := os.Getenv("STARTSHIP_SOCKET")
+		if path == "" {
+			path = "/run/startship/startship.sock"
+		}
+		if _, err := os.Stat(path); err == nil || errors.Is(err, os.ErrPermission) {
+			conn, err := net.DialTimeout("unix", path, time.Second)
+			if err == nil {
+				conn.Close()
+				server = "unix://" + path
+			} else if errors.Is(err, syscall.EACCES) {
+				c.socketPermissionDenied = true
+			}
+		}
+		if server == "" {
+			server = "http://localhost:8080"
+		}
+	}
+	u, err := url.Parse(server)
+	if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+		return "", nil, errors.New("server must be an http(s) URL or unix:///path without credentials, query or fragment")
+	}
+	if u.Scheme == "unix" && u.Host == "" && filepath.IsAbs(u.Path) {
+		client := *c.client
+		client.Transport = &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", u.Path)
+		}}
+		return "http://startship", &client, nil
+	}
+	if u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") {
+		return "", nil, errors.New("server must be an http(s) URL or unix:///path")
+	}
+	return strings.TrimRight(server, "/"), c.client, nil
 }
 
 func (c *cli) save() error {
@@ -52,16 +93,21 @@ func (c *cli) save() error {
 	return os.Rename(f.Name(), c.path)
 }
 
-func (c *cli) request(method, path string, body any) (any, error) {
-	u, err := url.Parse(c.Server)
-	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-		return nil, errors.New("server must be an http(s) URL without credentials, query or fragment")
+func (c *cli) request(method, path string, body any) (result any, requestErr error) {
+	defer func() {
+		if requestErr != nil && c.socketPermissionDenied {
+			requestErr = fmt.Errorf("%w; run as root or join the startship group (usermod -aG startship $USER), or startship login", requestErr)
+		}
+	}()
+	server, client, err := c.transport()
+	if err != nil {
+		return nil, err
 	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	r, err := http.NewRequest(method, strings.TrimRight(c.Server, "/")+"/api/"+path, bytes.NewReader(b))
+	r, err := http.NewRequest(method, server+"/api/"+path, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
@@ -69,12 +115,11 @@ func (c *cli) request(method, path string, body any) (any, error) {
 	if c.Token != "" {
 		r.AddCookie(&http.Cookie{Name: "startship_session", Value: c.Token})
 	}
-	resp, err := c.client.Do(r)
+	resp, err := client.Do(r)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	var result any
 	err = json.NewDecoder(resp.Body).Decode(&result)
 	if resp.StatusCode >= 300 {
 		if m, ok := result.(map[string]any); ok {
@@ -201,6 +246,9 @@ const usage = `startship [--json] COMMAND
   traffic PROJECT | detect JSON | version
 Names or IDs accepted for workspaces/projects/containers. JSON objects may be
 passed as '-' to read stdin. STARTSHIP_SERVER and STARTSHIP_TOKEN override config.
+Without a saved server, the local admin socket needs no login (root/startship group).
+STARTSHIP_SOCKET overrides /run/startship/startship.sock; unix:///path is also accepted.
+If unavailable, uses http://localhost:8080. Use login URL for remote servers.
 `
 
 func (c *cli) run(args []string) error {
@@ -261,6 +309,9 @@ func (c *cli) run(args []string) error {
 			c.Server = a[0]
 			c.Token = ""
 		}
+		if c.Server == "" {
+			c.Server = "http://localhost:8080"
+		}
 		u, e := c.prompt("Username", false)
 		if e != nil {
 			return e
@@ -273,6 +324,10 @@ func (c *cli) run(args []string) error {
 	case "logout":
 		if e := need(0); e != nil {
 			return e
+		}
+		if c.Server == "" {
+			c.Token = ""
+			return c.save()
 		}
 		method, path = "POST", "logout"
 	case "whoami":
@@ -556,7 +611,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	c := &cli{config: config{Server: "http://localhost:8080"}, path: filepath.Join(dir, "startship", "config.json"), in: bufio.NewReader(os.Stdin), out: os.Stdout, client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	c := &cli{path: filepath.Join(dir, "startship", "config.json"), in: bufio.NewReader(os.Stdin), out: os.Stdout, client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 	b, err := os.ReadFile(c.path)
 	if err == nil {
 		err = json.Unmarshal(b, &c.config)

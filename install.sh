@@ -47,7 +47,7 @@ if [ ! -f /etc/startship/startshipd.env ]; then
     chmod 0600 /etc/startship/startshipd.env
 fi
 install -d -m 0755 /etc/systemd/system
-printf '%s\n' '[Unit]' 'Description=Startship deployment daemon' 'After=network-online.target docker.service' 'Wants=network-online.target' 'Requires=docker.service' '' '[Service]' 'Type=simple' 'User=startship' 'Group=startship' 'SupplementaryGroups=docker' 'EnvironmentFile=/etc/startship/startshipd.env' 'WorkingDirectory=/var/lib/startship' 'ExecStart=/usr/local/bin/startshipd' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startshipd.service
+printf '%s\n' '[Unit]' 'Description=Startship deployment daemon' 'After=network-online.target docker.service' 'Wants=network-online.target' 'Requires=docker.service' '' '[Service]' 'Type=simple' 'User=startship' 'Group=startship' 'RuntimeDirectory=startship' 'RuntimeDirectoryMode=0750' 'SupplementaryGroups=docker' 'EnvironmentFile=/etc/startship/startshipd.env' 'WorkingDirectory=/var/lib/startship' 'ExecStart=/usr/local/bin/startshipd' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startshipd.service
 # The data directory may be overridden on first install.
 sed -i "s|WorkingDirectory=/var/lib/startship|WorkingDirectory=$data|" /etc/systemd/system/startshipd.service
 if [ -d /run/systemd/system ]; then
@@ -57,4 +57,4 @@ if [ -d /run/systemd/system ]; then
 else
     printf '%s\n' 'systemd is not running; service installed but not started. On boot: systemctl enable --now startshipd'
 fi
-printf '%s\n' 'Installed. First-run administrator credentials: journalctl -u startshipd' 'Treat credentials logs as sensitive. Then: startship login http://localhost:8080' 'Complete first-run setup with: startship passwd'
+printf '%s\n' 'Installed. Local CLI works without login as root or for members of the startship group.' 'Add a local user: usermod -aG startship USER (then log in again).' 'Use startship login URL only for remote servers.' 'Dashboard first-run administrator credentials: journalctl -u startshipd' 'Treat credentials logs as sensitive. Complete dashboard setup by signing in and changing the password.'

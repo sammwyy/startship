@@ -9,8 +9,8 @@ On Linux amd64/arm64 with Docker Engine, Git, curl and systemd installed:
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sammwyy/startship/main/install.sh | sudo sh
 journalctl -u startshipd
-startship login http://localhost:8080
-startship passwd
+sudo startship whoami
+sudo startship workspaces list
 ```
 
 The installer verifies release SHA-256 checksums, installs `startship` and
@@ -29,6 +29,24 @@ the unit but reports that it cannot start it. `STARTSHIP_DOWNLOAD_URL` can overr
 the release asset base URL for testing.
 
 ## CLI
+
+On the daemon's machine, root or members of the `startship` group can use the
+CLI **without login** via `/run/startship/startship.sock`. Add a trusted user with
+`sudo usermod -aG startship USER`, then log in again. Socket access grants local
+Platform Admin access as the first (bootstrap) administrator account; protect it
+like root access. Local access works even while dashboard first-run setup is pending.
+Login, logout and account/password updates on the socket are not session operations;
+use an HTTP login for account changes. `startship logout` without a saved server
+simply clears the local configuration.
+
+Transport selection is `STARTSHIP_SERVER`, then the server saved by `login`, then
+an accessible local socket, then `http://localhost:8080`. `STARTSHIP_SOCKET` overrides
+the CLI socket path; an explicit server can also be `unix:///absolute/path.sock`.
+The daemon uses `STARTSHIP_SOCKET`, otherwise `$RUNTIME_DIRECTORY/startship.sock`
+(set by the installed systemd service), otherwise `$STARTSHIP_DATA/startship.sock`.
+For a manually run daemon, point `STARTSHIP_SOCKET` at that same file in the CLI.
+The socket is mode 0660, owned by the daemon's user/group, and removed on shutdown.
+Remote servers continue to use HTTP(S) and `startship login URL` with credentials.
 
 Build locally with `go build -o startship ./cmd/startship`. The CLI talks to the
 daemon's dashboard JSON API; it does not open the database or require Docker on

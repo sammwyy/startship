@@ -96,6 +96,11 @@ func (a *Server) createUserPending(user, pass string, pending bool) (string, err
 	return id, tx.Commit()
 }
 func (a *Server) user(r *http.Request) string {
+	if localRequest(r) {
+		var id string
+		a.store.db.QueryRow("SELECT id FROM users ORDER BY rowid LIMIT 1").Scan(&id)
+		return id
+	}
 	c, e := r.Cookie("startship_session")
 	if e != nil {
 		return ""
@@ -222,6 +227,10 @@ func (a *Server) api() http.Handler {
 			}
 		}
 		p := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if localRequest(r) && len(p) > 1 && (p[1] == "login" || p[1] == "logout" || p[1] == "setup" && r.Method != "GET" || p[1] == "me" && r.Method != "GET") {
+			fail(w, 400, "this operation requires an HTTP login session, not the local admin socket")
+			return
+		}
 		if len(p) < 2 || p[0] != "api" {
 			fail(w, 404, "Startship JSON API")
 			return
@@ -315,7 +324,7 @@ func (a *Server) api() http.Handler {
 			var name string
 			var pending bool
 			a.store.db.QueryRow("SELECT username,must_change_password FROM users WHERE id=?", uid).Scan(&name, &pending)
-			reply(w, 200, map[string]any{"id": uid, "username": name, "must_change_password": pending, "setup_completed": a.setupComplete()})
+			reply(w, 200, map[string]any{"id": uid, "username": name, "must_change_password": pending, "setup_completed": a.setupComplete(), "local_admin": localRequest(r)})
 			return
 		}
 		var pending bool
@@ -323,7 +332,7 @@ func (a *Server) api() http.Handler {
 			fail(w, 500, "account unavailable")
 			return
 		}
-		if pending {
+		if pending && !localRequest(r) {
 			fail(w, 403, "change your password to complete setup before continuing")
 			return
 		}
