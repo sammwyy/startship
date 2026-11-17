@@ -265,6 +265,26 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .poll-status .icon { width: 12px; height: 12px; }
 .workbench .deployment-layout { grid-template-columns: minmax(0, .95fr) minmax(0, 1.3fr); gap: 18px; }
 .release-history { min-width: 0; }
+.project-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin: 6px 0 22px; }
+.project-heading h1 { margin: 5px 0; font-size: 26px; font-weight: 400; letter-spacing: -.9px; }
+.project-heading p { margin: 0; font-size: 11px; color: var(--muted); }
+.project-deployments { display: grid; grid-template-columns: minmax(240px, .7fr) minmax(0, 1.7fr); gap: 18px; align-items: start; }
+.project-log-panel .log { min-height: 420px; height: calc(100dvh - 285px); max-height: none; }
+.project-form { width: 100%; }
+.project-form textarea { min-height: 300px; }
+.release-toolbar { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.container-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.container-row:last-child { border-bottom: 0; }
+.container-copy { flex: 1; min-width: 140px; overflow-wrap: anywhere; }
+.container-copy strong, .container-copy > a { display: block; font-size: 12px; font-weight: 400; }
+.container-copy span { display: block; color: var(--muted); font-size: 10px; margin-top: 6px; }
+.runtime-selector { display: flex; align-items: center; gap: 12px; margin: 0; }
+.runtime-selector select { width: auto; margin: 0; }
+.source-details { display: grid; grid-template-columns: 90px minmax(0, 1fr); font-size: 11px; gap: 18px; padding-top: 14px; }
+.source-details dt { color: var(--muted); }
+.source-details dd { margin: 0; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .project-deployments { grid-template-columns: minmax(0, 1fr); } .project-log-panel .log { height: 400px; min-height: 240px; } }
+@media (max-width: 600px) { .project-heading { margin-bottom: 16px; } .project-heading h1 { font-size: 23px; } .project-heading > .row { width: 100%; justify-content: space-between; } .runtime-selector { max-width: 230px; } .container-row { padding: 14px; gap: 10px; } }
 .release-history .section-head { margin-bottom: 10px; }
 .release-directory { max-height: 460px; overflow-y: auto; }
 .release-entry.select-deploy { display: block; width: 100%; text-align: left; white-space: normal; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }

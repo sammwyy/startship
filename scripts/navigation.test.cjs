@@ -46,13 +46,13 @@ test('workspace shell puts switching and account controls in the sidebar, not a 
  assert.doesNotMatch(html, /primary-nav|app-header/);
 });
 
-test('project sidebar returns to its workspace and separates project Git from app views', () => {
- const f = fixture('#project/p1/git');
- f.run("shell('Project Git','Git',{id:'p1',name:'Storefront'})");
- const html = f.element('#root').innerHTML;
- assert.match(html, /href="#workspace\/w1"[^>]*>.*All projects/);
- assert.match(html, /href="#project\/p1\/git" aria-current="page"/);
- assert.doesNotMatch(html, /Workspace settings/);
+test('project sidebar exposes direct project sections and no app tabs', () => {
+ const f=fixture('#project/p1/source');f.run("shell('Source','Source',{id:'p1',name:'Storefront'})");
+ const html=f.element('#root').innerHTML;
+ assert.match(html,/href="#workspace\/w1"[^>]*>.*All projects/);
+ for(const section of ['deployments','logs','containers','domains','source','environment','settings'])assert.ok(html.includes('href="#project/p1/'+section+'"'));
+ assert.match(html,/href="#project\/p1\/source" aria-current="page"/);
+ assert.doesNotMatch(html,/Applications|App settings|Workspace settings|data-tab/);
 });
 
 test('workspace and account names are escaped in menu markup', () => {
@@ -62,44 +62,39 @@ test('workspace and account names are escaped in menu markup', () => {
  assert.doesNotMatch(html, /<script>|<img>/);
 });
 
-test('project Git is reachable before a project has any apps, including old webhook links', async () => {
- for (const tab of ['git', 'webhook']) {
-  const f = fixture('#project/p1/' + tab);
-  f.context.fakeAPI = path => Promise.resolve(path === 'projects/p1' ? { id: 'p1', name: 'Empty repo', workspace_id: 'w2', branch: 'main' } : []);
-  f.run('api=fakeAPI'); await f.run(`projectPage('p1','','${tab}')`);
-  assert.match(f.element('#root').innerHTML, /Project GitHub webhook/);
-  assert.match(f.element('#root').innerHTML, /href="#workspace\/w2"/);
-  assert.equal(f.stored.get('workspace'), 'w2');
+test('single and multiple containers have the same project-owned deployment controls',async()=>{
+ for(const count of [0,1,3]){
+  const f=fixture('#project/p1');f.context.fakeAPI=async path=>path==='projects/p1'?{id:'p1',name:'Repo',workspace_id:'w2',git_url:'file:///repo'}:path==='containers?project_id=p1'?Array.from({length:count},(_,i)=>({id:'c'+i,name:'web',status:'running'})):[];
+  f.run('api=fakeAPI');await f.run("projectPage('p1')");
+  const html=f.element('#root').innerHTML;
+  assert.match(html,/id="deploy-project"/);assert.match(html,/Project releases/);
+  assert.doesNotMatch(html,/application-switch|app-workbench|Add app|Create application/);
+  assert.match(html,new RegExp(count+' container'));
+  assert.equal(f.stored.get('workspace'),'w2');
  }
 });
-
-test('single-app and multi-app projects mount the same controls without a card switcher', async () => {
- for (const count of [1, 3]) {
-  const f = fixture('#project/p1');
-  f.context.fakeAPI = path => Promise.resolve(path === 'projects/p1' ? { id: 'p1', name: 'Repo', workspace_id: 'w1' } : path === 'apps?project_id=p1' ? Array.from({ length: count }, (_, i) => ({ id: 'a' + i })) : []);
-  f.run('api=fakeAPI;mountApplication=async(p,a)=>{globalThis.mounted=a.id}');
-  await f.run("projectPage('p1')");
-  assert.match(f.element('#root').innerHTML, /id="app-workbench"/);
-  assert.doesNotMatch(f.element('#root').innerHTML, /service-switcher/);
-  assert.equal(f.context.mounted, 'a0');
+test('source and old Git links work before detection without app setup',async()=>{
+ for(const section of ['source','git','webhook']){
+  const f=fixture('#project/p1/'+section);f.context.fakeAPI=async path=>path==='projects/p1'?{id:'p1',name:'Repo',workspace_id:'w1'}:[];
+  f.run('api=fakeAPI');await f.run("projectPage('p1','"+section+"')");
+  const html=f.element('#root').innerHTML;assert.match(html,/GitHub webhook/);assert.match(html,/Project source/);assert.doesNotMatch(html,/Create application/);
  }
 });
-
-test('application tabs are deep links and switching apps preserves the current tab', async () => {
- const f = fixture('#app/a1/settings');
- f.run("globalThis.p={id:'p1',git_url:'https://example.com/repo'};globalThis.a={id:'a1',name:'Web',root_dir:'web',port:3000,build_type:'node'}");
- await f.run("mountApplication(p,a,[a,{id:'a2',name:'API'}],[],'settings',[])");
- const html = f.element('#app-workbench').innerHTML;
- assert.match(html, /aria-label="Application"/);
- assert.match(html, /href="#app\/a1\/domains"/);
- assert.doesNotMatch(html, /Project Git/);
- assert.equal(f.tabs[2].attributes['aria-current'], 'page');
- f.element('#application-switch').onchange({ target: { value: 'a2' } });
- assert.equal(f.context.location.hash, 'app/a2/settings');
- f.tabs[1].onclick({ preventDefault() {} });
- assert.equal(f.context.location.hash, '#app/a1/domains');
- assert.equal(f.tabs[1].attributes['aria-current'], 'page');
- assert.equal(f.tabs[2].attributes['aria-current'], undefined);
+test('domain target selection only appears when a project has multiple containers',()=>{
+ const f=fixture();f.run('modal=(...args)=>{globalThis.dialog=args};addRoute({id:"p1"},[{id:"c1",name:"web",port:8080}])');
+ assert.doesNotMatch(f.context.dialog[2],/<select name="container_id"/);assert.match(f.context.dialog[2],/type="hidden" name="container_id"/);
+ f.run('addRoute({id:"p1"},[{id:"c1",name:"web",port:8080},{id:"c2",name:"api",port:3000}])');
+ assert.match(f.context.dialog[2],/<select name="container_id"/);assert.doesNotMatch(f.context.dialog[2],/Application/);
+});
+test('project creation never creates separately configured apps',async()=>{
+ const f=fixture();const calls=[];f.context.fakeAPI=async(...args)=>{calls.push(args);return{id:'p1'}};
+ f.run('api=fakeAPI;modal=(...args)=>{globalThis.dialog=args};toast=()=>{};createProject()');
+ assert.doesNotMatch(f.context.dialog[2],/name="layout"|application/);
+ await f.context.dialog[4](new Map([['name','Test'],['git_url','file:///repo'],['branch','main']]));
+ assert.equal(calls.length,1);assert.equal(calls[0][0],'projects');assert.equal(f.context.location.hash,'project/p1');
+});
+test('shared environment parsing preserves values and rejects invalid names',()=>{
+ const f=fixture();assert.equal(f.run('environmentData("TOKEN=a=b\\n#comment").TOKEN'),'a=b');assert.throws(()=>f.run('environmentData("BAD NAME=value")'),/KEY=VALUE/);
 });
 
 test('account settings confirms passwords, saves only requested credentials, and refreshes the account', async () => {
@@ -150,33 +145,15 @@ test('credential rotation ignores stale polling authorization errors without ign
  assert.equal(f.run('user'), null); assert.equal(f.context.location.hash, 'login');
 });
 
-test('deployment polling refreshes all project running counts and keeps releases in compact entries', async () => {
- const f = fixture('#app/a1/deployments');
- f.context.setInterval = callback => { f.context.poll = callback; return 1; };
- f.context.liveApps = [{ id: 'a1', name: 'Web' }, { id: 'a2', name: 'API' }];
- f.context.liveDeployments = [{ id: 'release-1', app_id: 'a1', status: 'building', created: '2026-11-17T09:00:00Z', commit: '<img>' }];
- const requests = [];
- f.context.fakeAPI = async path => {
-  requests.push(path);
-  if (path === 'apps?project_id=p1') return f.context.liveApps;
-  if (path === 'deployments?logs=false') return f.context.liveDeployments;
-  return { id: 'release-1', log: 'Build output', status: 'building' };
- };
- f.run('api=fakeAPI');
- await f.run("mountApplication({id:'p1',git_url:'file:///repo'},liveApps[0],liveApps,[],'deployments',liveDeployments)");
- assert.equal(f.element('#project-summary').textContent, '2 apps · 0 running · 0 routes');
- const html = f.element('#tab-content').innerHTML;
- assert.match(html, /class="release-entry select-deploy/);
- assert.match(html, /aria-pressed="true"/);
- assert.match(html, /&lt;img&gt;/);
- assert.doesNotMatch(html, /<table>/);
- f.context.liveApps = [{ id: 'a1', active_deployment: 'release-1' }, { id: 'a2', active_deployment: 'release-2' }];
- f.context.liveDeployments = [{ id: 'release-1', app_id: 'a1', status: 'running' }, { id: 'release-2', app_id: 'a2', status: 'running' }];
- await f.context.poll();
- assert.equal(f.element('#project-summary').textContent, '2 apps · 2 running · 0 routes');
- assert.doesNotMatch(f.element('#tab-content').innerHTML, /data-id="release-2"/);
- f.context.liveDeployments[1].status = 'stopped';
- await f.context.poll();
- assert.equal(f.element('#project-summary').textContent, '2 apps · 1 running · 0 routes');
- assert.ok(requests.filter(path => path === 'deployments?logs=false').length >= 3);
+test('project polling updates running counts and grouped release entries without tables',async()=>{
+ const f=fixture('#project/p1');f.context.setInterval=callback=>{f.context.poll=callback;return 1};
+ f.context.liveContainers=[{id:'c1',name:'web'},{id:'c2',name:'api'}];
+ f.context.liveReleases=[{id:'release1',project_id:'p1',status:'building',created:'2026-11-17T09:00:00Z',commit:'<img>',container_releases:['d1','d2']}];
+ const calls=[];f.context.fakeAPI=async path=>{calls.push(path);if(path==='projects/p1')return{id:'p1',name:'Repo',workspace_id:'w1',git_url:'file:///repo'};if(path==='containers?project_id=p1')return f.context.liveContainers;if(path.startsWith('releases?'))return f.context.liveReleases;if(path==='releases/release1')return{...f.context.liveReleases[0],log:'output'};return[]};
+ f.run('api=fakeAPI');await f.run("projectPage('p1')");
+ let html=f.element('#root').innerHTML;assert.match(html,/class="release-entry select-deploy/);assert.match(html,/&lt;img&gt;/);assert.doesNotMatch(html,/<table>/);
+ f.context.liveContainers=[{id:'c1',status:'running',active_deployment:'d1'},{id:'c2',status:'running',active_deployment:'d2'}];f.context.liveReleases[0].status='running';
+ await f.context.poll();assert.equal(f.element('#project-summary').textContent,'2 containers · 2 running · 0 domain routes');
+ f.context.liveContainers[1].status='failed';await f.context.poll();assert.equal(f.element('#project-summary').textContent,'2 containers · 1 running · 0 domain routes');
+ assert.ok(calls.filter(path=>path==='releases?project_id=p1&logs=false').length>=3);
 });

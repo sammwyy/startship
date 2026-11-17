@@ -56,13 +56,13 @@ function modal(title,description,fields,submit,onSubmit){
 }
 function shell(crumb,content,project=null){
  const workspaceURL='#workspace/'+esc(workspace?.id||''),settings=location.hash.endsWith('/settings')&&!project;
- const projectGit=project&&/\/(git|webhook)$/.test(location.hash);
+ const projectSection=location.hash.split('/')[2]||'deployments';
  const sidebarLink=(href,shape,label,active)=>'<a href="'+href+'" '+(active?'aria-current="page"':'')+'>'+icon(shape)+'<span>'+esc(label)+'</span></a>';
  const sidebar='<aside class="sidebar" aria-label="Dashboard sidebar"><div class="sidebar-top"><a href="'+workspaceURL+'" class="brand">'+brand()+'</a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">'+icon('close')+'</button></div>'+
   '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false"><span class="workspace-mark">'+icon('layers')+'</span><span class="selector-copy"><small>Workspace</small><strong>'+esc(workspace?.name||'Choose workspace')+'</strong></span>'+icon('chevron')+'</button>'+
   '<div id="workspace-menu" class="sidebar-menu" popover><div class="menu-caption">Switch workspace</div><div class="workspace-options">'+workspaces.map(w=>'<a href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'><span class="workspace-initial">'+esc(w.name[0]?.toUpperCase())+'</span><span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot" aria-label="Current workspace"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div><button id="create-workspace">'+icon('plus')+'Create workspace</button><a href="#workspaces">'+icon('layers')+'Manage workspaces</a></div>'+
   '<nav class="sidebar-nav" aria-label="'+(project?'Project':'Workspace')+' navigation">'+(project?
-   sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-caption">Project</div><div class="sidebar-project" title="'+esc(project.name)+'">'+esc(project.name)+'</div>'+sidebarLink('#project/'+esc(project.id),'box','Applications',!projectGit)+sidebarLink('#project/'+esc(project.id)+'/git','branch','Project Git',projectGit):
+   sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-caption">Project</div><div class="sidebar-project" title="'+esc(project.name)+'">'+esc(project.name)+'</div>'+projectSections.map(([key,label,shape])=>sidebarLink('#project/'+esc(project.id)+'/'+key,shape,label,key===projectSection)).join(''):
    '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav>'+
   '<div class="sidebar-bottom"><span class="sidebar-instance"><span class="dot"></span>Self-hosted instance</span><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-copy"><strong>'+esc(user.username)+'</strong><small>Personal account</small></span>'+icon('chevron')+'</button></div>'+
   '<div id="account-menu" class="sidebar-menu" popover><div class="menu-caption">Signed in as <strong>'+esc(user.username)+'</strong></div><button id="account-profile">'+icon('settings')+'Account settings</button>'+themeButton()+'<div class="menu-divider"></div><button id="logout">'+icon('logout')+'Sign out</button></div></aside>';
@@ -115,166 +115,136 @@ function auth(setup){
  bindTheme();
  $('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const v=Object.fromEntries(new FormData(e.target));try{if(setup)await api('setup',v);await api('login',v);user=await api('me');nav('workspaces')}catch(err){$('.form-error').textContent=err.message}finally{button.disabled=false}};
 }
-function createWorkspace(){modal('Create workspace','A home for your projects and applications.',field('Workspace name','name','','text','required'),'Create workspace',async f=>{const w=await api('workspaces',Object.fromEntries(f));nav('workspace/'+w.id);toast('Workspace created')})}
+function createWorkspace(){modal('Create workspace','A home for your projects.',field('Workspace name','name','','text','required'),'Create workspace',async f=>{const w=await api('workspaces',Object.fromEntries(f));nav('workspace/'+w.id);toast('Workspace created')})}
 function sourceFields(project={}){
  return field('Project repository URL','git_url',project.git_url||'','url','required placeholder="https://github.com/you/project"')+field('Shared branch','branch',project.branch||'main','text','required')+field('Repository token (leave blank to keep existing)','git_token','','password','autocomplete="off"');
 }
 function sourceData(f){const v={git_url:f.get('git_url'),branch:f.get('branch')};if(f.get('git_token'))v.git_token=f.get('git_token');return v}
 function editProjectSource(project){
- modal('Project source','One repository, branch, and credential set for this project. Changes apply to every app on its next deployment.',(project.source_conflict?'<div class="note">The old configuration contains different app sources. Choose the single repository this project should use. No apps or running deployments will be deleted.</div>':'')+sourceFields(project),'Save project source',async f=>{await api('projects/'+project.id,sourceData(f),'PATCH');await render();toast('Project source saved')});
+ modal('Project source','One repository, branch, and credential set for this project. Changes apply to the whole project on its next deployment.',(project.source_conflict?'<div class="note">Legacy containers used different sources. Choose the single repository for this project. Running containers stay online until the next healthy deployment.</div>':'')+sourceFields(project),'Save project source',async f=>{await api('projects/'+project.id,sourceData(f),'PATCH');await render();toast('Project source saved')});
 }
 function createProject(){
- modal('Create project','Connect one repository. A single-app project builds its root; a monorepo can define apps for frontend, backend, or daemons in that same repository.',field('Project name','name','','text','required placeholder="My Website"')+sourceFields()+'<label>Repository layout<select name="layout"><option value="single">Single application — repository root</option><option value="monorepo">Monorepo — choose app folders</option></select></label>','Create project',async(f,form)=>{
-  const p=form._project||await api('projects',{name:f.get('name'),workspace_id:workspace.id,...sourceData(f)});form._project=p;
-  if(f.get('layout')==='single'){const app=await api('apps',{project_id:p.id,name:p.name,root_dir:'.',build_type:'auto',port:8080});nav('app/'+app.id)}else nav('project/'+p.id);
-  toast('Project created');
+ modal('Create project','One repository, one deployment. Startship detects the containers your project needs.',field('Project name','name','','text','required placeholder="My Website"')+sourceFields(),'Create project',async f=>{
+  const p=await api('projects',{name:f.get('name'),workspace_id:workspace.id,...sourceData(f)});nav('project/'+p.id);toast('Project created');
  });
 }
 const types=['auto','dockerfile','static','node','python','go','rust'];
-function appFields(app={},wide=false){
- const identity=field('Application name','name',app.name||'','text','required')+field('Root directory in project repository','root_dir',app.root_dir||'.','text','required placeholder="frontend"');
- const build='<div class="split"><label>Build type<select name="build_type">'+types.map(t=>'<option '+((app.build_type||'auto')===t?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'+field('Internal port','port',app.port||8080,'number','required min="1" max="65535"')+'</div>'+field('Test command (optional)','test_command',app.test_command||'','text','placeholder="npm test"');
- const environment='<label>Environment variables<textarea name="env" placeholder="NODE_ENV=production&#10;API_KEY=your-value">'+esc(Object.entries(app.env||{}).map(([k,v])=>k+'='+v).join('\n'))+'</textarea></label>';
- const automatic='<label class="inline-check"><input type="checkbox" name="auto_deploy" '+(app.auto_deploy?'checked':'')+'>Deploy this app on project pushes</label>';
- return wide?'<div class="settings-columns"><section class="panel panel-pad"><h3>Build & runtime</h3>'+identity+build+'</section><section class="panel panel-pad"><h3>Environment</h3>'+environment+automatic+'<p class="small muted">Use one KEY=VALUE per line. Repository, branch, credentials, and webhook are managed once in Project source.</p></section></div>':identity+build+environment+automatic;
+const projectSections=[['deployments','Deployments','activity'],['logs','Logs','terminal'],['containers','Containers','box'],['domains','Domains','globe'],['source','Source','branch'],['environment','Environment','lock'],['settings','Settings','settings']];
+const busyRelease=d=>d&&['queued','building','testing','starting'].includes(d.status);
+function environmentData(value){
+ const env={};for(const line of value.split('\n')){if(!line.trim()||line.trim().startsWith('#'))continue;const i=line.indexOf('=');if(i<1||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0,i).trim()))throw Error('Use KEY=VALUE, one variable per line.');env[line.slice(0,i).trim()]=line.slice(i+1)}return env;
 }
-function appData(f){const v=Object.fromEntries(f);v.port=Number(v.port);v.auto_deploy=f.has('auto_deploy');v.env={};for(const line of f.get('env').split('\n')){if(!line.trim()||line.trim().startsWith('#'))continue;const i=line.indexOf('=');if(i<1||!/^[A-Za-z_][A-Za-z0-9_]*$/.test(line.slice(0,i).trim()))throw Error('Environment variables must use KEY=VALUE, one per line.');v.env[line.slice(0,i).trim()]=line.slice(i+1)}return v}
-function addApp(project){
- if(!project.git_url||project.source_conflict){editProjectSource(project);return}
- modal('Add app from project repository','Choose an app or daemon inside the project’s shared repository, not a different source.','<p class="note">'+esc(project.git_url)+' · '+esc(project.branch)+'</p>'+appFields(),'Create application',async f=>{const a=await api('apps',{...appData(f),project_id:project.id});nav('app/'+a.id);toast('Application created')});
+function projectSummary(containers,routes){return containers.length+' container'+(containers.length===1?'':'s')+' · '+containers.filter(c=>c.status==='running').length+' running · '+routes.length+' domain route'+(routes.length===1?'':'s')}
+function addRoute(project,containers,route={}){
+ if(!containers.length){toast('Deploy the project to detect its containers first');return}
+ modal(route.id?'Edit domain':'Connect domain','Hostnames and path prefixes route to the project. Longer prefixes take priority.',field('Hostname','host',route.host||'','text','required placeholder="example.com"')+field('Path prefix','path_prefix',route.path_prefix||'/','text','required')+(containers.length>1?'<label>Target container<select name="container_id">'+containers.map(c=>'<option value="'+esc(c.id)+'" '+((route.container_id||route.app_id)===c.id?'selected':'')+'>'+esc(c.name)+' · :'+c.port+'</option>').join('')+'</select></label>':'<input type="hidden" name="container_id" value="'+esc(containers[0].id)+'"><p class="small muted">Target: '+esc(containers[0].name)+'</p>')+'<label class="inline-check"><input type="checkbox" name="strip_prefix" '+(route.strip_prefix?'checked':'')+'>Strip path prefix before forwarding</label><p class="note">Point this hostname’s DNS A record to your server’s public IP.</p>',route.id?'Save domain':'Connect domain',async f=>{await api('routes'+(route.id?'/'+route.id:''),{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')},route.id?'PATCH':'POST');await render();toast('Domain saved')});
 }
-function detectApps(project,apps=[]){
- if(!project.git_url||project.source_conflict){editProjectSource(project);return}
- modal('Discover apps in this repository','Scan the project’s repository root and first-level folders for frontend, backend, or daemon apps.','<p class="note">'+esc(project.git_url)+' · '+esc(project.branch)+'</p><div id="candidates"></div>','Scan project repository',async(f,form)=>{
-  if(!form.dataset.scanned){
-   const found=await api('detect',{project_id:project.id});if(!found.length)throw Error('No supported applications found.');
-   $('#candidates').innerHTML='<h3>Choose apps to create</h3>'+found.map((c,i)=>{const exists=apps.some(a=>a.root_dir===c.root_dir);return '<label class="candidate"><input type="checkbox" name="candidate" value="'+i+'" '+(exists?'disabled':'checked')+'><span>Root '+rootLabel(c.root_dir)+' <span class="badge">'+esc(c.build_type)+'</span><br><span class="muted small">'+(exists?'Already added':'Port '+c.port)+'</span></span></label>'}).join('');
-   form._candidates=found;form.dataset.scanned='yes';form.querySelector('[type=submit]').textContent='Create selected apps';return false;
-  }
-  const chosen=f.getAll('candidate');if(!chosen.length)throw Error('Select at least one application.');
-  for(const i of chosen){const c=form._candidates[Number(i)];await api('apps',{project_id:project.id,name:c.root_dir==='.'?project.name:c.root_dir,...c})}
-  toast(chosen.length+' applications created');render();
- });
+function sourceContent(project){
+ const webhook=project.webhook_secret?location.origin+'/api/webhooks/github/'+project.id:'';
+ return '<div class="integration-layout"><section class="panel panel-pad"><div class="section-head"><h2>Project source</h2><button id="edit-project-source">Edit source</button></div><p class="small muted">A single repository and branch for every container.</p><dl class="source-details"><dt>Repository</dt><dd>'+esc(project.git_url||'Not connected')+'</dd><dt>Branch</dt><dd>'+esc(project.branch||'main')+'</dd><dt>Credentials</dt><dd>'+(project.has_git_token?'Token configured':'No token')+'</dd></dl></section><section class="panel panel-pad"><h2>GitHub webhook</h2><p class="small muted">A signed push queues one project deployment when automatic deployment is enabled in Settings.</p>'+field('Payload URL','webhook_url',webhook,'text','readonly')+field('Webhook secret','webhook_secret',project.webhook_secret||'Connect a source first','password','readonly')+'<button id="reveal-webhook" type="button">Show secret</button><p class="small muted">Content type: application/json · Event: push</p></section></div>';
 }
-function addRoute(project,apps,selectedId){if(!apps.length){toast('Create an application first');return}modal('Connect a domain','Direct traffic to an app using a hostname and path prefix.',field('Hostname','host','','text','required placeholder="example.com"')+field('Path prefix','path_prefix','/','text','required')+'<label>Application<select name="app_id">'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===selectedId?'selected':'')+'>'+esc(a.name)+' · :'+a.port+'</option>').join('')+'</select></label><label><input type="checkbox" name="strip_prefix">Strip prefix before forwarding</label><div class="note">DNS: point the A record of this hostname to this server’s public IP.</div>','Connect domain',async f=>{await api('routes',{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')});toast('Domain connected');render()})}
-const applicationTabs=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','App settings']];
-function projectGitContent(project){
- const url=location.origin+'/api/webhooks/github/'+project.id;
- return '<div class="integration-layout"><div class="panel panel-pad"><h2>Project GitHub webhook</h2><p class="small">One source for <strong>'+esc(project.name)+'</strong>: '+esc(project.git_url||'Not configured')+' · '+esc(project.branch)+'. Pushes deploy the apps with Auto-deploy enabled.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(project.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect the project repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy for the apps that should rebuild on project pushes.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
+function projectSettings(project){
+ return '<form id="project-settings" class="panel panel-pad project-form"><div class="section-head"><h2>Project settings</h2><span class="small muted">Shared by every container</span></div><div class="split">'+field('Project name','name',project.name,'text','required')+field('Repository root','root_dir',project.root_dir||'.','text','required')+'</div><div class="split"><label>Build strategy<select name="build_type">'+types.map(t=>'<option '+((project.build_type||'auto')===t?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'+field('HTTP port override (0 = detect)','port',project.port||0,'number','min="0" max="65535" required')+'</div>'+field('Test command (optional, run in each detected container)','test_command',project.test_command||'')+'<label class="inline-check"><input type="checkbox" name="auto_deploy" '+(project.auto_deploy?'checked':'')+'>Deploy project on source pushes</label><p class="note">Auto detects one server at the repository root, or multiple server folders in a monorepo. A manual build strategy treats the selected root as one container. Changes apply together on the next deployment.</p><div class="form-error" role="alert"></div><button class="primary">Save project settings</button></form>';
 }
-function deploymentStatus(app,deployments){return deployments.find(d=>d.id===app.active_deployment)?.status}
-function projectSummary(apps,routes,deployments){return apps.length+' app'+(apps.length===1?'':'s')+' · '+apps.filter(a=>deploymentStatus(a,deployments)==='running').length+' running · '+routes.length+' route'+(routes.length===1?'':'s')}
-async function projectPage(id,selectedId='',initialTab='deployments'){
+function environmentContent(project){
+ return '<form id="project-environment" class="panel panel-pad project-form"><div class="section-head"><h2>Environment</h2><span class="small muted">Project-wide configuration</span></div><p class="small muted">Applied to every container on the next deployment. PORT is assigned automatically unless overridden.</p><label>Variables<textarea name="env" rows="14" spellcheck="false" placeholder="NODE_ENV=production">'+esc(Object.entries(project.env||{}).map(([k,v])=>k+'='+v).join('\n'))+'</textarea></label><div class="form-error" role="alert"></div><button class="primary">Save environment</button></form>';
+}
+function releaseEntries(releases,selected){
+ return releases.map(d=>'<button class="release-entry select-deploy '+(d.id===selected?'selected':'')+'" data-release="'+esc(d.id)+'" aria-pressed="'+(d.id===selected)+'"><span class="release-main"><span class="release-id">'+icon('branch')+esc(d.commit?.slice(0,7)||d.id.slice(0,7))+'</span>'+badge(d.status)+'</span><span class="release-meta"><time>'+esc(new Date(d.created).toLocaleString())+'</time><span>'+((d.container_releases||[]).length)+' containers'+(d.redeploy_of?' · redeployed':'')+'</span></span></button>').join('')||'<div class="panel-pad muted small">No project deployments yet.</div>';
+}
+function logPanel(runtime=false){
+ return '<section class="panel log-panel project-log-panel"><div class="log-head"><div class="log-title">'+icon('terminal')+'<strong id="log-heading">'+(runtime?'Live logs':'Build output')+'</strong><span id="log-state"></span></div><div class="log-actions"><label class="inline-check"><input id="follow-log" type="checkbox" checked>Follow</label><button class="icon-button" id="copy-log" aria-label="Copy logs">'+icon('copy')+'</button></div></div><pre class="log" id="project-log" aria-label="Project logs">Select a release or deploy your project.</pre></section>';
+}
+function containerEntries(project,containers){
+ return containers.map(c=>'<div class="container-row"><span class="card-icon">'+icon('box')+'</span><div class="container-copy"><strong>'+esc(c.name)+'</strong><span>'+rootLabel(c.root_dir)+' · '+esc(c.build_type)+' · :'+esc(c.port)+'</span></div>'+badge(c.status)+'<a class="button" href="#project/'+esc(project.id)+'/logs/'+esc(c.id)+'">'+icon('terminal')+'Logs</a></div>').join('')||'<p class="panel-pad small muted">No containers yet. Deploy the project; Startship detects and launches them automatically.</p>';
+}
+function domainEntries(project,containers,routes){
+ return routes.map(r=>'<div class="container-row"><span class="card-icon">'+icon('globe')+'</span><div class="container-copy"><a href="'+esc(r.url||'')+'" target="_blank" rel="noopener noreferrer">'+esc(r.host)+esc(r.path_prefix)+'</a><span>'+esc(containers.find(c=>c.id===(r.container_id||r.app_id))?.name||'Container unavailable')+(r.strip_prefix?' · strips prefix':'')+'</span></div><button data-edit-route="'+esc(r.id)+'" aria-label="Edit '+esc(r.host)+'">Edit</button><button data-delete-route="'+esc(r.id)+'" aria-label="Delete '+esc(r.host)+'">'+icon('close')+'</button></div>').join('')||'<p class="panel-pad small muted">No domains connected. Deploy the project, then point a hostname to it.</p>';
+}
+async function projectPage(id,section='deployments',runtimeID=''){
  const version=viewVersion;
- const [p,apps,routes,deployments]=await Promise.all([api('projects/'+id),api('apps?project_id='+id),api('routes?project_id='+id),api('deployments?logs=false')]);
+ if(['git','webhook'].includes(section))section='source';
+ if(!projectSections.some(([key])=>key===section))section='deployments';
+ let [project,containers,releases,routes]=await Promise.all([api('projects/'+id),api('containers?project_id='+id),api('releases?project_id='+id+'&logs=false'),api('routes?project_id='+id)]);
  if(version!==viewVersion)return;
- workspace=workspaces.find(w=>w.id===p.workspace_id);
- localStorage.setItem('workspace',p.workspace_id);
- if(initialTab==='git'||initialTab==='webhook'){
-  shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; <a href="#project/'+esc(p.id)+'">'+esc(p.name)+'</a> &nbsp; / &nbsp; Project Git',
-   heading('Project · '+esc(p.name),'Project Git','One repository and webhook, shared by every application.','<button id="edit-project-source">'+icon('branch')+'Edit project source</button>')+projectGitContent(p),p);
-  $('#edit-project-source').onclick=()=>editProjectSource(p);
-  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}});
-  return;
+ workspace=workspaces.find(w=>w.id===project.workspace_id)||workspace;if(workspace)localStorage.setItem('workspace',workspace.id);
+ const sort=()=>releases.sort((a,b)=>new Date(b.created)-new Date(a.created));sort();
+ if(project.active_deployment)containers=containers.filter(c=>c.active_deployment||(busyRelease(releases[0])&&c.release_id===releases[0].id));
+ let selected=releases[0]?.id||'',followLatest=true,logVersion=0;
+ const title=projectSections.find(([key])=>key===section)[1];
+ const warning=(!releases.length&&containers.some(c=>c.active_deployment)?'<p class="note">Existing containers remain online. Deploy the project to start its unified release history.</p>':'')+(project.config_conflict?'<div class="note">Legacy containers used different settings. Review <a href="#project/'+esc(id)+'/environment">Environment</a> and <a href="#project/'+esc(id)+'/settings">Settings</a>, then confirm one shared configuration. Existing deployments stay online.<button id="confirm-project-config">Confirm shared configuration</button></div>':'')+(project.source_conflict?'<div class="note">Choose one <a href="#project/'+esc(id)+'/source">project source</a> before deploying.</div>':'');
+ let content='';
+ if(section==='deployments')content='<div class="project-deployments"><section class="release-history"><div class="section-head"><h2>Project releases</h2><span class="count" id="release-count">'+releases.length+'</span></div><div class="panel release-directory" id="project-releases">'+releaseEntries(releases,selected)+'</div><div class="release-toolbar"><label class="inline-check"><input id="no-cache" type="checkbox">Build without cache</label><button id="redeploy-release">Redeploy selected</button></div></section>'+logPanel()+'</div>';
+ if(section==='logs')content='<div class="section-head"><h2>Logs</h2><label class="runtime-selector">Log source<select id="log-source"><option value="">Project build output</option>'+containers.map(c=>'<option value="'+esc(c.id)+'" '+(runtimeID===c.id?'selected':'')+'>'+esc(c.name)+' · runtime</option>').join('')+'</select></label></div>'+logPanel(true);
+ if(section==='containers')content='<div class="section-head"><h2>Detected containers</h2><span class="small muted">Managed together by the project</span></div><div class="panel" id="project-containers">'+containerEntries(project,containers)+'</div>';
+ if(section==='domains')content='<div class="section-head"><h2>Domains</h2><button class="primary" id="add-project-domain">'+icon('plus')+'Connect domain</button></div><div class="panel">'+domainEntries(project,containers,routes)+'</div><p class="note">One container is the default target. With multiple containers, choose a target for each hostname or path. Longer matching path prefixes take priority.</p>';
+ if(section==='source')content=sourceContent(project);
+ if(section==='environment')content=environmentContent(project);
+ if(section==='settings')content=projectSettings(project);
+ shell('<a href="#workspace/'+esc(workspace?.id)+'">'+esc(workspace?.name)+'</a> &nbsp; / &nbsp; '+esc(project.name)+' &nbsp; / &nbsp; '+title,
+  '<div class="project-heading"><div><div class="eyebrow">Project / '+esc(title)+'</div><h1>'+esc(project.name)+'</h1><p id="project-summary" aria-live="polite">'+projectSummary(containers,routes)+'</p></div><div class="row"><span id="project-state" aria-label="Latest deployment">'+badge(releases[0]?.status)+'</span><button class="primary" id="deploy-project">'+icon('plus')+'Deploy project</button></div></div>'+warning+content,project);
+ const bindForm=(selector,data)=>{const form=$(selector);if(!form)return;form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{await api('projects/'+id,data(new FormData(form)),'PATCH');await render();toast('Project saved; changes apply on next deployment')}catch(err){form.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}}};
+ if(section==='settings')bindForm('#project-settings',f=>({name:f.get('name'),root_dir:f.get('root_dir'),build_type:f.get('build_type'),port:Number(f.get('port')),test_command:f.get('test_command'),auto_deploy:f.has('auto_deploy')}));
+ if(section==='environment')bindForm('#project-environment',f=>({env:environmentData(f.get('env'))}));
+ if(section==='source'){$('#edit-project-source').onclick=()=>editProjectSource(project);$('#reveal-webhook').onclick=()=>{const input=$('[name=webhook_secret]');input.type=input.type==='password'?'text':'password';$('#reveal-webhook').textContent=input.type==='password'?'Show secret':'Hide secret'};}
+ if(project.config_conflict)$('#confirm-project-config').onclick=async()=>{try{await api('projects/'+id,{config_confirmed:true},'PATCH');await render();toast('Project configuration confirmed')}catch(e){toast(e.message)}};
+ if(section==='domains'){
+  $('#add-project-domain').onclick=()=>addRoute(project,containers);
+  document.querySelectorAll('[data-edit-route]').forEach(b=>b.onclick=()=>addRoute(project,containers,routes.find(r=>r.id===b.dataset.editRoute)));
+  document.querySelectorAll('[data-delete-route]').forEach(b=>b.onclick=async()=>{if(!confirm('Disconnect this domain route?'))return;try{await api('routes/'+b.dataset.deleteRoute,null,'DELETE');await render()}catch(e){toast(e.message)}});
  }
- const app=apps.find(a=>a.id===selectedId)||apps[0];
- shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; '+esc(p.name),
-  heading('Project',p.name,projectSummary(apps,routes,deployments),'<button id="edit-project-source">'+icon('branch')+'Project source</button><button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>','project-summary')+
-  '<div class="project-source-summary"><span>'+icon('branch')+'<strong>Project source</strong> '+esc(p.git_url||'Not configured')+'</span><span>'+esc(p.branch||'')+'</span></div>'+(p.source_conflict?'<div class="note source-warning">Existing apps have different sources. Choose one project repository before editing or deploying apps.</div>':'')+
-  (app?'<section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
-   empty('Choose apps from this repository','Add an app at the repository root, or detect frontend, backend, and daemon folders inside this project’s monorepo.')),p);
- $('#edit-project-source').onclick=()=>editProjectSource(p);$('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p,apps);
- if(app)await mountApplication(p,app,apps,routes,initialTab,deployments);
-}
-async function appPage(id,tab='deployments'){const version=viewVersion,app=await api('apps/'+id);if(version===viewVersion)await projectPage(app.project_id,id,tab)}
-async function mountApplication(project,app,apps,allRoutes,initialTab,deployments){
- const version=viewVersion,isCurrent=()=>version===viewVersion&&!!$('#app-workbench');
- let activeTab='',loading=false,tabVersion=0,expandedLog=false;
- const ownRoutes=()=>allRoutes.filter(r=>r.app_id===app.id);
- $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><label class="application-picker">'+icon('box')+'<select id="application-switch" aria-label="Application" '+(apps.length===1?'disabled':'')+'>'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===app.id?'selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select></label><span id="active-status"></span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button id="redeploy" title="Restart the active release with current settings, without building">Redeploy</button><button id="rebuild-no-cache">Rebuild without cache</button><button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
- '<div class="app-details"><span>'+icon('folder')+'Root '+rootLabel(app.root_dir)+'</span><span>'+icon('server')+esc(app.build_type)+' · :'+app.port+'</span><label class="inline-check"><input type="checkbox" id="quick-auto-deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy</label></div>'+
- '<div class="workbench-navigation"><nav class="tabs" aria-label="Application views">'+applicationTabs.map(([name,shape,label])=>'<a href="#app/'+esc(app.id)+'/'+name+'" data-tab="'+name+'">'+icon(shape)+label+(name==='domains'?'<span class="tab-count">'+ownRoutes().length+'</span>':'')+'</a>').join('')+'</nav><span class="poll-status" id="poll-status">'+icon('activity')+'Live updates · 2s</span></div><div id="tab-content"></div>';
- $('#application-switch').onchange=e=>nav('app/'+e.target.value+'/'+activeTab);
- $('#quick-auto-deploy').onchange=async e=>{const input=e.currentTarget,value=input.checked;input.disabled=true;try{Object.assign(app,await api('apps/'+app.id,{auto_deploy:value},'PATCH'));const field=$('#settings-form [name="auto_deploy"]');if(field)field.checked=value;toast('Auto-deploy '+(value?'enabled':'disabled'))}catch(err){input.checked=!value;toast(err.message)}finally{input.disabled=false}};
- $('#deploy').disabled=$('#rebuild-no-cache').disabled=$('#quick-auto-deploy').disabled=!project.git_url||project.source_conflict;
- $('#redeploy').disabled=!app.active_deployment;
- async function queueRelease(button,action,body={}){button.disabled=true;try{const d=await api('apps/'+app.id+'/'+action,body);selectedDeployment=d.id;toast(action==='redeploy'?'Redeploy queued':'Deployment queued');if(isCurrent())await tab('deployments',true)}catch(err){toast(err.message)}finally{if(button.isConnected)button.disabled=false}}
- $('#deploy').onclick=e=>queueRelease(e.currentTarget,'deploy');
- $('#rebuild-no-cache').onclick=e=>queueRelease(e.currentTarget,'deploy',{no_cache:true});
- $('#redeploy').onclick=e=>queueRelease(e.currentTarget,'redeploy');
- async function showDeployments(){
-  if(loading)return;loading=true;
+ const loadLog=async()=>{
+  if(!['logs','deployments'].includes(section))return;
+  const request=++logVersion,source=section==='logs'?$('#log-source').value:'';
   try{
-   const [liveApps,liveDeployments]=await Promise.all([api('apps?project_id='+project.id),api('deployments?logs=false')]);if(!isCurrent()||activeTab!=='deployments')return;
-   const ds=liveDeployments.filter(d=>d.app_id===app.id);
-   const summary=$('#project-summary'),summaryText=projectSummary(liveApps,allRoutes,liveDeployments);if(summary&&summary.textContent!==summaryText)summary.textContent=summaryText;
-   const liveApp=liveApps.find(a=>a.id===app.id);if(liveApp)Object.assign(app,liveApp);
-   const previousLog=$('#build-log'),previousScroll=previousLog?.scrollTop||0,logHeight=previousLog?.style.height||'',follow=!previousLog||previousLog.scrollHeight-previousLog.scrollTop-previousLog.clientHeight<40;
-   const left=$('#deployment-history')?.scrollLeft||0,top=$('#deployment-history')?.scrollTop||0,focused=document.activeElement?.closest('.select-deploy')?.dataset.id,focusedControl=document.activeElement?.id;
-   const latest=ds.slice().reverse();if(!latest.some(d=>d.id===selectedDeployment))selectedDeployment=latest[0]?.id||'';
-   $('#tab-content').innerHTML='<div class="deployment-layout"><section class="release-history"><div class="section-head"><h2>Releases<span class="count">'+latest.length+'</span></h2><span class="small muted">Select a release to inspect</span></div>'+
-    (latest.length?'<div class="panel release-directory" id="deployment-history" aria-label="Release history">'+latest.map(d=>'<button class="release-entry select-deploy '+(d.id===selectedDeployment?'selected':'')+'" aria-label="Inspect deployment '+esc(d.id.slice(0,8))+'" aria-pressed="'+(d.id===selectedDeployment)+'" data-id="'+esc(d.id)+'"><span class="release-main"><span class="release-id">'+icon('box')+esc(d.id.slice(0,8))+'</span>'+badge(d.status)+'</span><span class="release-meta"><span class="commit">'+esc(d.commit?.slice(0,7)||'Pending commit')+'</span><time datetime="'+esc(d.created)+'">'+esc(new Date(d.created).toLocaleString())+'</time></span></button>').join('')+'</div>':empty('No releases yet','Deploy this application to see its build output.'))+
-    '<div class="release-endpoints"><div class="section-head"><h2>Public endpoints</h2><button class="text-button" id="manage-domains">'+(ownRoutes().length?'Manage':'Connect domain')+icon('arrow')+'</button></div>'+
-    (ownRoutes().length?ownRoutes().map(r=>'<a class="endpoint" href="'+esc(r.url)+'" target="_blank" rel="noreferrer">'+icon('globe')+'<span>'+esc(r.url)+'</span>'+icon('arrow')+'</a>').join(''):'<p class="small muted">No domain connected to this application.</p>')+'</div></section>'+
-    '<section class="panel log-panel '+(expandedLog?'expanded':'')+'"><div class="log-head"><span class="log-title">'+icon('terminal')+'Build output <span class="muted" id="log-id"></span></span><div class="log-actions"><button class="text-button" id="redeploy-release" disabled>Redeploy this release</button><button class="text-button" id="toggle-log" aria-expanded="'+expandedLog+'" aria-controls="build-log">'+icon('expand')+(expandedLog?'Compact':'Expand')+'</button><button class="text-button" id="copy-log">'+icon('copy')+'Copy</button></div></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section></div>';
-   const table=$('#deployment-history');if(table){table.scrollLeft=left;table.scrollTop=top}
-   if(logHeight)$('#build-log').style.height=logHeight;
-   document.querySelectorAll('.select-deploy').forEach(b=>b.onclick=async()=>{selectedDeployment=b.dataset.id;try{await showDeployments()}catch(err){toast(err.message)}});
-   if(focused)document.querySelector('.select-deploy[data-id="'+focused+'"]')?.focus({preventScroll:true});
-   if(['copy-log','toggle-log','manage-domains','redeploy-release'].includes(focusedControl))$('#'+focusedControl)?.focus({preventScroll:true});
-   $('#toggle-log').onclick=e=>{expandedLog=!expandedLog;$('.log-panel').classList.toggle('expanded',expandedLog);$('#build-log').style.height='';e.currentTarget.setAttribute('aria-expanded',String(expandedLog));e.currentTarget.innerHTML=icon('expand')+(expandedLog?'Compact':'Expand')};
-   $('#manage-domains').onclick=()=>ownRoutes().length?tab('domains',true).catch(err=>toast(err.message)):addRoute(project,apps,app.id);
-   $('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#build-log').textContent);toast('Build output copied')}catch{toast('Select and copy the build output manually')}};
-   const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];
-   $('#active-status').innerHTML=badge(current?.status);
-   $('#redeploy').disabled=!latest.some(d=>d.status==='running');
-   if(selectedDeployment){const d=await api('deployments/'+selectedDeployment);if(!isCurrent()||activeTab!=='deployments')return;$('#build-log').textContent=d.log||'Deployment '+d.status+'…';$('#log-id').textContent=' / '+d.id.slice(0,8);$('#build-log').scrollTop=follow?$('#build-log').scrollHeight:previousScroll;$('#redeploy-release').disabled=!d.redeployable;$('#redeploy-release').onclick=e=>queueRelease(e.currentTarget,'redeploy',{deployment_id:d.id})}
-  }finally{loading=false}
- }
- function showDomains(){
-  const routes=ownRoutes();
-  $('#tab-content').innerHTML='<div class="section-head"><div><h2>Domains & routes<span class="count">'+routes.length+'</span></h2><span class="small muted">Traffic connected to '+esc(app.name)+'</span></div><button class="primary" id="add-route">'+icon('plus')+'Connect domain</button></div>'+
-   (routes.length?'<div class="panel table-panel"><table><thead><tr><th>Public router URL</th><th>Internal port</th><th>Path prefix</th><th>Forwarding</th><th>Actions</th></tr></thead><tbody>'+routes.map(r=>'<tr><td><a href="'+esc(r.url)+'" target="_blank" rel="noreferrer">'+esc(r.url)+' '+icon('arrow')+'</a></td><td>:'+app.port+'</td><td>'+esc(r.path_prefix)+'</td><td>'+(r.strip_prefix?'Strip prefix':'Preserve prefix')+'</td><td><button class="danger delete-route" data-id="'+esc(r.id)+'" aria-label="Delete route '+esc(r.url)+'">Delete</button></td></tr>').join('')+'</tbody></table></div>':empty('Give this app an address','Connect a hostname and path prefix to route public traffic here.'))+
-   '<div class="note">Point your domain’s A record to this server’s public IP. Routes use the public router address, not the internal container port.</div>';
-  $('#add-route').onclick=()=>addRoute(project,apps,app.id);
-  document.querySelectorAll('.delete-route').forEach(b=>b.onclick=async()=>{b.disabled=true;try{await api('routes/'+b.dataset.id,null,'DELETE');await render();toast('Route deleted')}catch(err){b.disabled=false;toast(err.message)}});
- }
- function showSettings(){
-  $('#tab-content').innerHTML='<form id="settings-form" class="settings-form"><div class="section-head"><div><h2>Application settings</h2><span class="small muted">Changes apply on the next deployment.</span></div><button class="primary" type="submit">Save changes</button></div>'+appFields(app,true)+'<div class="form-error" role="alert"></div></form>';
-  $('#settings-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('[type="submit"]');button.disabled=true;try{Object.assign(app,await api('apps/'+app.id,appData(new FormData(e.target)),'PATCH'));await render();toast('Settings saved')}catch(err){if(isCurrent())$('#settings-form .form-error').textContent=err.message}finally{button.disabled=false}};
- }
- async function tab(name,updateURL=false){
-  const token=++tabVersion,requested=applicationTabs.some(t=>t[0]===name)?name:'deployments';
-  activeTab=requested;clearInterval(timer);
-  if(updateURL&&location.hash!=='#app/'+app.id+'/'+activeTab)history.pushState(null,'','#app/'+app.id+'/'+activeTab);
-  document.querySelectorAll('[data-tab]').forEach(b=>{const active=b.dataset.tab===activeTab;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
-  $('#poll-status').hidden=activeTab!=='deployments';
-  if(requested==='deployments'){await showDeployments();if(token===tabVersion&&isCurrent()&&activeTab==='deployments')timer=setInterval(()=>showDeployments().catch(err=>{if(isCurrent())toast(err.message)}),2000)}
-  if(requested==='domains')showDomains();
-  if(requested==='settings')showSettings();
- }
- document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();tab(b.dataset.tab,true).catch(err=>toast(err.message))});
- $('#active-status').innerHTML=badge(deploymentStatus(app,deployments)||deployments.filter(d=>d.app_id===app.id).at(-1)?.status);
- await tab(initialTab);
+   const d=source?await api('containers/'+source+'/logs'):(selected?await api('releases/'+selected):{log:'No project deployments yet. Deploy project to detect and launch its containers.'});
+   if(version!==viewVersion||request!==logVersion)return;
+   const pre=$('#project-log');pre.textContent=d.log||'Waiting for output…';if($('#follow-log').checked)pre.scrollTop=pre.scrollHeight;
+   $('#log-heading').textContent=source?(containers.find(c=>c.id===source)?.name||'Container')+' · runtime':'Project build output';
+   $('#log-state').innerHTML=badge(d.status||(source?'live':'idle'));
+   if(section==='deployments')$('#redeploy-release').disabled=!d.redeployable||!!busyRelease(releases[0]);
+  }catch(e){if(version===viewVersion&&request===logVersion)$('#project-log').textContent=e.message}
+ };
+ const bindReleases=()=>document.querySelectorAll('[data-release]').forEach(b=>b.onclick=async()=>{followLatest=false;selected=b.dataset.release;$('#project-releases').innerHTML=releaseEntries(releases,selected);bindReleases();await loadLog()});
+ if(section==='deployments')bindReleases();
+ if(section==='logs')$('#log-source').onchange=loadLog;
+ if(['logs','deployments'].includes(section))$('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#project-log').textContent);toast('Logs copied')}catch{toast('Clipboard unavailable')}};
+ const refresh=async()=>{
+  try{
+   const data=await Promise.all([api('projects/'+id),api('containers?project_id='+id),api('releases?project_id='+id+'&logs=false')]);if(version!==viewVersion)return;
+   [project,containers,releases]=data;sort();
+   if(project.active_deployment)containers=containers.filter(c=>c.active_deployment||(busyRelease(releases[0])&&c.release_id===releases[0].id));
+   if(followLatest)selected=releases[0]?.id||'';
+   $('#project-summary').textContent=projectSummary(containers,routes);$('#project-state').innerHTML=badge(releases[0]?.status);$('#deploy-project').disabled=!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url;
+   if(section==='deployments'){$('#project-releases').innerHTML=releaseEntries(releases,selected);$('#release-count').textContent=releases.length;bindReleases()}
+   if(section==='containers')$('#project-containers').innerHTML=containerEntries(project,containers);
+   if(section==='logs'){const source=$('#log-source').value;$('#log-source').innerHTML='<option value="">Project build output</option>'+containers.map(c=>'<option value="'+esc(c.id)+'" '+(source===c.id?'selected':'')+'>'+esc(c.name)+' · runtime</option>').join('')}
+   await loadLog();
+  }catch(e){if(version===viewVersion)toast(e.message)}
+ };
+ $('#deploy-project').onclick=async()=>{const b=$('#deploy-project');b.disabled=true;try{const d=await api('projects/'+id+'/deploy',{no_cache:section==='deployments'&&$('#no-cache').checked});selected=d.id;followLatest=true;await refresh();toast('Project deployment queued')}catch(e){toast(e.message);b.disabled=false}};
+ if(section==='deployments')$('#redeploy-release').onclick=async()=>{try{const d=await api('projects/'+id+'/redeploy',{deployment_id:selected});selected=d.id;followLatest=true;await refresh();toast('Project release queued without rebuilding')}catch(e){toast(e.message)}};
+ $('#deploy-project').disabled=!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url;
+ await loadLog();if(version===viewVersion)timer=setInterval(refresh,2000);
 }
-function collectionCard(item,kind,apps=[],deployments=[]){
- const current=kind==='workspace'&&workspace?.id===item.id,projectApps=apps.filter(a=>a.project_id===item.id);
- const created=item.created?new Date(item.created).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
+async function appPage(id,tab='deployments'){const version=viewVersion,container=await api('containers/'+id);if(version===viewVersion)nav('project/'+container.project_id+'/'+(tab==='settings'?'settings':tab==='domains'?'domains':'logs'))}
+function collectionCard(item,kind,containers=[],releases=[]){
+ const current=kind==='workspace'&&workspace?.id===item.id,owned=containers.filter(c=>c.project_id===item.id&&c.active_deployment);
  if(kind==='project'){
-  const running=projectApps.filter(a=>deploymentStatus(a,deployments)==='running').length;
-  const detail=projectApps.length+' app'+(projectApps.length===1?'':'s')+(projectApps.length?' · '+[...new Set(projectApps.map(a=>a.build_type))].map(esc).join(', '):' · Connect a repository');
-  return '<a class="project-row" data-project-name="'+esc(item.name.toLowerCase())+'" href="#project/'+esc(item.id)+'"><span class="card-icon">'+icon('grid')+'</span><span class="project-row-copy"><h3>'+esc(item.name)+'</h3><span>'+detail+'</span></span><span class="badge '+(running?'running':'idle')+'">'+(running?running+' running':projectApps.length?'Not deployed':'No apps')+'</span>'+icon('arrow')+'</a>';
+  const latest=releases.filter(d=>d.project_id===item.id).sort((a,b)=>new Date(b.created)-new Date(a.created))[0];
+  return '<a class="project-row" data-project-name="'+esc(item.name.toLowerCase())+'" href="#project/'+esc(item.id)+'"><span class="card-icon">'+icon('grid')+'</span><span class="project-row-copy"><h3>'+esc(item.name)+'</h3><span>'+owned.length+' containers · '+esc(item.git_url?item.branch||'main':'Connect a repository')+'</span></span>'+badge(latest?.status||(owned.some(c=>c.status==='running')?'running':''))+icon('arrow')+'</a>';
  }
- return '<a class="card link" href="#workspace/'+esc(item.id)+'"><div class="card-top"><div class="card-icon">'+icon('layers')+'</div>'+(current?'<span class="badge running">Current</span>':'<span class="card-arrow">'+icon('arrow')+'</span>')+'</div><h3>'+esc(item.name)+'</h3><div class="card-footer"><span>'+(created?'Created '+esc(created):'Workspace')+'</span><span>Open workspace '+icon('arrow')+'</span></div></a>';
+ const created=item.created?new Date(item.created).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
+ return '<a class="card link" href="#workspace/'+esc(item.id)+'"><div class="card-top"><div class="card-icon">'+icon('layers')+'</div>'+(current?'<span class="badge running">Current</span>':icon('arrow'))+'</div><h3>'+esc(item.name)+'</h3><div class="card-footer"><span>'+(created?'Created '+esc(created):'Workspace')+'</span><span>Open workspace '+icon('arrow')+'</span></div></a>';
 }
-function releasePanel(deployments,apps){
- const latest=deployments.slice().sort((a,b)=>new Date(b.created)-new Date(a.created)),recent=latest.slice(0,32).reverse();
- return '<aside class="panel activity-panel"><div class="section-head"><h2>Deployment activity</h2>'+icon('activity')+'</div><div class="activity-total"><strong>'+deployments.length+'</strong><span>total releases</span></div>'+
- (recent.length?'<div class="release-pulse" aria-label="Recent deployment statuses">'+recent.map(d=>'<span class="'+esc(d.status)+'" title="'+esc(d.status)+' · '+esc(new Date(d.created).toLocaleString())+'"></span>').join('')+'</div><div class="pulse-caption"><span>Older</span><span>Latest '+recent.length+' releases</span></div>':'<p class="activity-empty">Your first release starts with a deploy.</p>')+
- '<div class="release-list"><h2>Recent releases</h2>'+latest.slice(0,4).map(d=>'<a class="release-item" href="#app/'+esc(d.app_id)+'"><div><strong>'+esc(apps.find(a=>a.id===d.app_id)?.name||'Application')+'</strong><small>'+esc(d.commit?.slice(0,7)||d.id.slice(0,7))+' · '+esc(new Date(d.created).toLocaleDateString(undefined,{month:'short',day:'numeric'}))+'</small></div>'+badge(d.status)+'</a>').join('')+(!latest.length?'<p class="activity-empty">No deployments in this workspace.</p>':'')+'</div></aside>';
+function releasePanel(releases,projects){
+ const latest=releases.slice().sort((a,b)=>new Date(b.created)-new Date(a.created)),recent=latest.slice(0,32).reverse();
+ return '<aside class="panel activity-panel"><div class="section-head"><h2>Deployment activity</h2>'+icon('activity')+'</div><div class="activity-total"><strong>'+releases.length+'</strong><span>project releases</span></div>'+
+ (recent.length?'<div class="release-pulse" aria-label="Recent deployment statuses">'+recent.map(d=>'<span class="'+esc(d.status)+'" title="'+esc(d.status)+'"></span>').join('')+'</div>':'<p class="activity-empty">Your first release starts with a deploy.</p>')+
+ '<div class="release-list"><h2>Recent releases</h2>'+latest.slice(0,4).map(d=>'<a class="release-item" href="#project/'+esc(d.project_id)+'"><div><strong>'+esc(projects.find(p=>p.id===d.project_id)?.name||'Project')+'</strong><small>'+esc(d.commit?.slice(0,7)||d.id.slice(0,7))+'</small></div>'+badge(d.status)+'</a>').join('')+'</div></aside>';
 }
 function workspaceSettings(){
- shell(esc(workspace.name)+' &nbsp; / &nbsp; Settings',heading('Workspace','Workspace settings','A shared home for your projects and applications.')+
+ shell(esc(workspace.name)+' &nbsp; / &nbsp; Settings',heading('Workspace','Workspace settings','A shared home for your projects.')+
   '<form id="workspace-settings" class="panel panel-pad workspace-settings">'+field('Workspace name','name',workspace.name,'text','required')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">Save changes</button></form>');
  $('#workspace-settings').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await api('workspaces/'+workspace.id,Object.fromEntries(new FormData(e.target)),'PATCH');await render();toast('Workspace saved')}catch(err){if($('#workspace-settings'))$('#workspace-settings .form-error').textContent=err.message}finally{button.disabled=false}};
 }
@@ -286,21 +256,21 @@ async function render(){
  const parts=location.hash.slice(1).split('/');if(parts[0]==='login'){auth(false);return}
  workspaces=await api('workspaces');if(version!==viewVersion)return;workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
  if(!parts[0]&&workspace){nav('workspace/'+workspace.id);return}
- if(parts[0]==='project'){await projectPage(parts[1],'',parts[2]);return}
+ if(parts[0]==='project'){await projectPage(parts[1],parts[2],parts[3]);return}
  if(parts[0]==='app'){await appPage(parts[1],parts[2]);return}
  if(parts[0]==='workspace'&&workspace){
   localStorage.setItem('workspace',workspace.id);
   if(parts[2]==='settings'){workspaceSettings();return}
-  const [projects,allApps,allDeployments]=await Promise.all([api('projects?workspace_id='+workspace.id),api('apps'),api('deployments')]);
+  const [projects,allApps,allDeployments]=await Promise.all([api('projects?workspace_id='+workspace.id),api('containers'),api('releases?logs=false')]);
   if(version!==viewVersion)return;
   const apps=allApps.filter(a=>projects.some(p=>p.id===a.project_id));
-  const deployments=allDeployments.filter(d=>apps.some(a=>a.id===d.app_id));
-  const running=apps.filter(a=>deployments.find(d=>d.id===a.active_deployment)?.status==='running').length;
+  const deployments=allDeployments.filter(d=>projects.some(p=>p.id===d.project_id));
+  const running=apps.filter(a=>a.status==='running').length;
   shell(esc(workspace.name),
-   heading('Workspace overview','Projects','Your applications, from first commit to latest release.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
-   '<div class="stats"><div class="stat"><div><span>Total projects</span><strong>'+projects.length+'</strong></div>'+icon('grid')+'</div><div class="stat"><div><span>Applications</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running applications</span><strong>'+running+'</strong></div>'+icon('activity')+'</div></div>'+
+   heading('Workspace overview','Projects','One source and deployment per project.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
+   '<div class="stats"><div class="stat"><div><span>Total projects</span><strong>'+projects.length+'</strong></div>'+icon('grid')+'</div><div class="stat"><div><span>Containers</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running containers</span><strong>'+running+'</strong></div>'+icon('activity')+'</div></div>'+
    '<div class="workspace-layout"><section><div class="section-head"><h2>All projects<span class="count">'+projects.length+'</span></h2><label class="search-field">'+icon('search')+'<input type="search" id="project-search" placeholder="Find a project…" aria-label="Find a project"></label></div>'+
-   (projects.length?'<div class="panel project-directory">'+projects.map(p=>collectionCard(p,'project',apps,deployments)).join('')+'</div><p class="note" id="no-project-matches" hidden>No projects match your search.</p>':empty('No projects yet','Create a project, then connect your first repository.'))+'</section>'+releasePanel(deployments,apps)+'</div>');
+   (projects.length?'<div class="panel project-directory">'+projects.map(p=>collectionCard(p,'project',apps,deployments)).join('')+'</div><p class="note" id="no-project-matches" hidden>No projects match your search.</p>':empty('No projects yet','Create a project, then connect your first repository.'))+'</section>'+releasePanel(deployments,projects)+'</div>');
   $('#project-search').oninput=e=>{let matches=0;document.querySelectorAll('[data-project-name]').forEach(a=>{a.hidden=!a.dataset.projectName.includes(e.target.value.trim().toLowerCase());if(!a.hidden)matches++});if($('#no-project-matches'))$('#no-project-matches').hidden=matches>0};
   $('#new-project').onclick=createProject;return;
  }
