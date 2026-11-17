@@ -54,19 +54,19 @@ function modal(title,description,fields,submit,onSubmit){
  $('#close-modal').onclick=$('#cancel-modal').onclick=()=>d.close();
  d.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=d.querySelector('[type=submit]');button.disabled=true;d.querySelector('.form-error').textContent='';try{if(await onSubmit(new FormData(e.target),e.target)!==false)d.close()}catch(err){d.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}};d.showModal();d.querySelector('form input,form select,form textarea')?.focus();
 }
-function shell(crumb,content,project=null){
+function shell(content,project=null){
  const workspaceURL='#workspace/'+esc(workspace?.id||''),settings=location.hash.endsWith('/settings')&&!project;
  const projectSection=location.hash.split('/')[2]||'deployments';
  const sidebarLink=(href,shape,label,active)=>'<a href="'+href+'" '+(active?'aria-current="page"':'')+'>'+icon(shape)+'<span>'+esc(label)+'</span></a>';
  const sidebar='<aside class="sidebar" aria-label="Dashboard sidebar"><div class="sidebar-top"><a href="'+workspaceURL+'" class="brand">'+brand()+'</a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">'+icon('close')+'</button></div>'+
   '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false"><span class="workspace-mark">'+icon('layers')+'</span><span class="selector-copy"><small>Workspace</small><strong>'+esc(workspace?.name||'Choose workspace')+'</strong></span>'+icon('chevron')+'</button>'+
   '<div id="workspace-menu" class="sidebar-menu" popover><div class="menu-caption">Switch workspace</div><div class="workspace-options">'+workspaces.map(w=>'<a href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'><span class="workspace-initial">'+esc(w.name[0]?.toUpperCase())+'</span><span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot" aria-label="Current workspace"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div><button id="create-workspace">'+icon('plus')+'Create workspace</button><a href="#workspaces">'+icon('layers')+'Manage workspaces</a></div>'+
-  '<nav class="sidebar-nav" aria-label="'+(project?'Project':'Workspace')+' navigation">'+(project?
-   sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-caption">Project</div><div class="sidebar-project" title="'+esc(project.name)+'">'+esc(project.name)+'</div>'+projectSections.map(([key,label,shape])=>sidebarLink('#project/'+esc(project.id)+'/'+key,shape,label,key===projectSection)).join(''):
-   '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav>'+
+  '<div class="sidebar-body"><nav class="sidebar-nav" aria-label="'+(project?'Project':'Workspace')+' navigation">'+(project?
+   sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-project"><strong>'+esc(project.name)+'</strong><a class="sidebar-source" href="#project/'+esc(project.id)+'/source" title="Project source">'+icon('branch')+'<span>'+esc(project.git_url?(project.branch||'main'):'Connect source')+'</span></a></div>'+projectSections.map(([key,label,shape])=>sidebarLink('#project/'+esc(project.id)+'/'+key,shape,label,key===projectSection)).join(''):
+   '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav>'+(project?'<section class="sidebar-deployment" aria-label="Project deployment"><div class="deployment-status"><span>Latest release</span><span id="project-state" aria-label="Latest deployment">'+badge(project.deployment_status)+'</span></div><p id="project-summary" aria-live="polite">'+esc(project.summary)+'</p><button class="primary" id="deploy-project">'+icon('plus')+'Deploy project</button></section>':'')+'</div>'+
   '<div class="sidebar-bottom"><span class="sidebar-instance"><span class="dot"></span>Self-hosted instance</span><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-copy"><strong>'+esc(user.username)+'</strong><small>Personal account</small></span>'+icon('chevron')+'</button></div>'+
   '<div id="account-menu" class="sidebar-menu" popover><div class="menu-caption">Signed in as <strong>'+esc(user.username)+'</strong></div><button id="account-profile">'+icon('settings')+'Account settings</button>'+themeButton()+'<div class="menu-divider"></div><button id="logout">'+icon('logout')+'Sign out</button></div></aside>';
- $('#root').innerHTML='<div class="dashboard sidebar-layout"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="contextbar"><button class="icon-button mobile-only" id="open-navigation" aria-label="Open navigation" aria-haspopup="dialog">'+icon('menu')+'</button><div class="breadcrumbs">'+crumb+'</div><span class="instance-label">'+icon('server')+'Self-hosted</span></div><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div></div>';
+ $('#root').innerHTML='<div class="dashboard sidebar-layout"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div></div>';
  bindTheme();bindSidebar();
 }
 function focusMenuItem(menu,item){
@@ -121,7 +121,7 @@ function accountSettings(){
    accountSaving=true;try{user=await api('me',changes,'PATCH');form.reset();await render();toast('Account updated')}finally{accountSaving=false}
   });
 }
-function heading(kicker,title,subtitle,actions='',subtitleId=''){return '<div class="heading"><div class="heading-copy"><div class="eyebrow">'+kicker+'</div><h1>'+esc(title)+'</h1><p'+(subtitleId?' id="'+esc(subtitleId)+'" aria-live="polite"':'')+'>'+esc(subtitle)+'</p></div><div class="row heading-actions">'+actions+'</div></div>'}
+function heading(kicker,title,subtitle,actions='',subtitleId='',mobileContext=''){return '<header class="heading"><div class="heading-identity"><button class="icon-button mobile-only" id="open-navigation" aria-label="Open navigation" aria-haspopup="dialog">'+icon('menu')+'</button><div class="heading-copy">'+(kicker?'<div class="eyebrow">'+kicker+'</div>':'')+(mobileContext?'<span class="mobile-project-name">'+esc(mobileContext)+'</span>':'')+'<h1>'+esc(title)+'</h1>'+(subtitle?'<p'+(subtitleId?' id="'+esc(subtitleId)+'" aria-live="polite"':'')+'>'+esc(subtitle)+'</p>':'')+'</div></div>'+(actions?'<div class="row heading-actions">'+actions+'</div>':'')+'</header>'}
 function auth(setup){
  $('#root').innerHTML='<div class="auth"><header class="auth-header"><a class="brand" href="#login">'+brand()+'</a>'+themeButton()+'</header><section class="auth-story"><div class="auth-index"><span>01 — YOUR INFRASTRUCTURE</span><span>BUILT TO SHIP ↗</span></div><div class="auth-message"><h1>From commit.<br>To production.<br><em>On your terms.</em></h1><p>Deploy your applications on the server you own.<br>A straight line from your code to the world.</p></div><div class="pipeline"><div class="pipeline-head"><span>THE SHORTEST PATH TO LIVE</span>'+icon('arrow')+'</div><div class="pipeline-track"><div><span class="pipeline-node">'+icon('branch')+'</span><strong>Push</strong><span>Your repository</span></div><div><span class="pipeline-node">'+icon('box')+'</span><strong>Build</strong><span>Isolated by default</span></div><div><span class="pipeline-node node-live">'+icon('globe')+'</span><strong>Ship</strong><span>Your own domain</span></div></div><div class="pipeline-command"><span>$</span> git push origin main <span class="command-cursor"></span></div></div></section><section class="auth-form"><form><span class="form-index">'+(setup?'FIRST THINGS FIRST':'YOUR CONTROL ROOM')+'</span><h2>'+(setup?'Set up your account.':'Welcome back.')+'</h2><p>'+(setup?'Create the administrator account for this server.':'Sign in to manage your applications.')+'</p>'+field('Username','username','','text','required autocomplete="username" placeholder="Enter your username"')+field('Password','password','','password','required minlength="8" autocomplete="'+(setup?'new-password':'current-password')+'" placeholder="Enter your password"')+(setup?'<p class="password-help">At least 8 characters. There is no password reset, so keep it somewhere safe.</p>':'')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">'+(setup?'Create account':'Sign in')+icon('arrow')+'</button><div class="form-footnote">'+icon('lock')+'Private access to your infrastructure.</div></form></section><footer class="auth-footer"><span>SELF-HOSTED, NOT LIMITED.</span><span>Startship / Deployment platform</span></footer></div>';
  bindTheme();
@@ -193,8 +193,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
  if(section==='source')content=sourceContent(project);
  if(section==='environment')content=environmentContent(project);
  if(section==='settings')content=projectSettings(project);
- shell('<a href="#workspace/'+esc(workspace?.id)+'">'+esc(workspace?.name)+'</a> &nbsp; / &nbsp; '+esc(project.name)+' &nbsp; / &nbsp; '+title,
-  '<div class="project-heading"><div><div class="eyebrow">Project / '+esc(title)+'</div><h1>'+esc(project.name)+'</h1><p id="project-summary" aria-live="polite">'+projectSummary(containers,routes)+'</p></div><div class="row"><span id="project-state" aria-label="Latest deployment">'+badge(releases[0]?.status)+'</span><button class="primary" id="deploy-project">'+icon('plus')+'Deploy project</button></div></div>'+warning+content,project);
+ shell(heading('',title,'','<button class="primary mobile-only" id="deploy-project-mobile">'+icon('plus')+'Deploy</button>','',project.name)+warning+content,{...project,summary:projectSummary(containers,routes),deployment_status:releases[0]?.status});
  const bindForm=(selector,data)=>{const form=$(selector);if(!form)return;form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{await api('projects/'+id,data(new FormData(form)),'PATCH');await render();toast('Project saved; changes apply on next deployment')}catch(err){form.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}}};
  if(section==='settings')bindForm('#project-settings',f=>({name:f.get('name'),root_dir:f.get('root_dir'),build_type:f.get('build_type'),port:Number(f.get('port')),test_command:f.get('test_command'),auto_deploy:f.has('auto_deploy')}));
  if(section==='environment')bindForm('#project-environment',f=>({env:environmentData(f.get('env'))}));
@@ -227,22 +226,24 @@ async function projectPage(id,section='deployments',runtimeID=''){
  if(section==='deployments')bindReleases();
  if(section==='logs')$('#log-source').onchange=loadLog;
  if(['logs','deployments'].includes(section))$('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#project-log').textContent);toast('Logs copied')}catch{toast('Clipboard unavailable')}};
+ const setDeployDisabled=disabled=>{$('#deploy-project').disabled=$('#deploy-project-mobile').disabled=disabled};
  const refresh=async()=>{
   try{
    const data=await Promise.all([api('projects/'+id),api('containers?project_id='+id),api('releases?project_id='+id+'&logs=false')]);if(version!==viewVersion)return;
    [project,containers,releases]=data;sort();
    if(project.active_deployment)containers=containers.filter(c=>c.active_deployment||(busyRelease(releases[0])&&c.release_id===releases[0].id));
    if(followLatest)selected=releases[0]?.id||'';
-   $('#project-summary').textContent=projectSummary(containers,routes);$('#project-state').innerHTML=badge(releases[0]?.status);$('#deploy-project').disabled=!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url;
+   $('#project-summary').textContent=projectSummary(containers,routes);$('#project-state').innerHTML=badge(releases[0]?.status);setDeployDisabled(!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url);
    if(section==='deployments'){renderReleases();$('#release-count').textContent=releases.length}
    if(section==='containers')$('#project-containers').innerHTML=containerEntries(project,containers);
    if(section==='logs'){const source=$('#log-source').value;$('#log-source').innerHTML='<option value="">Project build output</option>'+containers.map(c=>'<option value="'+esc(c.id)+'" '+(source===c.id?'selected':'')+'>'+esc(c.name)+' · runtime</option>').join('')}
    await loadLog();
   }catch(e){if(version===viewVersion)toast(e.message)}
  };
- $('#deploy-project').onclick=async()=>{const b=$('#deploy-project');b.disabled=true;try{const d=await api('projects/'+id+'/deploy',{no_cache:section==='deployments'&&$('#no-cache').checked});selected=d.id;followLatest=true;await refresh();toast('Project deployment queued')}catch(e){toast(e.message);b.disabled=false}};
+ const deployProject=async()=>{setDeployDisabled(true);try{const d=await api('projects/'+id+'/deploy',{no_cache:section==='deployments'&&$('#no-cache').checked});selected=d.id;followLatest=true;await refresh();toast('Project deployment queued')}catch(e){toast(e.message);setDeployDisabled(false)}};
+ $('#deploy-project').onclick=$('#deploy-project-mobile').onclick=deployProject;
  if(section==='deployments')$('#redeploy-release').onclick=async()=>{try{const d=await api('projects/'+id+'/redeploy',{deployment_id:selected});selected=d.id;followLatest=true;await refresh();toast('Project release queued without rebuilding')}catch(e){toast(e.message)}};
- $('#deploy-project').disabled=!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url;
+ setDeployDisabled(!!busyRelease(releases[0])||!!project.config_conflict||!!project.source_conflict||!project.git_url);
  await loadLog();if(version===viewVersion)timer=setInterval(refresh,2000);
 }
 async function appPage(id,tab='deployments'){const version=viewVersion,container=await api('containers/'+id);if(version===viewVersion)nav('project/'+container.project_id+'/'+(tab==='settings'?'settings':tab==='domains'?'domains':'logs'))}
@@ -262,7 +263,7 @@ function releasePanel(releases,projects){
  '<div class="release-list"><h2>Recent releases</h2>'+latest.slice(0,4).map(d=>'<a class="release-item" href="#project/'+esc(d.project_id)+'"><div><strong>'+esc(projects.find(p=>p.id===d.project_id)?.name||'Project')+'</strong><small>'+esc(d.commit?.slice(0,7)||d.id.slice(0,7))+'</small></div>'+badge(d.status)+'</a>').join('')+'</div></aside>';
 }
 function workspaceSettings(){
- shell(esc(workspace.name)+' &nbsp; / &nbsp; Settings',heading('Workspace','Workspace settings','A shared home for your projects.')+
+ shell(heading('Workspace','Workspace settings','A shared home for your projects.')+
   '<form id="workspace-settings" class="panel panel-pad workspace-settings">'+field('Workspace name','name',workspace.name,'text','required')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">Save changes</button></form>');
  $('#workspace-settings').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await api('workspaces/'+workspace.id,Object.fromEntries(new FormData(e.target)),'PATCH');await render();toast('Workspace saved')}catch(err){if($('#workspace-settings'))$('#workspace-settings .form-error').textContent=err.message}finally{button.disabled=false}};
 }
@@ -284,16 +285,14 @@ async function render(){
   const apps=allApps.filter(a=>projects.some(p=>p.id===a.project_id));
   const deployments=allDeployments.filter(d=>projects.some(p=>p.id===d.project_id));
   const running=apps.filter(a=>a.status==='running').length;
-  shell(esc(workspace.name),
-   heading('Workspace overview','Projects','One source and deployment per project.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
+  shell(heading('Workspace overview','Projects','One source and deployment per project.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
    '<div class="stats"><div class="stat"><div><span>Total projects</span><strong>'+projects.length+'</strong></div>'+icon('grid')+'</div><div class="stat"><div><span>Containers</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running containers</span><strong>'+running+'</strong></div>'+icon('activity')+'</div></div>'+
    '<div class="workspace-layout"><section><div class="section-head"><h2>All projects<span class="count">'+projects.length+'</span></h2><label class="search-field">'+icon('search')+'<input type="search" id="project-search" placeholder="Find a project…" aria-label="Find a project"></label></div>'+
    (projects.length?'<div class="panel project-directory">'+projects.map(p=>collectionCard(p,'project',apps,deployments)).join('')+'</div><p class="note" id="no-project-matches" hidden>No projects match your search.</p>':empty('No projects yet','Create a project, then connect your first repository.'))+'</section>'+releasePanel(deployments,projects)+'</div>');
   $('#project-search').oninput=e=>{let matches=0;document.querySelectorAll('[data-project-name]').forEach(a=>{a.hidden=!a.dataset.projectName.includes(e.target.value.trim().toLowerCase());if(!a.hidden)matches++});if($('#no-project-matches'))$('#no-project-matches').hidden=matches>0};
   $('#new-project').onclick=createProject;return;
  }
- shell('Workspaces',
-  heading('Infrastructure','Workspaces','Organize the projects running on your server.','<button class="primary" id="new-workspace">'+icon('plus')+'New workspace</button>')+
+ shell(heading('Infrastructure','Workspaces','Organize the projects running on your server.','<button class="primary" id="new-workspace">'+icon('plus')+'New workspace</button>')+
   '<div class="section-head"><h2>All workspaces<span class="count">'+workspaces.length+'</span></h2></div>'+
   (workspaces.length?'<div class="grid">'+workspaces.map(w=>collectionCard(w,'workspace')).join('')+'</div>':empty('No workspaces yet','Create a workspace to organize your projects.')));
  $('#new-workspace').onclick=createWorkspace;

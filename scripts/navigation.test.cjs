@@ -34,7 +34,7 @@ function fixture(hash = '#workspace/w1') {
 }
 
 test('workspace shell puts switching and account controls in the sidebar, not a top navigation', () => {
- const f = fixture(); f.run("shell('Production','Projects')");
+ const f = fixture(); f.run("shell(heading('Workspace','Projects',''))");
  const html = f.element('#root').innerHTML;
  assert.match(html, /id="workspace-switch" popovertarget="workspace-menu"/);
  assert.match(html, /id="account-switch" popovertarget="account-menu"/);
@@ -43,20 +43,27 @@ test('workspace shell puts switching and account controls in the sidebar, not a 
  assert.match(html, /Account settings/);
  assert.match(html, /Switch to light theme/);
  assert.match(html, /aria-label="Open navigation"/);
- assert.doesNotMatch(html, /primary-nav|app-header/);
+ assert.doesNotMatch(html, /primary-nav|app-header|contextbar|breadcrumbs/);
+ assert.equal((html.match(/<header class="heading"/g)||[]).length,1);
 });
 
 test('project sidebar exposes direct project sections and no app tabs', () => {
- const f=fixture('#project/p1/source');f.run("shell('Source','Source',{id:'p1',name:'Storefront'})");
+ const f=fixture('#project/p1/source');f.run("shell(heading('','Source',''),{id:'p1',name:'Storefront',summary:'2 containers · 2 running',deployment_status:'running'})");
  const html=f.element('#root').innerHTML;
  assert.match(html,/href="#workspace\/w1"[^>]*>.*All projects/);
  for(const section of ['deployments','logs','containers','domains','source','environment','settings'])assert.ok(html.includes('href="#project/p1/'+section+'"'));
  assert.match(html,/href="#project\/p1\/source" aria-current="page"/);
- assert.doesNotMatch(html,/Applications|App settings|Workspace settings|data-tab/);
+ assert.doesNotMatch(html,/Applications|App settings|Workspace settings|data-tab|contextbar|breadcrumbs|project-heading/);
+ const sidebar=html.slice(html.indexOf('<aside'),html.indexOf('</aside>'));
+ assert.match(sidebar,/id="project-summary"[^>]*>2 containers · 2 running/);
+ assert.match(sidebar,/id="project-state"/);
+ assert.match(sidebar,/id="deploy-project"/);
+ assert.match(sidebar,/class="sidebar-source"/);
+ assert.equal((html.match(/<header class="heading"/g)||[]).length,1);
 });
 
 test('workspace and account names are escaped in menu markup', () => {
- const f = fixture(); f.run("user.username='<script>';workspace.name='<img>';shell('','')");
+ const f = fixture(); f.run("user.username='<script>';workspace.name='<img>';shell(heading('','Projects',''))");
  const html = f.element('#root').innerHTML;
  assert.match(html, /&lt;script&gt;/); assert.match(html, /&lt;img&gt;/);
  assert.doesNotMatch(html, /<script>|<img>/);
@@ -81,6 +88,11 @@ test('single and multiple containers have the same project-owned deployment cont
   assert.match(html,/id="deploy-project"/);assert.match(html,/Project releases/);
   assert.doesNotMatch(html,/application-switch|app-workbench|Add app|Create application/);
   assert.match(html,new RegExp(count+' container'));
+  assert.match(html,/<h1>Deployments<\/h1>/);
+  assert.match(html,/id="deploy-project-mobile"/);
+  assert.equal(f.element('#deploy-project').disabled,f.element('#deploy-project-mobile').disabled);
+  assert.equal((html.match(/id="open-navigation"/g)||[]).length,1);
+  assert.doesNotMatch(html,/contextbar|breadcrumbs|project-heading/);
   assert.equal(f.stored.get('workspace'),'w2');
  }
 });
