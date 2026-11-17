@@ -2,6 +2,7 @@ import { Outlet, useOutletContext, useParams } from "react-router-dom";
 import { useQueryClient, useSuspenseQueries } from "@tanstack/react-query";
 import { queries } from "../services/queries";
 import { busyRelease, sortReleases } from "../lib/project";
+import { useLiveSubscription } from "../providers/LiveProvider";
 import type {
   Container,
   DomainRoute,
@@ -20,6 +21,7 @@ export const useProject = () => useOutletContext<ProjectContext>();
 export function ProjectLayout() {
   const id = useParams().projectId!,
     client = useQueryClient();
+  useLiveSubscription({ topic: "project", project_id: id });
   const [
     { data: project },
     { data: allContainers },
@@ -27,10 +29,10 @@ export function ProjectLayout() {
     { data: routes },
   ] = useSuspenseQueries({
     queries: [
-      { ...queries.project(id), refetchInterval: 2000 },
-      { ...queries.containers(id), refetchInterval: 2000 },
-      { ...queries.releases(id), refetchInterval: 2000 },
-      { ...queries.routes(id), refetchInterval: 2000 },
+      queries.project(id),
+      queries.containers(id),
+      queries.releases(id),
+      queries.routes(id),
     ],
   });
   const releases = sortReleases(rawReleases);

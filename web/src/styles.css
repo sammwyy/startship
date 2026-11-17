@@ -27,6 +27,20 @@
   background: var(--success);
   margin-left: auto;
 }
+.live-connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.live-connection > span {
+  width: 5px;
+  height: 5px;
+  background: var(--warning);
+  border-radius: 50%;
+}
+.live-connection.connected > span {
+  background: var(--success);
+}
 .update-panel .section-head {
   padding: 0 0 16px;
 }
@@ -84,7 +98,328 @@
   background: var(--raised);
   color: var(--text);
 }
+.sidebar-layout .content {
+  width: 100%;
+  max-width: 1248px;
+  margin-inline: auto;
+  padding: 32px 36px 48px;
+}
+.sidebar-layout .content-compact {
+  max-width: 960px;
+}
+.sidebar-layout .heading {
+  margin-bottom: 28px;
+}
+.workspace-settings,
+.workspace-domains {
+  max-width: none;
+}
+.project-search {
+  margin-bottom: 16px;
+}
+.project-search .search-field {
+  width: 100%;
+  min-height: 44px;
+  border-radius: 10px;
+  background: var(--field);
+  padding-inline: 14px;
+}
+.project-search .search-field input {
+  margin: 0;
+  min-height: 42px;
+  font-size: 12px;
+}
+.project-search .search-field input:focus-visible {
+  outline: none;
+}
+.workspace-layout > section {
+  min-width: 0;
+}
+.project-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(290px, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+.overview-configuration,
+.overview-aside {
+  min-width: 0;
+}
+.overview-aside {
+  display: grid;
+  gap: 24px;
+}
+.overview-panel {
+  padding: 22px;
+}
+.overview-panel .section-head {
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+.overview-configuration .section-head p {
+  margin: 7px 0 10px;
+}
+.subtle-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.subtle-link:hover {
+  color: var(--text);
+}
+.subtle-link .icon,
+.overview-details .icon {
+  height: 12px;
+  width: 12px;
+}
+.overview-release {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.overview-release:last-child {
+  padding-bottom: 0;
+}
+.overview-release:hover .release-id {
+  color: var(--success);
+}
+.overview-release > div {
+  min-width: 0;
+}
+.overview-release time {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.overview-empty {
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
+  font-size: 11px;
+}
+.overview-empty .card-icon {
+  margin-bottom: 14px;
+}
+.overview-empty strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+}
+.overview-empty p {
+  margin: 8px 0 18px;
+}
+.overview-details {
+  margin: 0;
+  display: grid;
+  gap: 18px;
+  font-size: 11px;
+}
+.overview-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+.overview-details dt {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.overview-details dd {
+  margin: 0;
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.overview-details dd .icon {
+  display: inline;
+  vertical-align: middle;
+  margin-inline: 3px;
+}
+.configuration-help {
+  padding: 18px 0;
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+}
+.configuration-help summary {
+  cursor: pointer;
+  width: fit-content;
+}
+.configuration-help p {
+  margin: 12px 0 0;
+  line-height: 1.7;
+}
+.configuration-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.configuration-actions span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.project-deployments {
+  align-items: stretch;
+}
+.project-deployments .release-history {
+  display: flex;
+  flex-direction: column;
+}
+.project-deployments .release-directory {
+  flex: 1;
+  min-height: 240px;
+  max-height: 520px;
+  overflow: auto;
+}
+.project-deployments .project-log-panel {
+  display: flex;
+  flex-direction: column;
+}
+.project-deployments .project-log-panel .log {
+  flex: 1;
+  height: 480px;
+  min-height: 300px;
+  max-height: 620px;
+}
+.release-toolbar {
+  padding: 14px;
+  border-top: 1px solid var(--line);
+  margin-top: 0;
+  gap: 12px;
+}
+.log-no-wrap {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.project-log-panel .log {
+  font-size: 11px;
+  line-height: 1.8;
+}
+.logs-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: 16px;
+}
+.logs-toolbar .runtime-selector {
+  flex-wrap: wrap;
+  font-size: 11px;
+}
+.sidebar-layout .main:has(.logs-view) {
+  overflow: hidden;
+}
+.sidebar-layout .content:has(> .logs-view),
+.logs-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.logs-view,
+.logs-view .project-log-panel {
+  flex: 1;
+}
+.logs-view > .heading,
+.logs-view > .logs-toolbar {
+  flex-shrink: 0;
+}
+.logs-view .project-log-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.logs-view .project-log-panel > :not(.log) {
+  flex-shrink: 0;
+}
+.logs-view .project-log-panel .log {
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  max-height: none;
+  resize: none;
+  overscroll-behavior: contain;
+}
+.log-placeholder {
+  color: var(--faint);
+}
+.log-actions .log-toggle {
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 7px;
+  min-height: 28px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.log-actions .log-toggle[aria-pressed="true"] {
+  color: var(--text);
+  background: var(--raised);
+}
+.log-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  border-top: 1px solid var(--line);
+  font:
+    9px ui-monospace,
+    monospace;
+  color: var(--muted);
+  background: var(--terminal);
+}
+@media (max-width: 1100px) {
+  .project-overview {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overview-aside {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+@media (max-width: 1000px) {
+  .project-deployments {
+    gap: 24px;
+  }
+  .project-deployments .release-directory {
+    flex: none;
+    min-height: 0;
+    max-height: 320px;
+  }
+  .project-deployments .project-log-panel .log {
+    height: 400px;
+  }
+}
 @media (max-width: 700px) {
+  .sidebar-layout .content {
+    padding: 22px 18px 32px;
+  }
+  .sidebar-layout .heading {
+    margin-bottom: 22px;
+  }
+  .overview-aside {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+  }
+  .project-overview {
+    gap: 18px;
+  }
+  .overview-panel,
+  .project-overview .panel-pad {
+    padding: 20px;
+  }
+  .configuration-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .configuration-actions button {
+    width: 100%;
+  }
   .domain-form > .form-fields {
     display: block;
   }

@@ -28,7 +28,8 @@ function Axis({ buckets }: { buckets: TrafficBucket[] }) {
   );
 }
 export function TrafficBars({ data }: { data: Traffic }) {
-  const max = Math.max(1, ...data.buckets.map((b) => b.requests));
+  const peak = Math.max(0, ...data.buckets.map((b) => b.requests));
+  const max = Math.max(2, Math.ceil(peak / 2) * 2);
   return (
     <>
       <div className="traffic-volume-chart">
@@ -39,7 +40,7 @@ export function TrafficBars({ data }: { data: Traffic }) {
         </div>
         <svg
           role="img"
-          aria-label={`Requests and server errors over time, peak ${max} requests per interval`}
+          aria-label={`Requests and server errors over time, peak ${peak} requests per interval`}
           viewBox={`0 0 ${Math.max(1, data.buckets.length) * 10 + 4} 164`}
           preserveAspectRatio="none"
         >

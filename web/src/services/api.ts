@@ -14,6 +14,9 @@ export function beginSessionChange() {
 export function setCredentialRotation(value: boolean) {
   rotatingCredentials = value;
   beginSessionChange();
+  window.dispatchEvent(
+    new CustomEvent("credential-rotation", { detail: value }),
+  );
 }
 
 export async function request<T>(

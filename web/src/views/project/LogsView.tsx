@@ -12,10 +12,9 @@ export function LogsView() {
     : "";
   const log = useLog(releases[0]?.id || "", active);
   return (
-    <>
+    <div className="logs-view">
       <ProjectHeading title="Logs" />
-      <div className="section-head">
-        <h2>Logs</h2>
+      <div className="logs-toolbar">
         <label className="runtime-selector">
           Log source
           <select
@@ -26,7 +25,7 @@ export function LogsView() {
               )
             }
           >
-            <option value="">Project build output</option>
+            <option value="">Build logs</option>
             {containers.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name} · runtime
@@ -37,14 +36,19 @@ export function LogsView() {
       </div>
       <LogPanel
         log={log.data?.log}
-        status={log.data?.status}
+        status={
+          active
+            ? containers.find((c) => c.id === active)?.status
+            : log.data?.status
+        }
         title={
           active
             ? `${containers.find((c) => c.id === active)?.name} · runtime`
-            : "Project build output"
+            : "Build logs"
         }
         error={log.error}
+        loading={log.isFetching && !log.data}
       />
-    </>
+    </div>
   );
 }

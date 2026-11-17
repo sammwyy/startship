@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { UIProvider } from "../providers/UIProvider";
@@ -72,7 +72,7 @@ describe("system updates", () => {
     );
   });
   it("requires confirmation, queues one update and confirms the changed daemon version", async () => {
-    renderView();
+    const { client } = renderView();
     const trigger = await screen.findByText("Update daemon and CLI");
     await userEvent.click(trigger);
     expect(request).not.toHaveBeenCalledWith(
@@ -88,6 +88,12 @@ describe("system updates", () => {
     );
     expect(trigger).toBeDisabled();
     installed = "v1.1.0";
+    act(() =>
+      client.setQueryData(["system/version"], {
+        version: installed,
+        commit: "updated",
+      }),
+    );
     expect(
       await screen.findByText(/v1.1.0 is running/, {}, { timeout: 4000 }),
     ).toBeInTheDocument();

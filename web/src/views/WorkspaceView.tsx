@@ -12,6 +12,10 @@ import { SourceFields } from "../components/SourceFields";
 import { Heading } from "../components/Heading";
 import { Badge, Empty } from "../components/ui";
 import { Icon } from "../components/Icon";
+import {
+  useLiveProjects,
+  useLiveSubscription,
+} from "../providers/LiveProvider";
 
 export function WorkspaceView() {
   const id = useParams().workspaceId!,
@@ -25,6 +29,8 @@ export function WorkspaceView() {
       queries: [queries.projects(id), queries.containers(), queries.releases()],
     });
   const [search, setSearch] = useState("");
+  useLiveSubscription({ topic: "workspace", workspace_id: id });
+  useLiveProjects(projects.map((project) => project.id));
   const containers = allContainers.filter((c) =>
     projects.some((p) => p.id === c.project_id),
   );
@@ -99,14 +105,12 @@ export function WorkspaceView() {
       </div>
       <div className="workspace-layout">
         <section>
-          <div className="section-head">
-            <h2>
-              Projects <span className="count">{projects.length}</span>
-            </h2>
-            <label className="search">
+          <div className="project-search">
+            <label className="search-field">
               <Icon name="search" />
               <input
                 aria-label="Search projects"
+                type="search"
                 placeholder="Find a project"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -132,7 +136,8 @@ export function WorkspaceView() {
                     <span className="project-row-copy">
                       <h3>{p.name}</h3>
                       <span>
-                        {owned.length} containers ·{" "}
+                        {owned.length} container{owned.length === 1 ? "" : "s"}{" "}
+                        ·{" "}
                         {p.git_url
                           ? p.branch || "main"
                           : "Connect a repository"}
@@ -188,25 +193,27 @@ export function WorkspaceView() {
               Your first release starts with a deploy.
             </p>
           )}
-          <div className="release-list">
-            <h2>Recent releases</h2>
-            {releases.slice(0, 4).map((r) => (
-              <Link
-                key={r.id}
-                className="release-item"
-                to={`/project/${r.project_id}`}
-              >
-                <div>
-                  <strong>
-                    {projects.find((p) => p.id === r.project_id)?.name ||
-                      "Project"}
-                  </strong>
-                  <small>{r.commit?.slice(0, 7) || r.id.slice(0, 7)}</small>
-                </div>
-                <Badge status={r.status} />
-              </Link>
-            ))}
-          </div>
+          {!!releases.length && (
+            <div className="release-list">
+              <h2>Recent releases</h2>
+              {releases.slice(0, 4).map((r) => (
+                <Link
+                  key={r.id}
+                  className="release-item"
+                  to={`/project/${r.project_id}/deployments?release=${encodeURIComponent(r.id)}`}
+                >
+                  <div>
+                    <strong>
+                      {projects.find((p) => p.id === r.project_id)?.name ||
+                        "Project"}
+                    </strong>
+                    <small>{r.commit?.slice(0, 7) || r.id.slice(0, 7)}</small>
+                  </div>
+                  <Badge status={r.status} />
+                </Link>
+              ))}
+            </div>
+          )}
         </aside>
       </div>
     </>

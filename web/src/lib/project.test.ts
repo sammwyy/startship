@@ -12,6 +12,7 @@ import type { Container, Release } from "../services/types";
 describe("project configuration", () => {
   it("keeps project-centred sidebar sections without user-managed apps", () => {
     expect(projectSections.map(([key]) => key)).toEqual([
+      "overview",
       "deployments",
       "logs",
       "containers",
@@ -19,7 +20,6 @@ describe("project configuration", () => {
       "domains",
       "source",
       "environment",
-      "settings",
     ]);
   });
   it("parses environment values without losing equals signs or whitespace", () => {

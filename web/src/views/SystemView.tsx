@@ -22,15 +22,9 @@ export function SystemView() {
   const [startedAt, setStartedAt] = useState(0);
   const [timedOut, setTimedOut] = useState(false);
   const [installed, setInstalled] = useState<string>();
-  const status = useQuery({
-    ...queries.updates(),
-    refetchInterval: tracking && !timedOut ? 2000 : 60000,
-  });
+  const status = useQuery(queries.updates());
   const info = status.data;
-  const version = useQuery({
-    ...queries.version(),
-    refetchInterval: tracking && !timedOut ? 2000 : false,
-  });
+  const version = useQuery(queries.version());
   const refresh = useMutation({
     mutationFn: () => request<UpdateInfo>("system/update?refresh=1"),
     onSuccess: (data) => client.setQueryData(queries.updates().queryKey, data),
