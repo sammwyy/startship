@@ -62,7 +62,7 @@ function LegacyContainer() {
   return (
     <Navigate
       replace
-      to={`/project/${data.project_id}/${section === "settings" ? "settings" : section === "domains" ? "domains" : "logs"}`}
+      to={`/project/${data.project_id}/${section === "settings" ? "settings" : section === "domains" ? "domains" : `logs/${data.id}`}`}
     />
   );
 }
