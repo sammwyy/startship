@@ -27,6 +27,21 @@ type Server struct {
 	https           bool
 }
 
+// Response-only fields must not be persisted or accepted as app configuration.
+type apiRecord struct {
+	Record
+	URL string `json:"url,omitempty"`
+}
+
+func publicRecord(v Record) apiRecord {
+	v.GitToken = ""
+	out := apiRecord{Record: v}
+	if v.Kind == "routes" {
+		out.URL = routeURL(v)
+	}
+	return out
+}
+
 func reply(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -201,11 +216,10 @@ func (a *Server) api() http.Handler {
 		}
 		if r.Method == "GET" {
 			if len(p) > 2 {
-				old.GitToken = ""
-				reply(w, 200, old)
+				reply(w, 200, publicRecord(old))
 				return
 			}
-			out := []Record{}
+			out := []apiRecord{}
 			for _, v := range a.store.list(kind, uid) {
 				if parent := r.URL.Query().Get("project_id"); parent != "" && v.ProjectID != parent {
 					continue
@@ -216,8 +230,7 @@ func (a *Server) api() http.Handler {
 				if parent := r.URL.Query().Get("app_id"); parent != "" && v.AppID != parent {
 					continue
 				}
-				v.GitToken = ""
-				out = append(out, v)
+				out = append(out, publicRecord(v))
 			}
 			reply(w, 200, out)
 			return
@@ -337,8 +350,7 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		a.refresh()
-		v.GitToken = ""
-		reply(w, 200, v)
+		reply(w, 200, publicRecord(v))
 	})
 }
 func verifySignature(secret string, body []byte, signature string) bool {
