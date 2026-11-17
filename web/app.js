@@ -20,30 +20,25 @@ const icons = {
  lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
  logout: '<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4m6-13 5 5-5 5m-6-5h11"/>',
  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+ sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
+ moon: '<path d="M20.7 13A9 9 0 0 1 11 3.3 9 9 0 1 0 20.7 13Z"/>',
  close: '<path d="m6 6 12 12M6 18 18 6"/>'
 };
 function icon(name){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(icons[name]||icons.box)+'</svg>'}
-function brand(){return '<span class="mark">'+icon('arrow')+'</span><span>Startship<span class="brand-dot">.</span></span>'}
+function brand(){return '<span class="mark">'+icon('arrow')+'</span><span>Startship</span>'}
 let user, workspaces=[], workspace, timer, selectedDeployment='', viewVersion=0;
-const mobileNavigation=matchMedia('(max-width: 900px)');
-function setNavigation(open,restoreFocus=false){
- const sidebar=$('#sidebar');if(!sidebar)return;
- const expanded=mobileNavigation.matches&&open;
- sidebar.classList.toggle('is-open',expanded);sidebar.inert=mobileNavigation.matches&&!expanded;
- $('.main').inert=expanded;
- $('#sidebar-overlay').hidden=!expanded;$('#menu-toggle').setAttribute('aria-expanded',String(expanded));
- document.body.classList.toggle('navigation-open',expanded);
- if(expanded)$('#close-navigation').focus();else if(restoreFocus)$('#menu-toggle').focus();
+function themeButton(){
+ const light=document.documentElement.dataset.theme==='light';
+ return '<button class="theme-toggle" id="theme-toggle" aria-label="Switch to '+(light?'dark':'light')+' theme" title="Switch to '+(light?'dark':'light')+' theme">'+icon(light?'moon':'sun')+'<span>'+(light?'Dark':'Light')+'</span></button>';
 }
-mobileNavigation.addEventListener('change',()=>setNavigation(false));
-document.addEventListener('keydown',e=>{
- if(!mobileNavigation.matches||!$('#sidebar.is-open'))return;
- if(e.key==='Escape'){setNavigation(false,true);return}
- if(e.key!=='Tab')return;
- const focusable=[...$('#sidebar').querySelectorAll('a,button,select')],first=focusable[0],last=focusable.at(-1);
- if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}
- else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}
-});
+function bindTheme(){
+ $('#theme-toggle').onclick=()=>{
+  const theme=document.documentElement.dataset.theme==='light'?'dark':'light';
+  document.documentElement.dataset.theme=theme;
+  try{localStorage.setItem('startship-theme',theme)}catch{}
+  $('#theme-toggle').outerHTML=themeButton();bindTheme();$('#theme-toggle').focus();
+ };
+}
 async function api(path,body,method){const r=await fetch('/api/'+path,{method:method||(body?'POST':'GET'),headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const v=await r.json();if(!r.ok){if(r.status===401&&user){user=null;location.hash='login'}throw Error(v.error||'Request failed')}return v}
 function toast(text){$('#toast').textContent=text;$('#toast').style.display='block';setTimeout(()=>$('#toast').style.display='none',3500)}
 function badge(status){return '<span class="badge '+esc(status||'idle')+'">'+esc(status||'Not deployed')+'</span>'}
@@ -57,18 +52,15 @@ function modal(title,description,fields,submit,onSubmit){
 }
 function shell(crumb,content){
  const onWorkspaces=!/^#(workspace|project|app)\//.test(location.hash);
- document.body.classList.remove('navigation-open');
- $('#root').innerHTML='<aside class="sidebar" id="sidebar" aria-label="Main navigation"><button class="icon-button sidebar-close" id="close-navigation" aria-label="Close navigation">'+icon('close')+'</button><a href="#workspaces" class="brand">'+brand()+'</a><label class="workspace-label">Workspace<select id="workspace-switch">'+workspaces.map(w=>'<option value="'+esc(w.id)+'" '+(workspace?.id===w.id?'selected':'')+'>'+esc(w.name)+'</option>').join('')+'</select></label><nav class="nav" aria-label="Platform"><small>Overview</small><a class="'+(onWorkspaces?'':'active')+'" '+(!onWorkspaces?'aria-current="page"':'')+' href="#workspace/'+esc(workspace?.id||'')+'">'+icon('grid')+'Projects</a><a class="'+(onWorkspaces?'active':'')+'" '+(onWorkspaces?'aria-current="page"':'')+' href="#workspaces">'+icon('layers')+'Workspaces<span class="nav-count">'+workspaces.length+'</span></a><small>Resources</small><a href="https://docs.docker.com/" target="_blank" rel="noreferrer">'+icon('arrow')+'Docker documentation</a></nav><footer><div class="server-card">'+icon('server')+'<div><strong>Your infrastructure</strong><span>Self-hosted. In your control.</span></div></div><div class="row"><span class="user-info"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span>'+esc(user.username)+'</span></span><button class="icon-button" id="logout" title="Sign out" aria-label="Sign out">'+icon('logout')+'</button></div></footer></aside><button class="sidebar-overlay" id="sidebar-overlay" aria-label="Close navigation" tabindex="-1" hidden></button><main class="main"><header class="topbar"><button class="icon-button menu-toggle" id="menu-toggle" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">'+icon('menu')+'</button><div class="breadcrumbs">'+icon('layers')+'<span class="crumb-divider">/</span><span>'+crumb+'</span></div><div class="topbar-meta"><span class="topbar-tag">Self-hosted</span><span class="live"><span class="dot"></span>Connected</span></div></header><div class="content">'+content+'</div></main>';
- $('#menu-toggle').onclick=()=>setNavigation(!$('#sidebar').classList.contains('is-open'));
- $('#close-navigation').onclick=$('#sidebar-overlay').onclick=()=>setNavigation(false,true);
- setNavigation(false);
+ $('#root').innerHTML='<div class="dashboard"><header class="app-header"><a href="#workspaces" class="brand">'+brand()+'</a><nav class="primary-nav" aria-label="Main navigation"><a class="'+(onWorkspaces?'':'active')+'" '+(!onWorkspaces?'aria-current="page"':'')+' href="#workspace/'+esc(workspace?.id||'')+'">'+icon('grid')+'Projects</a><a class="'+(onWorkspaces?'active':'')+'" '+(onWorkspaces?'aria-current="page"':'')+' href="#workspaces">'+icon('layers')+'Workspaces</a></nav><div class="header-controls">'+themeButton()+'<a class="icon-button docs-link" href="https://docs.docker.com/" target="_blank" rel="noreferrer" aria-label="Docker documentation" title="Docker documentation">'+icon('server')+'</a><span class="avatar" title="'+esc(user.username)+'">'+esc(user.username[0].toUpperCase())+'</span><button class="icon-button" id="logout" title="Sign out" aria-label="Sign out">'+icon('logout')+'</button></div></header><main class="main"><div class="contextbar"><label class="workspace-picker">'+icon('layers')+'<select id="workspace-switch" aria-label="Workspace">'+workspaces.map(w=>'<option value="'+esc(w.id)+'" '+(workspace?.id===w.id?'selected':'')+'>'+esc(w.name)+'</option>').join('')+'</select></label><span class="context-divider">/</span><div class="breadcrumbs">'+crumb+'</div><span class="instance-label">'+icon('server')+'Self-hosted</span></div><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div>';
+ bindTheme();
  $('#workspace-switch').onchange=e=>nav('workspace/'+e.target.value);
  $('#logout').onclick=async()=>{await api('logout',{});user=null;nav('login')};
 }
-function heading(kicker,title,subtitle,actions=''){return '<div class="heading"><div class="heading-copy"><div class="eyebrow">'+kicker+'</div><h1>'+esc(title)+'</h1><p style="margin:0">'+esc(subtitle)+'</p></div><div class="row heading-actions">'+actions+'</div></div>'}
+function heading(kicker,title,subtitle,actions=''){return '<div class="heading"><div class="heading-copy"><div class="eyebrow">'+kicker+'</div><h1>'+esc(title)+'</h1><p>'+esc(subtitle)+'</p></div><div class="row heading-actions">'+actions+'</div></div>'}
 function auth(setup){
- document.body.classList.remove('navigation-open');
- $('#root').innerHTML='<div class="auth"><section class="auth-art"><div class="brand">'+brand()+'</div><div><div class="eyebrow">From local to live</div><h1>Your next idea.<br><em>Already taking off.</em></h1><p>One home for your code, applications, and domains. Ship on your terms, on infrastructure you own.</p><div class="auth-graphic"><span>'+icon('branch')+'git push</span>'+icon('next')+'<span>'+icon('box')+'build & test</span>'+icon('next')+'<span><i class="dot"></i>live</span></div></div><span class="auth-footer">'+icon('server')+'Independent by design. Self-hosted by you.</span></section><section class="auth-form"><form><div class="eyebrow">'+(setup?'Your launch starts here':'Welcome back')+'</div><h1>'+(setup?'Make yourself at home.':'Sign in to Startship.')+'</h1><p>'+(setup?'Create your administrator account to launch your first project.':'Pick up where you left off. Your projects are waiting.')+'</p>'+field('Username','username','','text','required autocomplete="username" placeholder="Your username"')+field('Password','password','','password','required minlength="8" autocomplete="'+(setup?'new-password':'current-password')+'" placeholder="Your password"')+(setup?'<p class="small muted" style="margin-top:-8px">At least 8 characters. There is no password reset, so keep it somewhere safe.</p>':'')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">'+(setup?'Create account & continue':'Sign in')+icon('next')+'</button><p class="form-footnote">'+icon('lock')+'Your server. Your code. Your rules.</p></form></section></div>';
+ $('#root').innerHTML='<div class="auth"><header class="auth-header"><a class="brand" href="#login">'+brand()+'</a>'+themeButton()+'</header><section class="auth-story"><div class="auth-index"><span>01 — YOUR INFRASTRUCTURE</span><span>BUILT TO SHIP ↗</span></div><div class="auth-message"><h1>From commit.<br>To production.<br><em>On your terms.</em></h1><p>Deploy your applications on the server you own.<br>A straight line from your code to the world.</p></div><div class="pipeline"><div class="pipeline-head"><span>THE SHORTEST PATH TO LIVE</span>'+icon('arrow')+'</div><div class="pipeline-track"><div><span class="pipeline-node">'+icon('branch')+'</span><strong>Push</strong><span>Your repository</span></div><div><span class="pipeline-node">'+icon('box')+'</span><strong>Build</strong><span>Isolated by default</span></div><div><span class="pipeline-node node-live">'+icon('globe')+'</span><strong>Ship</strong><span>Your own domain</span></div></div><div class="pipeline-command"><span>$</span> git push origin main <span class="command-cursor"></span></div></div></section><section class="auth-form"><form><span class="form-index">'+(setup?'FIRST THINGS FIRST':'YOUR CONTROL ROOM')+'</span><h2>'+(setup?'Set up your account.':'Welcome back.')+'</h2><p>'+(setup?'Create the administrator account for this server.':'Sign in to manage your applications.')+'</p>'+field('Username','username','','text','required autocomplete="username" placeholder="Enter your username"')+field('Password','password','','password','required minlength="8" autocomplete="'+(setup?'new-password':'current-password')+'" placeholder="Enter your password"')+(setup?'<p class="password-help">At least 8 characters. There is no password reset, so keep it somewhere safe.</p>':'')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">'+(setup?'Create account':'Sign in')+icon('arrow')+'</button><div class="form-footnote">'+icon('lock')+'Private access to your infrastructure.</div></form></section><footer class="auth-footer"><span>SELF-HOSTED, NOT LIMITED.</span><span>Startship / Deployment platform</span></footer></div>';
+ bindTheme();
  $('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const v=Object.fromEntries(new FormData(e.target));try{if(setup)await api('setup',v);await api('login',v);user=await api('me');nav('workspaces')}catch(err){$('.form-error').textContent=err.message}finally{button.disabled=false}};
 }
 function createWorkspace(){modal('Create workspace','A home for your projects and applications.',field('Workspace name','name','','text','required'),'Create workspace',async f=>{const w=await api('workspaces',Object.fromEntries(f));nav('workspace/'+w.id);toast('Workspace created')})}
@@ -96,11 +88,11 @@ async function projectPage(id){
  const [p,apps,routes,deployments]=await Promise.all([api('projects/'+id),api('apps?project_id='+id),api('routes?project_id='+id),api('deployments')]);workspace=workspaces.find(w=>w.id===p.workspace_id);
  const status=a=>deployments.find(d=>d.id===a.active_deployment)?.status;
  shell('<a href="#workspace/'+workspace.id+'">'+esc(workspace.name)+'</a> &nbsp; / &nbsp; '+esc(p.name),
- heading('Project overview',p.name,'Your applications, connected and ready to ship.','<button id="detect">'+icon('search')+'Detect apps</button><button class="primary" id="add-app">'+icon('plus')+'Add app</button>')+
- '<div class="stats"><div class="stat"><div><span>APPLICATIONS</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>RUNNING</span><strong>'+apps.filter(a=>status(a)==='running').length+'</strong></div>'+icon('activity')+'</div><div class="stat"><div><span>ROUTES</span><strong>'+routes.length+'</strong></div>'+icon('globe')+'</div></div>'+
- '<div class="section-head"><h2>Applications<span class="count">'+apps.length+'</span></h2><span class="small muted">From your repository to the world.</span></div>'+
+ heading('Project overview',p.name,'Applications and traffic, in one view.','<button id="detect">'+icon('search')+'Detect apps</button><button class="primary" id="add-app">'+icon('plus')+'Add app</button>')+
+ '<div class="stats"><div class="stat"><div><span>Applications</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running applications</span><strong>'+apps.filter(a=>status(a)==='running').length+'</strong></div>'+icon('activity')+'</div><div class="stat"><div><span>Connected routes</span><strong>'+routes.length+'</strong></div>'+icon('globe')+'</div></div>'+
+ '<div class="section-head"><h2>Applications<span class="count">'+apps.length+'</span></h2><span class="small muted">Git-connected services</span></div>'+
  (apps.length?'<div class="grid">'+apps.map(a=>'<a class="card link" href="#app/'+a.id+'"><div class="card-top"><div class="card-icon">'+icon('box')+'</div>'+badge(status(a))+'</div><h3>'+esc(a.name)+'</h3><div class="card-description">'+esc(a.git_url)+'</div><div class="app-meta"><span>'+icon('branch')+esc(a.branch)+'</span><span>'+icon('folder')+rootLabel(a.root_dir)+'</span></div><div class="card-footer"><span>'+esc(a.build_type)+' · Port '+a.port+'</span><span>View application '+icon('arrow')+'</span></div></a>').join('')+'</div>':empty('Your first app starts here','Connect a Git repository or discover apps in a monorepo.'))+
- '<section class="section"><div class="section-head"><div><h2>Domains & routes<span class="count">'+routes.length+'</span></h2><span class="small muted">A place on the internet for every application.</span></div><button id="add-route">'+icon('plus')+'Connect domain</button></div>'+
+ '<section class="section"><div class="section-head"><div><h2>Domains & routes<span class="count">'+routes.length+'</span></h2><span class="small muted">Public endpoints for this project</span></div><button id="add-route">'+icon('plus')+'Connect domain</button></div>'+
  (routes.length?'<div class="panel table-panel"><table><thead><tr><th>Public router URL</th><th>Application (internal port)</th><th>Prefix</th><th>Actions</th></tr></thead><tbody>'+routes.map(r=>'<tr><td><a href="'+esc(r.url)+'" target="_blank" rel="noopener noreferrer" aria-label="Open '+esc(r.url)+'">'+esc(r.url)+' '+icon('arrow')+'</a></td><td>'+esc(apps.find(a=>a.id===r.app_id)?.name)+' <span class="muted">:'+apps.find(a=>a.id===r.app_id)?.port+'</span></td><td>'+ (r.strip_prefix?'Stripped':'Preserved')+'</td><td><button class="danger delete-route" data-id="'+r.id+'">Delete</button></td></tr>').join('')+'</tbody></table></div>':empty('No domains connected yet','Add a hostname and route traffic to your app.'))+'<details class="note"><summary>DNS & routing setup</summary><p>Point the A record of each host to this server’s public IP. Open a router URL above to visit your app; internal container ports are not published. URLs use this server’s configured router port, not the dashboard port. If a gateway maps different public ports, use its public URL instead.</p></details></section>');
  $('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p);$('#add-route').onclick=()=>addRoute(p,apps);
  document.querySelectorAll('.delete-route').forEach(b=>b.onclick=async()=>{try{await api('routes/'+b.dataset.id,null,'DELETE');render();toast('Route deleted')}catch(e){toast(e.message)}});
@@ -116,11 +108,12 @@ async function appPage(id){
  const previousLog=$('#build-log');const previousScroll=previousLog?.scrollTop||0;const follow=!previousLog||previousLog.scrollHeight-previousLog.scrollTop-previousLog.clientHeight<40;
  const ds=await api('deployments?app_id='+id);if(activeTab!=='deployments'||!$('#tab-content'))return;
  const previousTableScroll=$('#deployment-history')?.scrollLeft||0;
+ const previousTableTop=$('#deployment-history')?.scrollTop||0;
  const latest=ds.slice().reverse();if(!latest.some(d=>d.id===selectedDeployment))selectedDeployment=latest[0]?.id||'';
- $('#tab-content').innerHTML='<div class="section-head"><h2>Release history</h2><span class="small muted">Branch '+esc(app.branch)+' &nbsp; · &nbsp; Root '+rootLabel(app.root_dir)+' &nbsp; · &nbsp; Port '+app.port+'</span></div>'+
+ $('#tab-content').innerHTML='<div class="section-head"><h2>Release history</h2><span class="small muted">Branch '+esc(app.branch)+' &nbsp; · &nbsp; Root '+rootLabel(app.root_dir)+' &nbsp; · &nbsp; Port '+app.port+'</span></div><div class="deployment-layout"><div>'+
  (latest.length?'<div class="panel table-panel" id="deployment-history"><table><thead><tr><th>Deployment</th><th>Status</th><th>Commit</th><th>Created</th></tr></thead><tbody>'+latest.map(d=>'<tr class="'+(d.id===selectedDeployment?'selected':'')+'"><td><button class="select-deploy" aria-pressed="'+(d.id===selectedDeployment)+'" data-id="'+d.id+'">'+icon('box')+d.id.slice(0,8)+'</button></td><td>'+badge(d.status)+'</td><td class="muted commit">'+esc(d.commit?.slice(0,7)||'Pending')+'</td><td class="muted">'+new Date(d.created).toLocaleString()+'</td></tr>').join('')+'</tbody></table></div>':empty('Ready when you are','Deploy your first release to see build output here.'))+
- '<section class="section panel"><div class="log-head"><span class="log-title">'+icon('terminal')+'Build output <span class="muted" id="log-id"></span></span><span class="live"><span class="dot"></span>Auto-refresh · 2s</span></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section>';
- if($('#deployment-history'))$('#deployment-history').scrollLeft=previousTableScroll;
+ '</div><section class="section panel"><div class="log-head"><span class="log-title">'+icon('terminal')+'Build output <span class="muted" id="log-id"></span></span><span class="live"><span class="dot"></span>Live · 2s</span></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section></div>';
+ if($('#deployment-history')){$('#deployment-history').scrollLeft=previousTableScroll;$('#deployment-history').scrollTop=previousTableTop}
  document.querySelectorAll('.select-deploy').forEach(b=>b.onclick=async()=>{selectedDeployment=b.dataset.id;await showDeployments()});
  const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];$('#active-status').innerHTML=badge(current?.status);
  await updateLog();
@@ -136,10 +129,18 @@ async function appPage(id){
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab).catch(e=>toast(e.message)));
  await tab('deployments');
 }
-function collectionCard(item,kind){
+function collectionCard(item,kind,apps=[]){
  const current=kind==='workspace'&&workspace?.id===item.id;
- const created=item.created?new Date(item.created).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'';
- return '<a class="card link" href="#'+kind+'/'+esc(item.id)+'"><div class="card-top"><div class="card-icon">'+icon(kind==='workspace'?'layers':'grid')+'</div>'+(current?'<span class="badge running">Current</span>':'<span class="card-arrow">'+icon('arrow')+'</span>')+'</div><h3>'+esc(item.name)+'</h3><div class="card-description">'+(kind==='workspace'?'A dedicated space for your projects.':'Applications, domains, and releases.')+'</div><div class="card-footer"><span>'+(created?'Created '+esc(created):'Ready to build')+'</span><span>Open '+kind+' '+icon('next')+'</span></div></a>';
+ const projectApps=apps.filter(a=>a.project_id===item.id);
+ const created=item.created?new Date(item.created).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';
+ const detail=kind==='workspace'?'Workspace':projectApps.length+' application'+(projectApps.length===1?'':'s')+(projectApps.length?' · '+[...new Set(projectApps.map(a=>a.build_type))].map(esc).join(', '):' · Ready to deploy');
+ return '<a class="card link" href="#'+kind+'/'+esc(item.id)+'"><div class="card-top"><div class="card-icon">'+icon(kind==='workspace'?'layers':'grid')+'</div>'+(current?'<span class="badge running">Current</span>':'<span class="card-arrow">'+icon('arrow')+'</span>')+'</div><h3>'+esc(item.name)+'</h3><div class="card-description">'+detail+'</div><div class="card-footer"><span>'+(created?'Created '+esc(created):'Not deployed')+'</span><span>Open '+kind+' '+icon('arrow')+'</span></div></a>';
+}
+function releasePanel(deployments,apps){
+ const latest=deployments.slice().sort((a,b)=>new Date(b.created)-new Date(a.created)),recent=latest.slice(0,32).reverse();
+ return '<aside class="panel activity-panel"><div class="section-head"><h2>Deployment activity</h2>'+icon('activity')+'</div><div class="activity-total"><strong>'+deployments.length+'</strong><span>total releases</span></div>'+
+ (recent.length?'<div class="release-pulse" aria-label="Recent deployment statuses">'+recent.map(d=>'<span class="'+esc(d.status)+'" title="'+esc(d.status)+' · '+esc(new Date(d.created).toLocaleString())+'"></span>').join('')+'</div><div class="pulse-caption"><span>Older</span><span>Latest '+recent.length+' releases</span></div>':'<p class="activity-empty">Your first release starts with a deploy.</p>')+
+ '<div class="release-list"><h2>Recent releases</h2>'+latest.slice(0,4).map(d=>'<a class="release-item" href="#app/'+esc(d.app_id)+'"><div><strong>'+esc(apps.find(a=>a.id===d.app_id)?.name||'Application')+'</strong><small>'+esc(d.commit?.slice(0,7)||d.id.slice(0,7))+' · '+esc(new Date(d.created).toLocaleDateString(undefined,{month:'short',day:'numeric'}))+'</small></div>'+badge(d.status)+'</a>').join('')+(!latest.length?'<p class="activity-empty">No deployments in this workspace.</p>':'')+'</div></aside>';
 }
 async function render(){
  clearInterval(timer);const version=++viewVersion;
@@ -152,17 +153,21 @@ async function render(){
  if(parts[0]==='app'){await appPage(parts[1]);return}
  if(parts[0]==='workspace'&&workspace){
   localStorage.setItem('workspace',workspace.id);
-  const projects=await api('projects?workspace_id='+workspace.id);
+  const [projects,allApps,allDeployments]=await Promise.all([api('projects?workspace_id='+workspace.id),api('apps'),api('deployments')]);
+  const apps=allApps.filter(a=>projects.some(p=>p.id===a.project_id));
+  const deployments=allDeployments.filter(d=>apps.some(a=>a.id===d.app_id));
+  const running=apps.filter(a=>deployments.find(d=>d.id===a.active_deployment)?.status==='running').length;
   shell(esc(workspace.name),
-   heading('Workspace',workspace.name,'Everything you’re building, all in one place.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
-   '<div class="section-head"><h2>Your projects<span class="count">'+projects.length+'</span></h2><span class="small muted">A home for your next big idea.</span></div>'+
-   (projects.length?'<div class="grid">'+projects.map(p=>collectionCard(p,'project')).join('')+'</div>':empty('Make room for your next idea','Create a project to start deploying apps.')));
+   heading('Workspace overview','Projects','Your applications, from first commit to latest release.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
+   '<div class="stats"><div class="stat"><div><span>Total projects</span><strong>'+projects.length+'</strong></div>'+icon('grid')+'</div><div class="stat"><div><span>Applications</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running applications</span><strong>'+running+'</strong></div>'+icon('activity')+'</div></div>'+
+   '<div class="workspace-layout"><section><div class="section-head"><h2>All projects<span class="count">'+projects.length+'</span></h2><span class="small muted">'+esc(workspace.name)+'</span></div>'+
+   (projects.length?'<div class="grid project-grid">'+projects.map(p=>collectionCard(p,'project',apps)).join('')+'</div>':empty('No projects yet','Create a project, then connect your first repository.'))+'</section>'+releasePanel(deployments,apps)+'</div>');
   $('#new-project').onclick=createProject;return;
  }
  shell('Workspaces',
-  heading('Your infrastructure','Workspaces','Great things start with a little space. Organize your projects here.','<button class="primary" id="new-workspace">'+icon('plus')+'New workspace</button>')+
-  '<div class="section-head"><h2>Your workspaces<span class="count">'+workspaces.length+'</span></h2><span class="small muted">Your infrastructure. Your way.</span></div>'+
-  (workspaces.length?'<div class="grid">'+workspaces.map(w=>collectionCard(w,'workspace')).join('')+'</div>':empty('A fresh start','Create a workspace to organize your projects.')));
+  heading('Infrastructure','Workspaces','Organize the projects running on your server.','<button class="primary" id="new-workspace">'+icon('plus')+'New workspace</button>')+
+  '<div class="section-head"><h2>All workspaces<span class="count">'+workspaces.length+'</span></h2></div>'+
+  (workspaces.length?'<div class="grid">'+workspaces.map(w=>collectionCard(w,'workspace')).join('')+'</div>':empty('No workspaces yet','Create a workspace to organize your projects.')));
  $('#new-workspace').onclick=createWorkspace;
  }catch(e){$('#root').innerHTML='<div class="error-page"><h1>Something went wrong.</h1><p>'+esc(e.message)+'</p><a class="button" href="#workspaces">Back to workspaces</a></div>'}
 }
