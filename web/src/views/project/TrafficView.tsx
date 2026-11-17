@@ -53,7 +53,7 @@ export function TrafficContent({ data }: { data: Traffic }) {
     memory = data.containers.reduce((n, c) => n + c.memory_bytes, 0);
   const notes: Record<string, string> = {
     waiting: "Waiting for first sample",
-    none: "No running containers",
+    none: "No process resource samples",
     unavailable: "Container metrics unavailable",
     stale: "Container metrics are stale",
   };
