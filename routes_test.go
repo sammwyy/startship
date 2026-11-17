@@ -2,10 +2,81 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestStaticCacheRevalidation(t *testing.T) {
+	for _, prefix := range []string{"/", "/site/"} {
+		t.Run(prefix, func(t *testing.T) {
+			a := testServer(t)
+			modified := time.Unix(1700000000, 0)
+			releases := make([]Record, 2)
+			for i, release := range []string{"A", "B"} {
+				dir := t.TempDir()
+				for _, name := range []string{"index.html", "app.js", "style.css"} {
+					file := filepath.Join(dir, name)
+					if err := os.WriteFile(file, []byte(name+" release "+release), 0600); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Chtimes(file, modified, modified); err != nil {
+						t.Fatal(err)
+					}
+				}
+				releases[i] = Record{ID: release, Status: "running", StaticDir: dir}
+			}
+			a.targets = []Target{{Route: Record{Host: "test.local", PathPrefix: prefix, StripPrefix: true}}}
+			request := func(method, path, etag, lastModified string) *httptest.ResponseRecorder {
+				t.Helper()
+				r := httptest.NewRequest(method, "http://test.local"+prefix+path, nil)
+				if etag != "" {
+					r.Header.Set("If-None-Match", etag)
+				}
+				if lastModified != "" {
+					r.Header.Set("If-Modified-Since", lastModified)
+				}
+				w := httptest.NewRecorder()
+				a.ServeHTTP(w, r)
+				if got := w.Header().Get("Cache-Control"); got != "no-cache" {
+					t.Fatalf("%s: Cache-Control = %q, want no-cache", path, got)
+				}
+				return w
+			}
+			for _, path := range []string{"", "index.html", "deep/link", "app.js", "style.css"} {
+				t.Run(path, func(t *testing.T) {
+					a.targets[0].Deployment = releases[0]
+					first := request(http.MethodGet, path, "", "")
+					etag, lastModified := first.Header().Get("ETag"), first.Header().Get("Last-Modified")
+					if first.Code != http.StatusOK || !strings.Contains(first.Body.String(), "release A") || etag == "" || lastModified == "" {
+						t.Fatalf("initial response: %d %v %s", first.Code, first.Header(), first.Body.String())
+					}
+					for _, method := range []string{http.MethodGet, http.MethodHead} {
+						cached := request(method, path, etag, lastModified)
+						if cached.Code != http.StatusNotModified || cached.Body.Len() != 0 || cached.Header().Get("ETag") != etag {
+							t.Fatalf("unchanged %s: %d %v %s", method, cached.Code, cached.Header(), cached.Body.String())
+						}
+					}
+					a.targets[0].Deployment = releases[1]
+					updated := request(http.MethodGet, path, etag, lastModified)
+					if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), "release B") {
+						t.Fatalf("redeployed response: %d %s", updated.Code, updated.Body.String())
+					}
+					if updated.Header().Get("ETag") == etag || updated.Header().Get("Last-Modified") != lastModified {
+						t.Fatalf("redeploy must change ETag even with identical modification times: %v", updated.Header())
+					}
+					if cached := request(http.MethodGet, path, updated.Header().Get("ETag"), lastModified); cached.Code != http.StatusNotModified {
+						t.Fatalf("unchanged new deployment: %d", cached.Code)
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestPublicRouteURL(t *testing.T) {
 	for _, tt := range []struct{ name, httpAddr, httpsAddr, email, host, prefix, want string }{

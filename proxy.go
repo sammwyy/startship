@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"net"
 	"net/http"
@@ -138,6 +139,9 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+		w.Header().Set("Cache-Control", "no-cache")
+		etag := sha256.Sum256([]byte(d.ID + ":" + clean))
+		w.Header().Set("ETag", fmt.Sprintf(`"%x"`, etag))
 		if _, e = os.Stat(file); os.IsNotExist(e) {
 			http.ServeFile(w, r, filepath.Join(d.StaticDir, "index.html"))
 			return
