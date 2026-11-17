@@ -2,6 +2,65 @@
 
 Self-hosted deployment platform, single Go binary `startshipd`. A dark, responsive dashboard is embedded with Go embed.FS; no Node toolchain or external asset service is required. The same dashboard server also exposes a JSON API.
 
+## Install on a server
+
+On Linux amd64/arm64 with Docker Engine, Git, curl and systemd installed:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sammwyy/startship/main/install.sh | sudo sh
+journalctl -u startshipd
+startship login http://localhost:8080
+startship passwd
+```
+
+The installer verifies release SHA-256 checksums, installs `startship` and
+`startshipd` in `/usr/local/bin`, and enables the daemon at boot. Re-run to upgrade;
+set `STARTSHIP_VERSION=vX.Y.Z` to pin a release. Existing
+`/etc/startship/startshipd.env` is preserved. Data is embedded **SQLite**, stored at
+`$STARTSHIP_DATA/startship.db` (installer default `/var/lib/startship`); no external
+database is needed. The service runs as `startship` with Docker access (equivalent
+to root privileges) and permission to bind ports 80/443. Keep dashboard access
+restricted to trusted networks or use HTTPS for remote login.
+
+Download and inspect the script before executing it if desired. `sudo sh
+install.sh --uninstall` removes the service and binaries but preserves data,
+configuration and the service user. Without running systemd the installer writes
+the unit but reports that it cannot start it. `STARTSHIP_DOWNLOAD_URL` can override
+the release asset base URL for testing.
+
+## CLI
+
+Build locally with `go build -o startship ./cmd/startship`. The CLI talks to the
+daemon's dashboard JSON API; it does not open the database or require Docker on
+the client. `startship help` lists every command. For example:
+
+```sh
+startship login https://deploy.example.com
+startship whoami
+startship workspaces list
+startship projects create website "admin's Workspace"
+startship projects source website '{"git_url":"https://github.com/owner/repo","branch":"main"}'
+startship projects env set website NODE_ENV=production
+startship deploy website --wait
+startship deployments list website --json
+startship logs website
+startship containers list website
+startship routes add website CONTAINER_ID example.com /
+startship traffic website --json
+```
+
+Project deployments map to API **releases** (combined build logs); container runtime
+logs use `startship logs --container ID`. `projects update ID JSON` exposes project
+settings, and `detect JSON` exposes source detection. Environment `set` replaces
+the entire environment map (no pairs clears it). Use IDs when names are ambiguous.
+`--json` returns API JSON; errors exit non-zero. Login and account updates store
+the rotated session cookie in `$XDG_CONFIG_HOME/startship/config.json` (fallback
+`~/.config/startship/config.json`), mode 0600. `STARTSHIP_SERVER` and
+`STARTSHIP_TOKEN` override saved settings. Passwords are prompted, not passed as
+command arguments; terminal echo is disabled when `stty` is available. Use
+`passwd` to complete first-run setup, and `account update NAME` to rename yourself.
+Roles, workspace membership and workspace domain policies are not added here.
+
 ## Run
 
 Requires [Docker Engine](https://docs.docker.com/engine/install/) with Compose and [Git](https://git-scm.com/downloads); your user must be able to access the Docker daemon. Ports 80, 443 and 8080 must be free on the host.

@@ -1,0 +1,33 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build Linux binaries
+        env:
+          CGO_ENABLED: '0'
+          GOOS: linux
+          VERSION: ${{ github.ref_name }}
+        run: |
+          mkdir dist
+          for arch in amd64 arm64; do
+            GOARCH=$arch go build -trimpath -o dist/startshipd_linux_$arch .
+            GOARCH=$arch go build -trimpath -ldflags "-X main.version=$VERSION" -o dist/startship_linux_$arch ./cmd/startship
+          done
+          (cd dist && sha256sum startship* > checksums.txt)
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          gh release view "$VERSION" || gh release create "$VERSION" --verify-tag --generate-notes
+          gh release upload "$VERSION" dist/* --clobber
