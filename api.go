@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -65,6 +66,9 @@ func secureRequest(r *http.Request) bool {
 	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
 }
 func (a *Server) createUser(user, pass string) (string, error) {
+	return a.createUserPending(user, pass, false)
+}
+func (a *Server) createUserPending(user, pass string, pending bool) (string, error) {
 	user = strings.TrimSpace(user)
 	if len(user) < 1 || len(user) > 100 || len(pass) < 8 {
 		return "", fmt.Errorf("username required; password must be at least 8 characters")
@@ -81,7 +85,7 @@ func (a *Server) createUser(user, pass string) (string, error) {
 	}
 	defer tx.Rollback()
 	id := randomID()
-	if _, e = tx.Exec("INSERT INTO users VALUES(?,?,?)", id, user, string(hash)); e != nil {
+	if _, e = tx.Exec("INSERT INTO users(id,username,password,must_change_password) VALUES(?,?,?,?)", id, user, string(hash), pending); e != nil {
 		return "", e
 	}
 	ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace", Created: time.Now().UTC()}
@@ -140,7 +144,8 @@ func (a *Server) updateAccount(w http.ResponseWriter, r *http.Request, uid strin
 	defer tx.Rollback()
 	cookie, _ := r.Cookie("startship_session")
 	var name, hash string
-	err = tx.QueryRow("SELECT u.username,u.password FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND s.id=? AND s.expires>?", uid, cookie.Value, time.Now().Unix()).Scan(&name, &hash)
+	var pending bool
+	err = tx.QueryRow("SELECT u.username,u.password,u.must_change_password FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND s.id=? AND s.expires>?", uid, cookie.Value, time.Now().Unix()).Scan(&name, &hash, &pending)
 	if err != nil {
 		fail(w, 401, "session expired; sign in again")
 		return
@@ -170,6 +175,16 @@ func (a *Server) updateAccount(w http.ResponseWriter, r *http.Request, uid strin
 		}
 		hash = string(generated)
 	}
+	if pending && v.NewPassword != nil {
+		if *v.NewPassword == v.CurrentPassword {
+			fail(w, 400, "choose a different password")
+			return
+		}
+		if _, err = tx.Exec("UPDATE users SET must_change_password=0 WHERE id=?; INSERT OR IGNORE INTO settings VALUES('setup_completed',strftime('%Y-%m-%dT%H:%M:%SZ','now'))", uid); err != nil {
+			fail(w, 500, "account update failed")
+			return
+		}
+	}
 	if _, err = tx.Exec("UPDATE users SET username=?,password=? WHERE id=?", name, hash, uid); err != nil {
 		fail(w, 500, "account update failed")
 		return
@@ -187,6 +202,9 @@ func (a *Server) updateAccount(w http.ResponseWriter, r *http.Request, uid strin
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode, MaxAge: 604800})
+	if pending && v.NewPassword != nil {
+		log.Print("Setup complete: administrator password changed")
+	}
 	reply(w, 200, map[string]string{"id": uid, "username": name})
 }
 func (a *Server) api() http.Handler {
@@ -216,7 +234,7 @@ func (a *Server) api() http.Handler {
 			if r.Method == "GET" {
 				var n int
 				a.store.db.QueryRow("SELECT count(*) FROM users").Scan(&n)
-				reply(w, 200, map[string]bool{"required": n == 0})
+				reply(w, 200, map[string]bool{"required": n == 0, "completed": a.setupComplete()})
 				return
 			}
 			if r.Method != "POST" {
@@ -239,6 +257,10 @@ func (a *Server) api() http.Handler {
 			id, e := a.createUser(v.Username, v.Password)
 			if e != nil {
 				fail(w, 400, e.Error())
+				return
+			}
+			if e := a.markSetupComplete(); e != nil {
+				fail(w, 500, "setup failed")
 				return
 			}
 			reply(w, 201, map[string]string{"id": id})
@@ -291,8 +313,18 @@ func (a *Server) api() http.Handler {
 				return
 			}
 			var name string
-			a.store.db.QueryRow("SELECT username FROM users WHERE id=?", uid).Scan(&name)
-			reply(w, 200, map[string]string{"id": uid, "username": name})
+			var pending bool
+			a.store.db.QueryRow("SELECT username,must_change_password FROM users WHERE id=?", uid).Scan(&name, &pending)
+			reply(w, 200, map[string]any{"id": uid, "username": name, "must_change_password": pending, "setup_completed": a.setupComplete()})
+			return
+		}
+		var pending bool
+		if err := a.store.db.QueryRow("SELECT must_change_password FROM users WHERE id=?", uid).Scan(&pending); err != nil {
+			fail(w, 500, "account unavailable")
+			return
+		}
+		if pending {
+			fail(w, 403, "change your password to complete setup before continuing")
 			return
 		}
 		if p[1] == "detect" && r.Method == "POST" {

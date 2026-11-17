@@ -10,7 +10,9 @@ services:
       # and open ports 80/443. The dashboard is then served at https://<domain>.
       # STARTSHIP_ACME_EMAIL: you@example.com
       # STARTSHIP_DASHBOARD_DOMAIN: startship.example.com
-      # Skip the first-run screen by seeding the admin account instead:
+      # First run prints admin credentials: docker compose logs startship
+      # Sign in and change the temporary password to complete setup.
+      # Or seed credentials without a forced change (only on an empty database):
       # STARTSHIP_ADMIN_USER: admin
       # STARTSHIP_ADMIN_PASSWORD: change-this-password
     ports:

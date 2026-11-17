@@ -31,7 +31,7 @@ const icons = {
 };
 function icon(name){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(icons[name]||icons.box)+'</svg>'}
 function brand(){return '<span class="mark">'+icon('arrow')+'</span><span>Startship</span>'}
-let user, workspaces=[], workspace, timer, selectedDeployment='', viewVersion=0, accountSaving=false;
+let user, loginPassword='', workspaces=[], workspace, timer, selectedDeployment='', viewVersion=0, accountSaving=false;
 function themeButton(){
  const light=document.documentElement.dataset.theme==='light';
  return '<button class="theme-toggle" id="theme-toggle" aria-label="Switch to '+(light?'dark':'light')+' theme" title="Switch to '+(light?'dark':'light')+' theme">'+icon(light?'moon':'sun')+'<span>'+(light?'Dark':'Light')+'</span></button>';
@@ -134,7 +134,8 @@ function heading(kicker,title,subtitle,actions='',subtitleId='',mobileContext=''
 function auth(setup){
  $('#root').innerHTML='<div class="auth"><header class="auth-header"><a class="brand" href="#login">'+brand()+'</a>'+themeButton()+'</header><section class="auth-story"><div class="auth-index"><span>01 — YOUR INFRASTRUCTURE</span><span>BUILT TO SHIP ↗</span></div><div class="auth-message"><h1>From commit.<br>To production.<br><em>On your terms.</em></h1><p>Deploy your applications on the server you own.<br>A straight line from your code to the world.</p></div><div class="pipeline"><div class="pipeline-head"><span>THE SHORTEST PATH TO LIVE</span>'+icon('arrow')+'</div><div class="pipeline-track"><div><span class="pipeline-node">'+icon('branch')+'</span><strong>Push</strong><span>Your repository</span></div><div><span class="pipeline-node">'+icon('box')+'</span><strong>Build</strong><span>Isolated by default</span></div><div><span class="pipeline-node node-live">'+icon('globe')+'</span><strong>Ship</strong><span>Your own domain</span></div></div><div class="pipeline-command"><span>$</span> git push origin main <span class="command-cursor"></span></div></div></section><section class="auth-form"><form><span class="form-index">'+(setup?'FIRST THINGS FIRST':'YOUR CONTROL ROOM')+'</span><h2>'+(setup?'Set up your account.':'Welcome back.')+'</h2><p>'+(setup?'Create the administrator account for this server.':'Sign in to manage your applications.')+'</p>'+field('Username','username','','text','required autocomplete="username" placeholder="Enter your username"')+field('Password','password','','password','required minlength="8" autocomplete="'+(setup?'new-password':'current-password')+'" placeholder="Enter your password"')+(setup?'<p class="password-help">At least 8 characters. There is no password reset, so keep it somewhere safe.</p>':'')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">'+(setup?'Create account':'Sign in')+icon('arrow')+'</button><div class="form-footnote">'+icon('lock')+'Private access to your infrastructure.</div></form></section><footer class="auth-footer"><span>SELF-HOSTED, NOT LIMITED.</span><span>Startship / Deployment platform</span></footer></div>';
  bindTheme();
- $('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const v=Object.fromEntries(new FormData(e.target));try{if(setup)await api('setup',v);await api('login',v);user=await api('me');nav('workspaces')}catch(err){$('.form-error').textContent=err.message}finally{button.disabled=false}};
+ if(!setup)$('.auth-form form>p').textContent='First run? Find the admin credentials in the server logs (docker compose logs startship).';
+ $('form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;const v=Object.fromEntries(new FormData(e.target));try{if(setup)await api('setup',v);await api('login',v);loginPassword=v.password;user=await api('me');if(!user.must_change_password)loginPassword='';nav('workspaces')}catch(err){$('.form-error').textContent=err.message}finally{button.disabled=false}};
 }
 function createWorkspace(){modal('Create workspace','A home for your projects.',field('Workspace name','name','','text','required'),'Create workspace',async f=>{const w=await api('workspaces',Object.fromEntries(f));nav('workspace/'+w.id);toast('Workspace created')})}
 function sourceFields(project={}){
@@ -276,11 +277,19 @@ function workspaceSettings(){
   '<form id="workspace-settings" class="panel panel-pad workspace-settings">'+field('Workspace name','name',workspace.name,'text','required')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">Save changes</button></form>');
  $('#workspace-settings').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await api('workspaces/'+workspace.id,Object.fromEntries(new FormData(e.target)),'PATCH');await render();toast('Workspace saved')}catch(err){if($('#workspace-settings'))$('#workspace-settings .form-error').textContent=err.message}finally{button.disabled=false}};
 }
+function forcePassword(){
+ auth(false);
+ const form=$('.auth-form form');
+ form.innerHTML='<span class="form-index">COMPLETE SETUP</span><h2>Set your password.</h2><p>Replace the temporary administrator password to continue.</p>'+field('New password','new_password','','password','required minlength="8" maxlength="72" autocomplete="new-password"')+field('Confirm password','confirm','','password','required autocomplete="new-password"')+'<p class="password-help">Use 8–72 bytes. Keep your new password somewhere safe.</p><div class="form-error" role="alert"></div><button class="primary" type="submit">Set password'+icon('arrow')+'</button>';
+ form.onsubmit=async e=>{e.preventDefault();const v=Object.fromEntries(new FormData(form)),button=form.querySelector('button');button.disabled=true;try{if(v.new_password!==v.confirm)throw Error('Passwords do not match');const bytes=new TextEncoder().encode(v.new_password).length;if(bytes<8||bytes>72)throw Error('Password must be 8–72 bytes');if(!loginPassword){await api('logout',{});user=null;nav('login');return}await api('me',{current_password:loginPassword,new_password:v.new_password},'PATCH');loginPassword='';user=await api('me');nav('workspaces');await render()}catch(err){form.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}};
+ if(!loginPassword){form.querySelector('p').textContent='Please sign in again with the temporary password to complete setup.';form.querySelector('button').textContent='Return to sign in';form.querySelectorAll('input').forEach(input=>input.disabled=true);form.onsubmit=async e=>{e.preventDefault();try{await api('logout',{});user=null;nav('login');await render()}catch(err){form.querySelector('.form-error').textContent=err.message}}}
+}
 async function render(){
  clearInterval(timer);const version=++viewVersion;
  try{
  const setup=await api('setup');if(version!==viewVersion)return;if(setup.required){auth(true);return}
  if(!user){try{user=await api('me')}catch{auth(false);return}}
+ if(user.must_change_password){forcePassword();return}
  const parts=location.hash.slice(1).split('/');if(parts[0]==='login'){auth(false);return}
  workspaces=await api('workspaces');if(version!==viewVersion)return;workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
  if(!parts[0]&&workspace){nav('workspace/'+workspace.id);return}

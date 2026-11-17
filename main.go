@@ -85,14 +85,8 @@ func main() {
 	}
 	defer s.db.Close()
 	a := &Server{store: s, data: data, queues: make(map[string]chan string), dashboardDomain: os.Getenv("STARTSHIP_DASHBOARD_DOMAIN")}
-	if u, p := os.Getenv("STARTSHIP_ADMIN_USER"), os.Getenv("STARTSHIP_ADMIN_PASSWORD"); u != "" && p != "" {
-		var n int
-		s.db.QueryRow("SELECT count(*) FROM users").Scan(&n)
-		if n == 0 {
-			if _, e = a.createUser(u, p); e != nil {
-				log.Fatal(e)
-			}
-		}
+	if e = a.bootstrapAdmin(os.Getenv("STARTSHIP_ADMIN_USER"), os.Getenv("STARTSHIP_ADMIN_PASSWORD")); e != nil {
+		log.Fatal(e)
 	}
 	a.restore()
 	metricsContext, stopMetrics := context.WithCancel(context.Background())

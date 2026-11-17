@@ -78,6 +78,17 @@ func openStore(path string) (*Store, error) {
 		return nil, e
 	}
 	s := &Store{db: db}
+	var columns int
+	if e = db.QueryRow("SELECT count(*) FROM pragma_table_info('users') WHERE name='must_change_password'").Scan(&columns); e == nil && columns == 0 {
+		_, e = db.Exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+	}
+	if e == nil {
+		_, e = db.Exec("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL); INSERT OR IGNORE INTO settings SELECT 'setup_completed', strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE EXISTS(SELECT 1 FROM users) AND NOT EXISTS(SELECT 1 FROM users WHERE must_change_password=1)")
+	}
+	if e != nil {
+		db.Close()
+		return nil, e
+	}
 	if e = s.migrateProjectSources(); e != nil {
 		db.Close()
 		return nil, e
