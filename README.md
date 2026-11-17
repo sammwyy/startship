@@ -4,24 +4,42 @@ Self-hosted deployment platform, single Go binary `startshipd`. A dark, responsi
 
 ## Run
 
-Requires [Go 1.26+](https://go.dev/doc/install), [Docker Engine](https://docs.docker.com/engine/install/) and [Git](https://git-scm.com/downloads). Install these first and ensure your user can access the Docker daemon. No C toolchain required.
+Requires [Docker Engine](https://docs.docker.com/engine/install/) with Compose and [Git](https://git-scm.com/downloads); your user must be able to access the Docker daemon. Ports 80, 443 and 8080 must be free on the host.
 
 ```sh
 git clone https://github.com/sammwyy/startship.git
 cd startship
-go build -o startshipd .
-STARTSHIP_HTTP_ADDR=:8081 STARTSHIP_ADMIN_USER=admin STARTSHIP_ADMIN_PASSWORD='change-this-password' ./startshipd
-# or:
 docker compose up --build -d
 ```
 
-The proxy defaults to `:80`, which requires root or `CAP_NET_BIND_SERVICE` on Linux. The native command above uses unprivileged port 8081 instead; the dashboard remains on 8080. Use a strong, unique admin password. For standard ports, grant the binary the appropriate capability or use the Docker Compose option. HTTPS on the default `:443` also needs privileged-port access when enabled.
+Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so use a strong, unique password and keep it safe.
 
-Visit `GET /api/setup` on port 8080. If no seed user exists, `POST /api/setup` with `{"username":"admin","password":"at-least-eight-characters"}`. Setup closes once a user exists. Every user gets `<username>'s Workspace`. No public registration after setup.
+From there: open a workspace (or create one with **+ New workspace**; the sidebar selector switches between them), create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line. Sign out with the button next to your username at the bottom of the sidebar.
 
-Or open `http://localhost:8080` in your browser: first-run setup and login guide you into your workspaces. Create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line.
+Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/doc/install), Git and Docker Engine required; no C toolchain):
 
-**Security:** Startship controls the Docker socket and can execute arbitrary repository code. Treat every dashboard user and repository as a server administrator, not as an untrusted tenant. Do not expose initial setup publicly. Terminate dashboard TLS at a trusted gateway or use `STARTSHIP_DASHBOARD_DOMAIN` and ACME. Restrict direct access to dashboard port 8080. Cookies are HttpOnly/SameSite=Lax and Secure on HTTPS. Build logs may include secrets printed by application commands: do not print credentials. File URLs are allowed intentionally for local deployment.
+```sh
+go build -o startshipd .
+STARTSHIP_HTTP_ADDR=:8081 ./startshipd
+```
+
+The proxy defaults to `:80`, which requires root or `CAP_NET_BIND_SERVICE` on Linux; the command above uses unprivileged port 8081 instead, and the dashboard stays on 8080. For standard ports, grant the binary that capability or use Docker Compose. HTTPS on the default `:443` also needs privileged-port access.
+
+To skip the first-run screen, set `STARTSHIP_ADMIN_USER` and `STARTSHIP_ADMIN_PASSWORD` (uncomment them in `compose.yaml`); they only create the account when no user exists yet. Over the API, `GET /api/setup` returns `{"required":true}` until the first account exists, created with `POST /api/setup {"username":"admin","password":"at-least-eight-characters"}`.
+
+## HTTPS
+
+Startship gets Let's Encrypt certificates itself:
+
+1. Point DNS A records for the dashboard domain and every app host at the server; allow inbound 80 and 443.
+2. In `compose.yaml`, uncomment `STARTSHIP_ACME_EMAIL` and `STARTSHIP_DASHBOARD_DOMAIN`, then run `docker compose up -d`.
+3. Open `https://<dashboard domain>`. Plain HTTP requests to that domain are redirected to HTTPS.
+
+Certificates are only issued for the dashboard domain and hosts configured in routes; app hosts keep answering on plain HTTP too. Certificates are cached in the data volume.
+
+Alternatively, terminate TLS at a trusted gateway in front of port 8080 (or 80 with `STARTSHIP_DASHBOARD_DOMAIN`) and leave `STARTSHIP_ACME_EMAIL` empty; the gateway must forward `X-Forwarded-Proto: https` so session cookies are marked Secure.
+
+**Security:** Startship controls the Docker socket and can execute arbitrary repository code. Treat every dashboard user and repository as a server administrator, not as an untrusted tenant. Do not expose initial setup publicly: finish it right after starting, or seed the admin account through the environment. Once HTTPS is configured, restrict direct access to dashboard port 8080 (for example with a firewall, or by changing the compose mapping to `127.0.0.1:8080:8080`). Cookies are HttpOnly/SameSite=Lax and Secure on HTTPS. Build logs may include secrets printed by application commands: do not print credentials. File URLs are allowed intentionally for local deployment.
 
 ## Configuration
 
@@ -33,16 +51,16 @@ Or open `http://localhost:8080` in your browser: first-run setup and login guide
 | STARTSHIP_HTTPS_ADDR | :443 |
 | STARTSHIP_ACME_EMAIL | empty (HTTPS disabled) |
 | STARTSHIP_ADMIN_USER / STARTSHIP_ADMIN_PASSWORD | empty (first-run setup) |
-| STARTSHIP_DASHBOARD_DOMAIN | empty |
+| STARTSHIP_DASHBOARD_DOMAIN | empty (dashboard only on port 8080) |
 | STARTSHIP_SELF_CONTAINER | detected hostname inside Docker |
 
-Point DNS at the server; allow inbound 80/443. ACME only authorizes hosts configured in routes. With `STARTSHIP_DASHBOARD_DOMAIN`, matching proxy requests go to the API; add that hostname as a route as well if using ACME. The daemon creates Docker network `startship`. Containerized startshipd must join that same network; compose configures it, and startup also attempts connection using `STARTSHIP_SELF_CONTAINER`. No application ports are published.
+With `STARTSHIP_DASHBOARD_DOMAIN`, proxy requests for that hostname go to the dashboard and API. The daemon creates Docker network `startship`. Containerized startshipd must join that same network; compose configures it, and startup also attempts connection using `STARTSHIP_SELF_CONTAINER`. No application ports are published.
 
 ## API
 
 All bodies and responses are JSON. Login using `POST /api/login {"username":"admin","password":"..."}`, keep the `startship_session` cookie. `POST /api/logout`, `GET /api/me`. Sessions expire after seven days.
 
-Ownership-scoped `GET/POST /api/{workspaces,projects,apps,routes}` and `GET/PUT/PATCH/DELETE /api/{collection}/{id}`. Delete children before parents. POST returns the new object including ID. Fields:
+Names are required and trimmed. Ownership-scoped `GET/POST /api/{workspaces,projects,apps,routes}` and `GET/PUT/PATCH/DELETE /api/{collection}/{id}`. Delete children before parents. POST returns the new object including ID. Fields:
 
 - workspace: `name`
 - project: `workspace_id, name`
