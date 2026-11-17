@@ -6,6 +6,11 @@ vi.mock("../providers/UIProvider", () => ({
 }));
 afterEach(cleanup);
 describe("log console", () => {
+  it("does not claim an unknown runtime state is not deployed and uses singular line counts", () => {
+    render(<LogPanel log="Static files are served directly." />);
+    expect(screen.queryByText("Not deployed")).toBeNull();
+    expect(screen.getByText("1 line")).toBeTruthy();
+  });
   it("shows a waiting state instead of suggesting another deploy for active builds", () => {
     render(<LogPanel status="building" />);
     expect(screen.getByText("Waiting for build output…")).toBeTruthy();

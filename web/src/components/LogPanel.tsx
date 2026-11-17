@@ -44,6 +44,7 @@ export function LogPanel({
     ui = useUI();
   const liveStatus = useLiveStatus();
   const output = log || "";
+  const lineCount = output ? output.trimEnd().split("\n").length : 0;
   const placeholder = loading
     ? "Loading logs…"
     : status && ["queued", "building", "testing", "starting"].includes(status)
@@ -60,7 +61,7 @@ export function LogPanel({
         <div className="log-title">
           <Icon name="terminal" />
           <strong>{title || "Build logs"}</strong>
-          <Badge status={status} />
+          {status && <Badge status={status} />}
         </div>
         <div className="log-actions">
           <button
@@ -105,7 +106,7 @@ export function LogPanel({
       <div className="log-footer">
         <span>
           {output
-            ? `${output.trimEnd().split("\n").length} lines`
+            ? `${lineCount} ${lineCount === 1 ? "line" : "lines"}`
             : "No output yet"}
         </span>
         <span>

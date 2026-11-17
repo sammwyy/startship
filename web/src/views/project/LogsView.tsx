@@ -36,7 +36,11 @@ export function LogsView() {
       </div>
       <LogPanel
         log={log.data?.log}
-        status={log.data?.status}
+        status={
+          active
+            ? containers.find((c) => c.id === active)?.status
+            : log.data?.status
+        }
         title={
           active
             ? `${containers.find((c) => c.id === active)?.name} · runtime`
