@@ -33,7 +33,7 @@ func TestTrafficProxyAndOwnership(t *testing.T) {
 		} else if r.URL.Path == "/missing" {
 			w.WriteHeader(404)
 		}
-		fmt.Fprintln(w, "data: streaming still works\n")
+		fmt.Fprint(w, "data: streaming still works\n\n")
 		w.(http.Flusher).Flush()
 	}))
 	defer upstream.Close()
