@@ -75,6 +75,21 @@ describe("domain routing editor", () => {
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ host: "legacy.test", path_prefix: "/status" }),
     );
+    await user.selectOptions(screen.getByLabelText("Domain"), "example.com");
+    expect(
+      screen.queryByText(/outside the workspace’s registered domains/),
+    ).not.toBeInTheDocument();
+  });
+  it("allows retaining an existing host with no registered workspace domains", async () => {
+    const { user, onSave } = setup({
+      domains: [],
+      route: { ...route, container_id: "web", host: "legacy.test" },
+    });
+    expect(screen.getByLabelText("Domain")).toHaveValue("legacy.test");
+    await user.click(screen.getByRole("button", { name: "Save route" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ host: "legacy.test" }),
+    );
   });
   it("automatically targets a single container and follows its detected port", async () => {
     const { user, onSave } = setup();

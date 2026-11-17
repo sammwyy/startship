@@ -113,7 +113,7 @@ export function HostPicker({
           autoComplete="off"
         />
       </div>
-      {existingOnly && (
+      {existingOnly && selected === host && (
         <p className="small muted">
           This hostname is outside the workspace’s registered domains. You can
           keep it on this existing route, or choose a registered domain.
