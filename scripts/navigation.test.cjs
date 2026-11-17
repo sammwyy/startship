@@ -209,10 +209,11 @@ test('source and old Git links work before detection without app setup',async()=
   const html=f.element('#root').innerHTML;assert.match(html,/GitHub webhook/);assert.match(html,/Project source/);assert.doesNotMatch(html,/Create application/);
  }
 });
-test('domain target selection only appears when a project has multiple containers',()=>{
- const f=fixture();f.run('modal=(...args)=>{globalThis.dialog=args};addRoute({id:"p1"},[{id:"c1",name:"web",port:8080}])');
+test('domain target selection only appears when a project has multiple containers',async()=>{
+ const f=fixture();f.run('api=async()=>({domains:[]});hostField=()=>"";bindHostField=()=>{};modal=(...args)=>{globalThis.dialog=args}');
+ await f.run('addRoute({id:"p1"},[{id:"c1",name:"web",port:8080}])');
  assert.doesNotMatch(f.context.dialog[2],/<select name="container_id"/);assert.match(f.context.dialog[2],/type="hidden" name="container_id"/);
- f.run('addRoute({id:"p1"},[{id:"c1",name:"web",port:8080},{id:"c2",name:"api",port:3000}])');
+ await f.run('addRoute({id:"p1"},[{id:"c1",name:"web",port:8080},{id:"c2",name:"api",port:3000}])');
  assert.match(f.context.dialog[2],/<select name="container_id"/);assert.doesNotMatch(f.context.dialog[2],/Application/);
 });
 test('project creation never creates separately configured apps',async()=>{

@@ -270,6 +270,12 @@ Roles are assigned to a user at a scope with `POST /api/assignments {"user_id","
 
 Overrides refine roles Discord-style: `PUT /api/overrides {"scope","scope_id","subject_type":"role|user","subject_id","allow":[...],"deny":[...]}`. Workspace overrides apply before project overrides and role overrides before user overrides, so the most specific rule wins. Nobody can grant a permission they do not hold. `GET /api/effective?workspace_id=&project_id=` returns the caller's permissions at a scope, `GET /api/workspaces/{id}/members` lists members, and every change to users, roles, assignments and overrides is recorded with its actor in `GET /api/audit`.
 
+## Workspace domains
+
+A workspace owns the domains its projects may route. Members with **Manage domains** (`workspace.domains`, part of Administrator) add them under Workspace settings or with `POST /api/workspaces/{id}/domains {"name":"example.com","subdomains":false}`. `example.com` allows exactly that host, `*.example.com` allows any subdomain at any depth, and `"subdomains":true` on `example.com` allows both. A domain belongs to one workspace: overlapping claims across workspaces (`*.example.com` here, `shop.example.com` there) and the dashboard domain are rejected.
+
+Connecting or changing a route's host (`domains.manage`) requires a host under one of the project's workspace domains; Platform Admins may use any host. `GET /api/workspaces/{id}/domains` lists them with how many routes each serves, and `DELETE /api/workspaces/{id}/domains/{domainID}` refuses while a route still depends on the domain. Existing routes keep working when a domain is added or removed elsewhere. Domain changes are recorded in the audit log.
+
 ## API
 
 All bodies and responses are JSON. Login using `POST /api/login {"username":"admin","password":"..."}`, keep the `startship_session` cookie. `POST /api/logout`, `GET /api/me`. Sessions expire after seven days.

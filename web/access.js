@@ -110,3 +110,33 @@ async function usersPage(){
  document.querySelectorAll('[data-grant]').forEach(b=>b.onclick=()=>modal('Add platform role','Platform roles apply everywhere on this server.','<label>Role<select name="role_id">'+roles.filter(r=>r.id!=='platform-admin'||user.platform_admin).map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name)+'</option>').join('')+'</select></label>','Add role',async f=>{await api('assignments',{user_id:b.dataset.grant,role_id:f.get('role_id'),scope:'platform',scope_id:''});await reload();toast('Role added')}));
  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=async()=>{const [uid,role]=b.dataset.remove.split(':');try{const [a]=await api('assignments?user_id='+uid+'&scope=platform').then(l=>l.filter(v=>v.role_id===role));await api('assignments/'+a.id,null,'DELETE');await reload();toast('Role removed')}catch(e){toast(e.message)}});
 }
+
+const domainPatterns=d=>[d.apex&&d.name,d.subdomains&&'*.'+d.name].filter(Boolean);
+async function workspaceDomains(){
+ const box=$('#workspace-domains');if(!box)return;
+ const {domains,can_manage:manage}=await api('workspaces/'+workspace.id+'/domains');
+ box.innerHTML='<div class="section-head"><div><h2>Domains</h2><p class="small muted">Projects in this workspace can only route hostnames under these domains.</p></div></div>'+
+  (domains.length?'<div class="panel table-panel"><table class="domain-table"><thead><tr><th>Domain</th><th>Allows</th><th>Routes</th><th></th></tr></thead><tbody>'+domains.map(d=>'<tr><td><span class="domain-name">'+icon('globe')+esc(d.name)+'</span></td><td><div class="chips">'+domainPatterns(d).map(p=>'<code class="domain-pattern">'+esc(p)+'</code>').join('')+'</div></td><td>'+d.routes+'</td><td class="row-actions">'+(manage?'<button class="danger" data-delete-domain="'+esc(d.id)+'" data-name="'+esc(d.name)+'">'+icon('trash')+'Remove</button>':'')+'</td></tr>').join('')+'</tbody></table></div>':empty('No domains yet',manage?'Add a domain so projects can connect hostnames under it.':'A workspace administrator adds the domains projects can use.'))+
+  (manage?'<form class="panel panel-pad domain-form" id="add-domain"><label>Domain<input name="name" required placeholder="example.com or *.example.com" autocomplete="off" spellcheck="false"></label><label class="inline-check"><input type="checkbox" name="subdomains">Also allow any subdomain</label><button class="primary" type="submit">'+icon('plus')+'Add domain</button><div class="form-error" role="alert"></div></form>':'');
+ if(!manage)return;
+ const form=$('#add-domain');
+ form.onsubmit=async e=>{e.preventDefault();form.querySelector('.form-error').textContent='';try{await api('workspaces/'+workspace.id+'/domains',{name:form.name.value,subdomains:form.subdomains.checked});await workspaceDomains();toast('Domain added')}catch(err){form.querySelector('.form-error').textContent=err.message}};
+ box.querySelectorAll('[data-delete-domain]').forEach(b=>b.onclick=()=>modal('Remove '+b.dataset.name,'Projects will no longer be able to connect hostnames under this domain.','','Remove domain',async()=>{await api('workspaces/'+workspace.id+'/domains/'+b.dataset.deleteDomain,null,'DELETE');await workspaceDomains();toast('Domain removed')}));
+}
+
+function hostField(domains,host=''){
+ const exact=domains.find(d=>d.apex&&d.name===host),wild=!exact&&domains.find(d=>d.subdomains&&host.endsWith('.'+d.name));
+ const custom=user.platform_admin,selected=exact?exact.name:wild?'*.'+wild.name:host&&custom?'':domains.length?(domains[0].subdomains?'*.':'')+domains[0].name:'';
+ const options=domains.flatMap(d=>domainPatterns(d)).map(p=>'<option value="'+esc(p)+'" '+(p===selected?'selected':'')+'>'+esc(p)+'</option>').join('')+(custom?'<option value="" '+(selected===''?'selected':'')+'>Any hostname (Platform Admin)</option>':'');
+ if(!options)return '<p class="note">This workspace has no domains yet. A workspace administrator adds them in Workspace settings.</p>';
+ return '<div class="host-picker"><span class="field-label">Hostname</span><div class="host-composer"><input name="sub" aria-label="Subdomain" placeholder="app" value="'+esc(wild?host.slice(0,-wild.name.length-1):'')+'" autocomplete="off" spellcheck="false"><span class="host-dot">.</span><select name="domain" aria-label="Domain">'+options+'</select><input name="host" aria-label="Hostname" placeholder="example.com" value="'+esc(!exact&&!wild?host:'')+'" autocomplete="off" spellcheck="false"></div></div>';
+}
+function bindHostField(form){
+ const select=form.querySelector('[name=domain]');if(!select)return;
+ const sync=()=>{const v=select.value,box=form.querySelector('.host-composer');box.dataset.mode=v===''?'custom':v.startsWith('*.')?'sub':'exact';form.querySelector('[name=sub]').required=box.dataset.mode==='sub';form.querySelector('[name=host]').required=box.dataset.mode==='custom'};
+ select.onchange=sync;sync();
+}
+function pickedHost(f){
+ const v=f.get('domain');if(v===null)return '';
+ return v===''?f.get('host'):v.startsWith('*.')?f.get('sub').trim().replace(/\.$/,'')+'.'+v.slice(2):v;
+}
