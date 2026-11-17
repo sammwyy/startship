@@ -4,14 +4,28 @@ Self-hosted deployment platform, single Go binary `startshipd`. A dark, responsi
 
 ## Run
 
-Requires Go 1.26+, Docker Engine and Git. No C toolchain required.
+Requires Go 1.26 or newer, Docker Engine and Git. No C toolchain required. If Go is not installed, follow the [official Go installation instructions](https://go.dev/doc/install) for your OS, add its `bin` directory to your `PATH`, and check `go version`. Install and start Docker Engine, and ensure your user can run `docker info` without sudo before continuing.
+
+Clone and build, then start a local instance (no root privileges or privileged ports required):
 
 ```sh
+git clone https://github.com/sammwyy/startship.git
+cd startship
 go build -o startshipd .
-STARTSHIP_ADMIN_USER=admin STARTSHIP_ADMIN_PASSWORD='change-this-password' ./startshipd
-# or:
+STARTSHIP_DASHBOARD_ADDR=127.0.0.1:8080 \
+STARTSHIP_HTTP_ADDR=127.0.0.1:18081 \
+./startshipd
+```
+
+Open `http://localhost:8080` and create your administrator account. For a local app, connect a route such as `app.localhost`, then visit `http://app.localhost:18081` (or use `curl -H 'Host: app.localhost' http://127.0.0.1:18081/`). Application ports are internal; use the proxy port, not the dashboard port, to access your app.
+
+Alternatively, from the checkout, run with Docker Compose (publishes ports 80, 443 and 8080; protect setup before exposing the server):
+
+```sh
 docker compose up --build -d
 ```
+
+The native daemon defaults to proxy port 80 (and 443 when HTTPS is enabled). On Linux these privileged ports normally require additional permissions; without them the daemon exits with `bind: permission denied`. Use the unprivileged address overrides above for local use, or place the proxy behind a trusted gateway for production. Keep the dashboard private. The configuration defaults below are unchanged by the local quickstart overrides.
 
 Visit `GET /api/setup` on port 8080. If no seed user exists, `POST /api/setup` with `{"username":"admin","password":"at-least-eight-characters"}`. Setup closes once a user exists. Every user gets `<username>'s Workspace`. No public registration after setup.
 
