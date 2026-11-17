@@ -356,3 +356,164 @@ func TestLiveIdleAccessRevoked(t *testing.T) {
 		t.Fatal(string(b))
 	}
 }
+
+func TestLiveProjectActivation(t *testing.T) {
+	a := testServer(t)
+	uid, err := a.createUser("alice", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project := Record{ID: "project", Kind: "projects", Owner: uid, Active: "old-release"}
+	container := Record{ID: "container", Kind: "apps", Owner: uid, ProjectID: project.ID, Active: "old-deployment"}
+	for _, r := range []Record{
+		project, container,
+		{ID: "old-release", Kind: "releases", Owner: uid, ProjectID: project.ID, Status: "running"},
+		{ID: "new-release", Kind: "releases", Owner: uid, ProjectID: project.ID, Status: "building"},
+		{ID: "old-deployment", Kind: "deployments", Owner: uid, ProjectID: project.ID, AppID: container.ID, Status: "running"},
+		{ID: "new-deployment", Kind: "deployments", Owner: uid, ProjectID: project.ID, AppID: container.ID, ReleaseID: "new-release", Status: "ready", StaticDir: "/static"},
+	} {
+		if err := a.store.Save(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sid := randomID()
+	if _, err := a.store.DB.Exec("INSERT INTO sessions VALUES(?,?,?)", sid, uid, time.Now().Add(time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(a.api())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + sid}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	read := func() map[string]any {
+		t.Helper()
+		_, b, err := c.Read(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]any
+		if err := json.Unmarshal(b, &m); err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	if m := read(); m["type"] != "ready" {
+		t.Fatal(m)
+	}
+	for _, s := range []liveSub{{Type: "subscribe", ID: "logs", Topic: "container_log", ContainerID: container.ID}, {Type: "subscribe", ID: "project", Topic: "project", ProjectID: project.ID}} {
+		b, _ := json.Marshal(s)
+		if err := c.Write(ctx, websocket.MessageText, b); err != nil {
+			t.Fatal(err)
+		}
+		m := read()
+		if m["type"] != "snapshot" || m["id"] != s.ID {
+			t.Fatal(m)
+		}
+		if s.Topic == "container_log" && m["data"].(map[string]any)["log"] != "No runtime output available." {
+			t.Fatal(m)
+		}
+	}
+	if err := a.activateProject(project.ID, "new-release", []Record{container}, []string{"new-deployment"}); err != nil {
+		t.Fatal(err)
+	}
+	reset, containerUpsert, releaseUpsert := false, false, false
+	for !reset || !containerUpsert || !releaseUpsert {
+		m := read()
+		if m["id"] == "logs" {
+			if m["type"] != "log" || m["reset"] != true || m["data"] != "Static container: files are served directly; no runtime process logs." {
+				t.Fatal(m)
+			}
+			reset = true
+		} else if m["type"] == "upsert" {
+			r := m["record"].(map[string]any)
+			if m["kind"] == "container" && r["id"] == container.ID {
+				if r["active_deployment"] != "new-deployment" {
+					t.Fatal(m)
+				}
+				containerUpsert = true
+			}
+			if m["kind"] == "release" && r["id"] == "new-release" {
+				if r["status"] != "running" {
+					t.Fatal(m)
+				}
+				releaseUpsert = true
+			}
+		}
+	}
+}
+
+func TestRuntimeTransactionNotifications(t *testing.T) {
+	for _, name := range []string{"legacy activation", "project source", "personal workspace"} {
+		t.Run(name, func(t *testing.T) {
+			a := testServer(t)
+			var run func() error
+			var expected []string
+			switch name {
+			case "legacy activation":
+				for _, r := range []Record{{ID: "app", Kind: "apps", Active: "old"}, {ID: "old", Kind: "deployments", Status: "running"}, {ID: "new", Kind: "deployments"}} {
+					if err := a.store.Save(r); err != nil {
+						t.Fatal(err)
+					}
+				}
+				run = func() error { return a.activate(Record{ID: "app"}, "new") }
+				expected = []string{"app", "new", "old"}
+			case "project source":
+				for _, r := range []Record{{ID: "project", Kind: "projects", Owner: "owner"}, {ID: "app", Kind: "apps", Owner: "owner", ProjectID: "project", GitURL: "https://example.com/repo"}} {
+					if err := a.store.Save(r); err != nil {
+						t.Fatal(err)
+					}
+				}
+				run = func() error { return migrateProjectSources(a.store) }
+				expected = []string{"project", "app"}
+			case "personal workspace":
+				run = func() error { _, err := a.createUser("alice", "password123"); return err }
+			}
+			seen := map[string]Record{}
+			a.store.OnChange = func(r Record, deleted bool) {
+				if deleted {
+					t.Fatal("unexpected delete")
+				}
+				stored, err := a.store.Get(r.ID)
+				if err != nil {
+					t.Fatal("notification before committed record", err)
+				}
+				want, _ := json.Marshal(r)
+				got, _ := json.Marshal(stored)
+				if string(want) != string(got) {
+					t.Fatalf("notification differs from committed state: %s != %s", want, got)
+				}
+				seen[r.ID] = r
+			}
+			if err := run(); err != nil {
+				t.Fatal(err)
+			}
+			if name == "personal workspace" {
+				if len(seen) != 1 {
+					t.Fatalf("workspace notifications: %v", seen)
+				}
+				for _, r := range seen {
+					if r.Kind != "workspaces" {
+						t.Fatal(r)
+					}
+				}
+				clear(seen)
+				if err := run(); err == nil {
+					t.Fatal("expected duplicate username error")
+				}
+				if len(seen) != 0 {
+					t.Fatal("failed transaction emitted notifications")
+				}
+			} else {
+				for _, id := range expected {
+					if _, ok := seen[id]; !ok {
+						t.Fatalf("missing notification for %s: %v", id, seen)
+					}
+				}
+			}
+		})
+	}
+}

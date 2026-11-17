@@ -103,10 +103,17 @@ func (s *Store) Save(r Record) error {
 		return e
 	}
 	_, e = s.DB.Exec("INSERT INTO records VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET body=excluded.body, parent=excluded.parent", r.ID, r.Kind, r.Owner, r.Parent, string(b))
-	if e == nil && s.OnChange != nil {
-		s.OnChange(r, false)
+	if e == nil {
+		s.Notify(r)
 	}
 	return e
+}
+func (s *Store) Notify(records ...Record) {
+	if s.OnChange != nil {
+		for _, r := range records {
+			s.OnChange(r, false)
+		}
+	}
 }
 func (s *Store) Delete(r Record) error {
 	_, err := s.DB.Exec("DELETE FROM records WHERE id=?", r.ID)

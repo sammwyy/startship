@@ -434,6 +434,7 @@ func (a *Server) activate(app Record, id string) error {
 	if e != nil {
 		return e
 	}
+	a.store.Notify(d, current)
 	a.refresh()
 	if oldID != "" {
 		a.store.Update(oldID, func(r *Record) { r.Status = "superseded" })
