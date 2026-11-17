@@ -17,6 +17,7 @@ import { projectSections, text } from "../lib/project";
 import { Brand, Icon } from "../components/Icon";
 import { Field, ThemeButton } from "../components/ui";
 import { Popover } from "../components/Popover";
+import { SystemUpdateLink } from "../components/SystemUpdateLink";
 
 interface DashboardContext {
   workspace?: Workspace;
@@ -266,6 +267,7 @@ export function DashboardLayout() {
         </nav>
       </div>
       <div className="sidebar-bottom">
+        <SystemUpdateLink />
         <Popover
           id={`account-menu-${mobile}`}
           className="sidebar-selector account-selector"

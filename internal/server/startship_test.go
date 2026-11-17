@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -121,11 +122,28 @@ func TestCheckoutRoot(t *testing.T) {
 
 func TestDashboardEmbedded(t *testing.T) {
 	a := testServer(t)
-	for _, path := range []string{"/", "/app.js", "/style.css"} {
+	index := httptest.NewRecorder()
+	a.api().ServeHTTP(index, httptest.NewRequest("GET", "/", nil))
+	if index.Code != http.StatusOK {
+		t.Fatal("dashboard entrypoint", index.Code)
+	}
+	assets := regexp.MustCompile(`(?:src|href)="(/assets/[^"]+)"`).FindAllStringSubmatch(index.Body.String(), -1)
+	if len(assets) < 2 {
+		t.Fatal("production scripts and styles missing from entrypoint")
+	}
+	for _, asset := range assets {
+		path := asset[1]
 		w := httptest.NewRecorder()
 		a.api().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
 		if w.Code != 200 || w.Body.Len() == 0 {
 			t.Fatal(path, w.Code)
+		}
+	}
+	for _, path := range []string{"/app.js", "/src/main.tsx", "/package.json"} {
+		w := httptest.NewRecorder()
+		a.api().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != http.StatusNotFound {
+			t.Fatal("development source exposed", path, w.Code)
 		}
 	}
 }

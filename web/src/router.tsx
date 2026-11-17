@@ -78,6 +78,12 @@ export const router = createHashRouter([
           { index: true, element: <Home /> },
           { path: "login", element: <Home /> },
           {
+            path: "system",
+            lazy: async () => ({
+              Component: (await import("./views/SystemView")).SystemView,
+            }),
+          },
+          {
             path: "workspaces",
             lazy: async () => ({
               Component: (await import("./views/WorkspacesView"))

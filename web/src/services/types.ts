@@ -67,6 +67,35 @@ export interface User extends Scoped {
   must_change_password?: boolean;
   platform_roles?: string[];
 }
+export interface SystemVersion {
+  version: string;
+  commit: string;
+}
+export interface UpdateRequest {
+  version: string;
+  by?: string;
+  requested?: string;
+}
+export interface UpdateInfo {
+  current: string;
+  commit: string;
+  latest?: string;
+  update_available: boolean;
+  development: boolean;
+  release_url?: string;
+  notes?: string;
+  checked_at?: string;
+  check_error?: string;
+  self_update: boolean;
+  pending?: UpdateRequest;
+  update?: {
+    state: "running" | "succeeded" | "failed";
+    version: string;
+    error?: string;
+    started?: string;
+    finished?: string;
+  };
+}
 export interface Role {
   id: string;
   name: string;

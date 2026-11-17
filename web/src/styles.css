@@ -20,6 +20,36 @@
 .form-error:empty {
   display: none;
 }
+.update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-left: auto;
+}
+.update-panel .section-head {
+  padding: 0 0 16px;
+}
+.update-panel h2 {
+  margin: 0;
+}
+.update-panel .form-actions {
+  flex-wrap: wrap;
+}
+.update-notes {
+  margin-top: 20px;
+}
+.update-notes summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.update-notes pre {
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.7;
+  padding-top: 12px;
+  overflow-wrap: anywhere;
+}
 .traffic-page {
   --traffic-lime: #c9f56c;
   --traffic-red: #f17f70;

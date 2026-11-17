@@ -10,6 +10,8 @@ import type {
   Role,
   User,
   Workspace,
+  UpdateInfo,
+  SystemVersion,
 } from "./types";
 
 function resource<T>(path: string) {
@@ -19,6 +21,15 @@ function resource<T>(path: string) {
   });
 }
 export const queries = {
+  updates: () => ({
+    ...resource<UpdateInfo>("system/update"),
+    retry: false,
+    refetchInterval: 60000,
+  }),
+  version: () => ({
+    ...resource<SystemVersion>("system/version"),
+    retry: false,
+  }),
   workspaces: () => resource<Workspace[]>("workspaces"),
   projects: (id: string) =>
     resource<Project[]>(`projects?workspace_id=${encodeURIComponent(id)}`),
