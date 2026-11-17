@@ -76,6 +76,7 @@ func Run() {
 	metricsContext, stopMetrics := context.WithCancel(context.Background())
 	defer stopMetrics()
 	go a.sampleTrafficResources(metricsContext)
+	go a.watchUpdates(metricsContext)
 	dash := &http.Server{Addr: config.Env("STARTSHIP_DASHBOARD_ADDR", ":8080"), Handler: a.api(), ReadHeaderTimeout: 10 * time.Second}
 	proxy := &http.Server{Addr: config.Env("STARTSHIP_HTTP_ADDR", ":80"), Handler: a, ReadHeaderTimeout: 10 * time.Second}
 	servers := []*http.Server{dash, proxy}

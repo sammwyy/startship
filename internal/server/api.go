@@ -30,6 +30,7 @@ type Server struct {
 	// dashboardDomain is served by the proxy listeners; https is set when ACME is enabled.
 	dashboardDomain string
 	https           bool
+	updates         *updates
 }
 
 // Response-only fields must not be persisted or accepted as app configuration.
@@ -385,7 +386,7 @@ func (a *Server) api() http.Handler {
 			a.detectAPI(w, r, x)
 			return
 		}
-		if a.accessAPI(w, r, p, uid, x) {
+		if a.accessAPI(w, r, p, uid, x) || a.systemAPI(w, r, p, uid, x) {
 			return
 		}
 		kind := p[1]
