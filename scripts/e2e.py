@@ -31,14 +31,23 @@ def request(path, body=None, method=None):
     with client.open(req, timeout=10) as response:
         return json.load(response)
 
+def inspect_if_present(container_id):
+    result = subprocess.run(["docker", "inspect", container_id], text=True, capture_output=True)
+    if result.returncode:
+        if "no such object" in result.stderr.lower() or "no such container" in result.stderr.lower():
+            return None
+        raise RuntimeError(result.stderr)
+    return json.loads(result.stdout)[0]
+
 def wait_deploy(app, options=None, action="deploy"):
     global build_limits_seen
     started = time.monotonic()
     deployment = request("apps/" + app["id"] + "/" + action, options or {})
     for _ in range(600):
         tests = subprocess.check_output(["docker", "ps", "-q", "--filter", "label=startship.test=" + app["id"]], text=True).split()
-        if tests:
-            config = json.loads(subprocess.check_output(["docker", "inspect", tests[0]], text=True))[0]["HostConfig"]
+        test_container = inspect_if_present(tests[0]) if tests else None
+        if test_container:
+            config = test_container["HostConfig"]
             assert config["Memory"] == 536870912 and config["NanoCpus"] == 1000000000 and config["PidsLimit"] == 512, config
             assert config["CapDrop"] == ["ALL"] and "no-new-privileges" in config["SecurityOpt"], config
             assert config["NetworkMode"] == "startship-" + app["project_id"], config
@@ -163,6 +172,8 @@ fn main() {
                 time.sleep(0.2)
             else:
                 raise RuntimeError("superseded container was not removed")
+            assert inspect_if_present(previous) is None
+            print("ephemeral container inspection tolerates removal between ps and inspect: OK")
             print("atomic replacement and old-container removal: OK")
             request("apps/" + app["id"], {"env": {"REDEPLOY_PROBE": "current"}, "port": 8082, "test_command": "exit 1"}, "PATCH")
             restarted = wait_deploy(app, action="redeploy")
