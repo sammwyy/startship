@@ -14,9 +14,9 @@ docker compose up --build -d
 
 Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so use a strong, unique password and keep it safe.
 
-From there: open a workspace (or create one with **+ New workspace**; the top-bar selector switches between them) and create a project connected to **one Git repository**. The project owns the repository, branch, credentials, and GitHub webhook. Choose a single application to build the repository root, or a monorepo to define frontend, backend, or daemon apps in folders of that same repository. Apps only configure their root directory, build, port, variables, and deployment behavior; they cannot select another source. Deploy an app and connect a domain to expose it.
+From there: use the workspace menu at the top of the sidebar to switch or create workspaces, then create a project connected to **one Git repository**. The project owns the repository, branch, credentials, and GitHub webhook. Choose a single application to build the repository root, or a monorepo to define frontend, backend, or daemon apps in folders of that same repository. Apps only configure their root directory, build, port, variables, and deployment behavior; they cannot select another source. Deploy an app and connect a domain to expose it.
 
-Projects open directly into their application's controls. Multi-app projects add an application switcher; single-app projects skip that extra navigation. Both use the same deployments, domains, app settings, and **Project Git** tabs, with live build logs and the project's copyable webhook credentials. **Project source** edits the source shared by every app. Environment variables use one KEY=VALUE per line. Sign out next to your avatar in the top-right corner. The theme button remembers your light/dark choice.
+Projects open directly into their application's controls. The same compact application selector is shown for single-app and multi-app projects. Application tabs hold deployments, domains, and app settings; **Project Git** in the sidebar holds the shared source and copyable webhook credentials. **All projects** returns to the selected workspace in one click. On narrow screens, the navigation button opens the sidebar. The account menu at the bottom contains account details, the light/dark theme toggle, and sign out; profile/password editing is not yet supported. The theme choice is remembered. Environment variables use one KEY=VALUE per line.
 
 Use **Open app** or a public endpoint in the application's Deployments or Domains tab to visit the deployed app, not the
 dashboard or internal container port. URLs use the configured router port and
@@ -188,6 +188,7 @@ For a monorepo, connect `api.example.com` with prefix `/` to the backend, `examp
 
 ```sh
 go vet ./... && go test ./...
+node --test scripts/navigation.test.cjs # optional frontend regression checks, Node 18+
 ./scripts/e2e.sh
 ```
 

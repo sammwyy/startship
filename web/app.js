@@ -24,6 +24,8 @@ const icons = {
  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
  moon: '<path d="M20.7 13A9 9 0 0 1 11 3.3 9 9 0 1 0 20.7 13Z"/>',
+ chevron: '<path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/>',
+ back: '<path d="M19 12H5m6-6-6 6 6 6"/>',
  close: '<path d="m6 6 12 12M6 18 18 6"/>'
 };
 function icon(name){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(icons[name]||icons.box)+'</svg>'}
@@ -52,12 +54,48 @@ function modal(title,description,fields,submit,onSubmit){
  $('#close-modal').onclick=$('#cancel-modal').onclick=()=>d.close();
  d.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=d.querySelector('[type=submit]');button.disabled=true;d.querySelector('.form-error').textContent='';try{if(await onSubmit(new FormData(e.target),e.target)!==false)d.close()}catch(err){d.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}};d.showModal();d.querySelector('form input,form select,form textarea')?.focus();
 }
-function shell(crumb,content){
- const onWorkspaces=!/^#(workspace|project|app)\//.test(location.hash);
- $('#root').innerHTML='<div class="dashboard"><header class="app-header"><a href="#workspaces" class="brand">'+brand()+'</a><nav class="primary-nav" aria-label="Main navigation"><a class="'+(onWorkspaces?'':'active')+'" '+(!onWorkspaces?'aria-current="page"':'')+' href="#workspace/'+esc(workspace?.id||'')+'">'+icon('grid')+'Projects</a><a class="'+(onWorkspaces?'active':'')+'" '+(onWorkspaces?'aria-current="page"':'')+' href="#workspaces">'+icon('layers')+'Workspaces</a></nav><div class="header-controls">'+themeButton()+'<a class="icon-button docs-link" href="https://docs.docker.com/" target="_blank" rel="noreferrer" aria-label="Docker documentation" title="Docker documentation">'+icon('server')+'</a><span class="avatar" title="'+esc(user.username)+'">'+esc(user.username[0].toUpperCase())+'</span><button class="icon-button" id="logout" title="Sign out" aria-label="Sign out">'+icon('logout')+'</button></div></header><main class="main"><div class="contextbar"><label class="workspace-picker">'+icon('layers')+'<select id="workspace-switch" aria-label="Workspace">'+workspaces.map(w=>'<option value="'+esc(w.id)+'" '+(workspace?.id===w.id?'selected':'')+'>'+esc(w.name)+'</option>').join('')+'</select></label><span class="context-divider">/</span><div class="breadcrumbs">'+crumb+'</div><span class="instance-label">'+icon('server')+'Self-hosted</span></div><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div>';
- bindTheme();
- $('#workspace-switch').onchange=e=>nav('workspace/'+e.target.value);
- $('#logout').onclick=async()=>{await api('logout',{});user=null;nav('login')};
+function shell(crumb,content,project=null){
+ const workspaceURL='#workspace/'+esc(workspace?.id||''),settings=location.hash.endsWith('/settings')&&!project;
+ const projectGit=project&&/\/(git|webhook)$/.test(location.hash);
+ const sidebarLink=(href,shape,label,active)=>'<a href="'+href+'" '+(active?'aria-current="page"':'')+'>'+icon(shape)+'<span>'+esc(label)+'</span></a>';
+ const sidebar='<aside class="sidebar" aria-label="Dashboard sidebar"><div class="sidebar-top"><a href="'+workspaceURL+'" class="brand">'+brand()+'</a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">'+icon('close')+'</button></div>'+
+  '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false"><span class="workspace-mark">'+icon('layers')+'</span><span class="selector-copy"><small>Workspace</small><strong>'+esc(workspace?.name||'Choose workspace')+'</strong></span>'+icon('chevron')+'</button>'+
+  '<div id="workspace-menu" class="sidebar-menu" popover><div class="menu-caption">Switch workspace</div><div class="workspace-options">'+workspaces.map(w=>'<a href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'><span class="workspace-initial">'+esc(w.name[0]?.toUpperCase())+'</span><span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot" aria-label="Current workspace"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div><button id="create-workspace">'+icon('plus')+'Create workspace</button><a href="#workspaces">'+icon('layers')+'Manage workspaces</a></div>'+
+  '<nav class="sidebar-nav" aria-label="'+(project?'Project':'Workspace')+' navigation">'+(project?
+   sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-caption">Project</div><div class="sidebar-project" title="'+esc(project.name)+'">'+esc(project.name)+'</div>'+sidebarLink('#project/'+esc(project.id),'box','Applications',!projectGit)+sidebarLink('#project/'+esc(project.id)+'/git','branch','Project Git',projectGit):
+   '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav>'+
+  '<div class="sidebar-bottom"><span class="sidebar-instance"><span class="dot"></span>Self-hosted instance</span><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-copy"><strong>'+esc(user.username)+'</strong><small>Personal account</small></span>'+icon('chevron')+'</button></div>'+
+  '<div id="account-menu" class="sidebar-menu" popover><div class="menu-caption">Signed in as <strong>'+esc(user.username)+'</strong></div><button id="account-profile">'+icon('settings')+'Account details</button>'+themeButton()+'<div class="menu-divider"></div><button id="logout">'+icon('logout')+'Sign out</button></div></aside>';
+ $('#root').innerHTML='<div class="dashboard sidebar-layout"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="contextbar"><button class="icon-button mobile-only" id="open-navigation" aria-label="Open navigation" aria-haspopup="dialog">'+icon('menu')+'</button><div class="breadcrumbs">'+crumb+'</div><span class="instance-label">'+icon('server')+'Self-hosted</span></div><div class="content">'+content+'</div></main><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></div></div>';
+ bindTheme();bindSidebar();
+}
+function bindSidebar(){
+ const drawer=$('#navigation-drawer'),sidebar=$('.sidebar'),desktop=$('#desktop-sidebar');
+ const closeDrawer=()=>{drawer.close();desktop.append(sidebar)};
+ $('#open-navigation').onclick=()=>{drawer.append(sidebar);drawer.showModal();$('#close-navigation').focus()};
+ $('#close-navigation').onclick=closeDrawer;
+ drawer.onclose=()=>desktop.append(sidebar);
+ drawer.onclick=e=>{if(e.target===drawer)closeDrawer()};
+ sidebar.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{sidebar.querySelectorAll('[popover]').forEach(p=>{if(p.matches(':popover-open'))p.hidePopover()});if(drawer.open)closeDrawer()}));
+ sidebar.querySelectorAll('[popovertarget]').forEach(button=>{
+  const menu=$('#'+button.getAttribute('popovertarget'));
+  menu.addEventListener('toggle',()=>{
+   const open=menu.matches(':popover-open');button.setAttribute('aria-expanded',String(open));if(!open)return;
+   menu.style.maxHeight='';
+   const rect=button.getBoundingClientRect(),height=menu.offsetHeight,below=innerHeight-rect.bottom-12,above=rect.top-12;
+   menu.style.left=Math.max(8,Math.min(rect.left,innerWidth-menu.offsetWidth-8))+'px';
+   menu.style.top=(below>=height||below>=above?rect.bottom+6:Math.max(8,rect.top-height-6))+'px';
+   menu.style.maxHeight=Math.max(80,(below>=height||below>=above?below:above))+'px';
+  });
+  button.onkeydown=e=>{if(e.key==='ArrowDown'){e.preventDefault();menu.showPopover();menu.querySelector('a,button')?.focus()}};
+  menu.onkeydown=e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const items=[...menu.querySelectorAll('a,button')],index=items.indexOf(document.activeElement);items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:items.length-1))%items.length]?.focus()};
+ });
+ $('#create-workspace').onclick=()=>{$('#workspace-menu').hidePopover();if(drawer.open)closeDrawer();createWorkspace()};
+ $('#account-profile').onclick=()=>{
+  $('#account-menu').hidePopover();if(drawer.open)closeDrawer();
+  const d=$('#modal');d.setAttribute('aria-labelledby','modal-title');d.innerHTML='<div class="row"><h2 id="modal-title">Account details</h2><button id="close-account" class="icon-button" aria-label="Close">'+icon('close')+'</button></div><div class="account-details"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><div><strong>'+esc(user.username)+'</strong><p class="small">Signed in to this Startship instance.</p></div></div><p class="small">Profile and password editing are not available on this server.</p>';$('#close-account').onclick=()=>d.close();d.showModal();
+ };
+ $('#logout').onclick=async()=>{try{await api('logout',{});if(drawer.open)closeDrawer();user=null;nav('login')}catch(err){toast(err.message)}};
 }
 function heading(kicker,title,subtitle,actions=''){return '<div class="heading"><div class="heading-copy"><div class="eyebrow">'+kicker+'</div><h1>'+esc(title)+'</h1><p>'+esc(subtitle)+'</p></div><div class="row heading-actions">'+actions+'</div></div>'}
 function auth(setup){
@@ -107,34 +145,43 @@ function detectApps(project,apps=[]){
  });
 }
 function addRoute(project,apps,selectedId){if(!apps.length){toast('Create an application first');return}modal('Connect a domain','Direct traffic to an app using a hostname and path prefix.',field('Hostname','host','','text','required placeholder="example.com"')+field('Path prefix','path_prefix','/','text','required')+'<label>Application<select name="app_id">'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===selectedId?'selected':'')+'>'+esc(a.name)+' · :'+a.port+'</option>').join('')+'</select></label><label><input type="checkbox" name="strip_prefix">Strip prefix before forwarding</label><div class="note">DNS: point the A record of this hostname to this server’s public IP.</div>','Connect domain',async f=>{await api('routes',{...Object.fromEntries(f),project_id:project.id,strip_prefix:f.has('strip_prefix')});toast('Domain connected');render()})}
-const applicationTabs=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','App settings'],['webhook','branch','Project Git']];
+const applicationTabs=[['deployments','layers','Deployments'],['domains','globe','Domains'],['settings','settings','App settings']];
+function projectGitContent(project){
+ const url=location.origin+'/api/webhooks/github/'+project.id;
+ return '<div class="integration-layout"><div class="panel panel-pad"><h2>Project GitHub webhook</h2><p class="small">One source for <strong>'+esc(project.name)+'</strong>: '+esc(project.git_url||'Not configured')+' · '+esc(project.branch)+'. Pushes deploy the apps with Auto-deploy enabled.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(project.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect the project repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy for the apps that should rebuild on project pushes.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
+}
 function deploymentStatus(app,deployments){return deployments.find(d=>d.id===app.active_deployment)?.status}
 async function projectPage(id,selectedId='',initialTab='deployments'){
  const version=viewVersion;
  const [p,apps,routes,deployments]=await Promise.all([api('projects/'+id),api('apps?project_id='+id),api('routes?project_id='+id),api('deployments')]);
  if(version!==viewVersion)return;
  workspace=workspaces.find(w=>w.id===p.workspace_id);
+ localStorage.setItem('workspace',p.workspace_id);
+ if(initialTab==='git'||initialTab==='webhook'){
+  shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; <a href="#project/'+esc(p.id)+'">'+esc(p.name)+'</a> &nbsp; / &nbsp; Project Git',
+   heading('Project · '+esc(p.name),'Project Git','One repository and webhook, shared by every application.','<button id="edit-project-source">'+icon('branch')+'Edit project source</button>')+projectGitContent(p),p);
+  $('#edit-project-source').onclick=()=>editProjectSource(p);
+  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}});
+  return;
+ }
  const app=apps.find(a=>a.id===selectedId)||apps[0],running=apps.filter(a=>deploymentStatus(a,deployments)==='running').length;
  shell('<a href="#workspace/'+esc(p.workspace_id)+'">Projects</a> &nbsp; / &nbsp; '+esc(p.name),
   heading('Project',p.name,apps.length+' app'+(apps.length===1?'':'s')+' · '+running+' running · '+routes.length+' route'+(routes.length===1?'':'s'),'<button id="edit-project-source">'+icon('branch')+'Project source</button><button id="detect">'+icon('search')+'Detect apps</button><button id="add-app">'+icon('plus')+'Add app</button>')+
   '<div class="project-source-summary"><span>'+icon('branch')+'<strong>Project source</strong> '+esc(p.git_url||'Not configured')+'</span><span>'+esc(p.branch||'')+'</span></div>'+(p.source_conflict?'<div class="note source-warning">Existing apps have different sources. Choose one project repository before editing or deploying apps.</div>':'')+
-  (app?'<nav class="service-switcher" aria-label="Project applications" '+(apps.length===1?'hidden':'')+'>'+apps.map(a=>'<a data-app-link="'+esc(a.id)+'" class="service-option '+(a.id===app.id?'active':'')+'" '+(a.id===app.id?'aria-current="page"':'')+' href="#app/'+esc(a.id)+'/'+esc(initialTab)+'"><span class="service-icon">'+icon('box')+'</span><span class="service-copy"><strong>'+esc(a.name)+'</strong><small>'+esc(a.root_dir==='.'?'Repository root':a.root_dir)+' · '+esc(a.build_type)+'</small></span><span data-service-status="'+esc(a.id)+'">'+badge(deploymentStatus(a,deployments))+'</span></a>').join('')+'</nav><section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
-   empty('Choose apps from this repository','Add an app at the repository root, or detect frontend, backend, and daemon folders inside this project’s monorepo.')));
+  (app?'<section class="workbench" id="app-workbench" aria-label="'+esc(app.name)+' controls"></section>':
+   empty('Choose apps from this repository','Add an app at the repository root, or detect frontend, backend, and daemon folders inside this project’s monorepo.')),p);
  $('#edit-project-source').onclick=()=>editProjectSource(p);$('#add-app').onclick=()=>addApp(p);$('#detect').onclick=()=>detectApps(p,apps);
- if(app){
-  const list=$('.service-switcher'),selected=list.querySelector('[aria-current="page"]');
-  list.scrollLeft=selected.offsetLeft-list.offsetLeft;
-  await mountApplication(p,app,apps,routes,initialTab,deployments);
- }
+ if(app)await mountApplication(p,app,apps,routes,initialTab,deployments);
 }
 async function appPage(id,tab='deployments'){const version=viewVersion,app=await api('apps/'+id);if(version===viewVersion)await projectPage(app.project_id,id,tab)}
 async function mountApplication(project,app,apps,allRoutes,initialTab,deployments){
  const version=viewVersion,isCurrent=()=>version===viewVersion&&!!$('#app-workbench');
  let activeTab='',loading=false,tabVersion=0,expandedLog=false;
  const ownRoutes=()=>allRoutes.filter(r=>r.app_id===app.id);
- $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><h2>'+esc(app.name)+'</h2><span id="active-status"></span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button id="redeploy" title="Restart the active release with current settings, without building">Redeploy</button><button id="rebuild-no-cache">Rebuild without cache</button><button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
+ $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><label class="application-picker">'+icon('box')+'<select id="application-switch" aria-label="Application" '+(apps.length===1?'disabled':'')+'>'+apps.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===app.id?'selected':'')+'>'+esc(a.name)+'</option>').join('')+'</select></label><span id="active-status"></span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button id="redeploy" title="Restart the active release with current settings, without building">Redeploy</button><button id="rebuild-no-cache">Rebuild without cache</button><button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
  '<div class="app-details"><span>'+icon('folder')+'Root '+rootLabel(app.root_dir)+'</span><span>'+icon('server')+esc(app.build_type)+' · :'+app.port+'</span><label class="inline-check"><input type="checkbox" id="quick-auto-deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy</label></div>'+
- '<div class="workbench-navigation"><div class="tabs" aria-label="Application views">'+applicationTabs.map(([name,shape,label])=>'<button data-tab="'+name+'" aria-pressed="false">'+icon(shape)+label+(name==='domains'?'<span class="tab-count">'+ownRoutes().length+'</span>':'')+'</button>').join('')+'</div><span class="poll-status" id="poll-status">'+icon('activity')+'Live updates · 2s</span></div><div id="tab-content"></div>';
+ '<div class="workbench-navigation"><nav class="tabs" aria-label="Application views">'+applicationTabs.map(([name,shape,label])=>'<a href="#app/'+esc(app.id)+'/'+name+'" data-tab="'+name+'">'+icon(shape)+label+(name==='domains'?'<span class="tab-count">'+ownRoutes().length+'</span>':'')+'</a>').join('')+'</nav><span class="poll-status" id="poll-status">'+icon('activity')+'Live updates · 2s</span></div><div id="tab-content"></div>';
+ $('#application-switch').onchange=e=>nav('app/'+e.target.value+'/'+activeTab);
  $('#quick-auto-deploy').onchange=async e=>{const input=e.currentTarget,value=input.checked;input.disabled=true;try{Object.assign(app,await api('apps/'+app.id,{auto_deploy:value},'PATCH'));const field=$('#settings-form [name="auto_deploy"]');if(field)field.checked=value;toast('Auto-deploy '+(value?'enabled':'disabled'))}catch(err){input.checked=!value;toast(err.message)}finally{input.disabled=false}};
  $('#deploy').disabled=$('#rebuild-no-cache').disabled=$('#quick-auto-deploy').disabled=!project.git_url||project.source_conflict;
  $('#redeploy').disabled=!app.active_deployment;
@@ -163,7 +210,7 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
    $('#manage-domains').onclick=()=>ownRoutes().length?tab('domains',true).catch(err=>toast(err.message)):addRoute(project,apps,app.id);
    $('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#build-log').textContent);toast('Build output copied')}catch{toast('Select and copy the build output manually')}};
    const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];
-   $('#active-status').innerHTML=badge(current?.status);document.querySelector('[data-service-status="'+app.id+'"]').innerHTML=badge(current?.status);
+   $('#active-status').innerHTML=badge(current?.status);
    $('#redeploy').disabled=!latest.some(d=>d.status==='running');
    if(selectedDeployment){const d=await api('deployments/'+selectedDeployment);if(!isCurrent()||activeTab!=='deployments')return;$('#build-log').textContent=d.log||'Deployment '+d.status+'…';$('#log-id').textContent=' / '+d.id.slice(0,8);$('#build-log').scrollTop=follow?$('#build-log').scrollHeight:previousScroll;$('#redeploy-release').disabled=!d.redeployable;$('#redeploy-release').onclick=e=>queueRelease(e.currentTarget,'redeploy',{deployment_id:d.id})}
   }finally{loading=false}
@@ -180,24 +227,17 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
   $('#tab-content').innerHTML='<form id="settings-form" class="settings-form"><div class="section-head"><div><h2>Application settings</h2><span class="small muted">Changes apply on the next deployment.</span></div><button class="primary" type="submit">Save changes</button></div>'+appFields(app,true)+'<div class="form-error" role="alert"></div></form>';
   $('#settings-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('[type="submit"]');button.disabled=true;try{Object.assign(app,await api('apps/'+app.id,appData(new FormData(e.target)),'PATCH'));await render();toast('Settings saved')}catch(err){if(isCurrent())$('#settings-form .form-error').textContent=err.message}finally{button.disabled=false}};
  }
- function showWebhook(){
-  const url=location.origin+'/api/webhooks/github/'+project.id;
-  $('#tab-content').innerHTML='<div class="integration-layout"><div class="panel panel-pad"><h2>Project GitHub webhook</h2><p class="small">One source for <strong>'+esc(project.name)+'</strong>: '+esc(project.git_url)+' · '+esc(project.branch)+'. Pushes deploy the apps with Auto-deploy enabled.</p><label>Webhook URL<div class="copy-row"><input id="hook-url" readonly value="'+esc(url)+'"><button data-copy="hook-url">Copy</button></div></label><label>Webhook secret<div class="copy-row"><input id="hook-secret" readonly value="'+esc(project.webhook_secret)+'"><button data-copy="hook-secret">Copy</button></div></label></div><div class="panel panel-pad integration-guide"><h2>Connect the project repository</h2><ol><li>Open your repository’s Settings → Webhooks → Add webhook.</li><li>Paste this URL and secret; choose <code>application/json</code> and “Just the push event”.</li><li>Enable Auto-deploy for the apps that should rebuild on project pushes.</li></ol><p class="small muted">Use your publicly reachable dashboard domain. GitHub cannot reach localhost.</p></div></div>';
-  document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText($('#'+b.dataset.copy).value);toast('Copied to clipboard')}catch{toast('Select and copy the value manually')}});
- }
  async function tab(name,updateURL=false){
   const token=++tabVersion,requested=applicationTabs.some(t=>t[0]===name)?name:'deployments';
   activeTab=requested;clearInterval(timer);
-  if(updateURL)history.replaceState(null,'','#app/'+app.id+'/'+activeTab);
-  document.querySelectorAll('[data-app-link]').forEach(a=>a.href='#app/'+a.dataset.appLink+'/'+activeTab);
-  document.querySelectorAll('[data-tab]').forEach(b=>{b.classList.toggle('active',b.dataset.tab===activeTab);b.setAttribute('aria-pressed',String(b.dataset.tab===activeTab))});
+  if(updateURL&&location.hash!=='#app/'+app.id+'/'+activeTab)history.pushState(null,'','#app/'+app.id+'/'+activeTab);
+  document.querySelectorAll('[data-tab]').forEach(b=>{const active=b.dataset.tab===activeTab;b.classList.toggle('active',active);if(active)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current')});
   $('#poll-status').hidden=activeTab!=='deployments';
   if(requested==='deployments'){await showDeployments();if(token===tabVersion&&isCurrent()&&activeTab==='deployments')timer=setInterval(()=>showDeployments().catch(err=>{if(isCurrent())toast(err.message)}),2000)}
   if(requested==='domains')showDomains();
   if(requested==='settings')showSettings();
-  if(requested==='webhook')showWebhook();
  }
- document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>tab(b.dataset.tab,true).catch(err=>toast(err.message)));
+ document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=e=>{if(e.ctrlKey||e.metaKey||e.shiftKey||e.altKey)return;e.preventDefault();tab(b.dataset.tab,true).catch(err=>toast(err.message))});
  $('#active-status').innerHTML=badge(deploymentStatus(app,deployments)||deployments.filter(d=>d.app_id===app.id).at(-1)?.status);
  await tab(initialTab);
 }
@@ -217,6 +257,11 @@ function releasePanel(deployments,apps){
  (recent.length?'<div class="release-pulse" aria-label="Recent deployment statuses">'+recent.map(d=>'<span class="'+esc(d.status)+'" title="'+esc(d.status)+' · '+esc(new Date(d.created).toLocaleString())+'"></span>').join('')+'</div><div class="pulse-caption"><span>Older</span><span>Latest '+recent.length+' releases</span></div>':'<p class="activity-empty">Your first release starts with a deploy.</p>')+
  '<div class="release-list"><h2>Recent releases</h2>'+latest.slice(0,4).map(d=>'<a class="release-item" href="#app/'+esc(d.app_id)+'"><div><strong>'+esc(apps.find(a=>a.id===d.app_id)?.name||'Application')+'</strong><small>'+esc(d.commit?.slice(0,7)||d.id.slice(0,7))+' · '+esc(new Date(d.created).toLocaleDateString(undefined,{month:'short',day:'numeric'}))+'</small></div>'+badge(d.status)+'</a>').join('')+(!latest.length?'<p class="activity-empty">No deployments in this workspace.</p>':'')+'</div></aside>';
 }
+function workspaceSettings(){
+ shell(esc(workspace.name)+' &nbsp; / &nbsp; Settings',heading('Workspace','Workspace settings','A shared home for your projects and applications.')+
+  '<form id="workspace-settings" class="panel panel-pad workspace-settings">'+field('Workspace name','name',workspace.name,'text','required')+'<div class="form-error" role="alert"></div><button class="primary" type="submit">Save changes</button></form>');
+ $('#workspace-settings').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;try{await api('workspaces/'+workspace.id,Object.fromEntries(new FormData(e.target)),'PATCH');await render();toast('Workspace saved')}catch(err){if($('#workspace-settings'))$('#workspace-settings .form-error').textContent=err.message}finally{button.disabled=false}};
+}
 async function render(){
  clearInterval(timer);const version=++viewVersion;
  try{
@@ -224,10 +269,12 @@ async function render(){
  if(!user){try{user=await api('me')}catch{auth(false);return}}
  const parts=location.hash.slice(1).split('/');if(parts[0]==='login'){auth(false);return}
  workspaces=await api('workspaces');if(version!==viewVersion)return;workspace=workspaces.find(w=>w.id===parts[1])||workspaces.find(w=>w.id===localStorage.getItem('workspace'))||workspaces[0];
+ if(!parts[0]&&workspace){nav('workspace/'+workspace.id);return}
  if(parts[0]==='project'){await projectPage(parts[1],'',parts[2]);return}
  if(parts[0]==='app'){await appPage(parts[1],parts[2]);return}
  if(parts[0]==='workspace'&&workspace){
   localStorage.setItem('workspace',workspace.id);
+  if(parts[2]==='settings'){workspaceSettings();return}
   const [projects,allApps,allDeployments]=await Promise.all([api('projects?workspace_id='+workspace.id),api('apps'),api('deployments')]);
   if(version!==viewVersion)return;
   const apps=allApps.filter(a=>projects.some(p=>p.id===a.project_id));
