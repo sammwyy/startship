@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -272,4 +274,21 @@ func TestAccessMigrationForExistingInstalls(t *testing.T) {
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
+}
+
+func TestSocketActsAsPlatformAdmin(t *testing.T) {
+	f := newRBACFixture(t)
+	local := func() *http.Request {
+		r := httptest.NewRequest("GET", "/api/me", nil)
+		return r.WithContext(context.WithValue(r.Context(), socketContextKey{}, true))
+	}
+	if got := f.a.user(local()); got != f.rootID {
+		t.Fatal("socket should act as the Platform Admin", got)
+	}
+	f.assign(t, f.root, f.aliceID, platformAdminRole, scopePlatform, "", 201)
+	held := f.a.assignments("a.user_id=? AND a.role_id=?", f.rootID, platformAdminRole)
+	accountRequest(t, f.h, "DELETE", "assignments/"+held[0].ID, "", f.root, 200)
+	if got := f.a.user(local()); got != f.aliceID {
+		t.Fatal("socket should follow the Platform Admin role, not the first account", got)
+	}
 }

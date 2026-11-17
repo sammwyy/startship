@@ -29,7 +29,7 @@ function fixture(hash = '#workspace/w1') {
   clearInterval() {}, setInterval() {}, setTimeout() {},
  });
  vm.runInContext(source.replace(/render\(\);\s*$/, ''), context);
- vm.runInContext("user={username:'sammwy'};workspaces=[{id:'w1',name:'Production'},{id:'w2',name:'Sandbox'}];workspace=workspaces[0];bindTheme=()=>{};bindSidebar=()=>{}", context);
+ vm.runInContext("user={username:'sammwy',permissions:['workspaces.create','users.manage','audit.view']};workspaces=[{id:'w1',name:'Production'},{id:'w2',name:'Sandbox'}];workspace=workspaces[0];bindTheme=()=>{};bindSidebar=()=>{}", context);
  return { context, element, tabs, stored, run: code => vm.runInContext(code, context) };
 }
 
@@ -287,4 +287,14 @@ test('project polling updates running counts and grouped release entries without
  assert.equal(f.element('#deploy-project').disabled,false);
  f.context.liveContainers[1].status='failed';await f.context.poll();assert.equal(f.element('#project-summary').textContent,'2 containers · 1 running · 0 domain routes');
  assert.ok(calls.filter(path=>path==='releases?project_id=p1&logs=false').length>=3);
+});
+
+test('sidebar shows platform pages and creation controls only with the matching permissions', () => {
+ const f = fixture(); f.run("shell(heading('Workspace','Projects',''))");
+ let html = f.element('#root').innerHTML;
+ for (const link of ['#workspace/w1/members', '#roles', '#users', '#audit']) assert.ok(html.includes('href="' + link + '"'), link);
+ f.run("user={username:'guest',permissions:[]};shell(heading('Workspace','Projects',''))");
+ html = f.element('#root').innerHTML;
+ assert.ok(html.includes('href="#roles"'));
+ assert.doesNotMatch(html, /href="#users"|href="#audit"|Create workspace/);
 });
