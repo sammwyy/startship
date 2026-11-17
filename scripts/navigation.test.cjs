@@ -79,6 +79,47 @@ test('workspace and account selectors are single-line controls without repeated 
  assert.doesNotMatch(html,/Personal account|Self-hosted instance|sidebar-instance/);
 });
 
+test('sidebar collapse persists across navigation and exposes its expanded state',()=>{
+ const f=fixture(),changes=[];
+ f.element('.sidebar-layout').classList.toggle=(name,value)=>changes.push([name,value]);
+ f.run("shell(heading('','Projects',''))");
+ assert.doesNotMatch(f.element('#root').innerHTML,/class="dashboard sidebar-layout sidebar-collapsed"/);
+ assert.match(f.element('#root').innerHTML,/id="toggle-sidebar"[^>]*aria-controls="desktop-sidebar" aria-expanded="true" aria-label="Collapse sidebar"/);
+ f.run('setSidebarCollapsed(true)');
+ assert.equal(f.stored.get('startship-sidebar-collapsed'),'true');
+ assert.deepEqual(changes.pop(),['sidebar-collapsed',true]);
+ assert.equal(f.element('#toggle-sidebar').attributes['aria-expanded'],'false');
+ assert.equal(f.element('#toggle-sidebar').attributes['aria-label'],'Expand sidebar');
+ f.run("shell(heading('','Source',''),{id:'p1',name:'Repo'})");
+ assert.match(f.element('#root').innerHTML,/class="dashboard sidebar-layout sidebar-collapsed"/);
+ assert.match(f.element('#root').innerHTML,/id="toggle-sidebar"[^>]*aria-expanded="false" aria-label="Expand sidebar"/);
+ f.run('setSidebarCollapsed(false)');
+ assert.equal(f.stored.get('startship-sidebar-collapsed'),'false');
+ assert.deepEqual(changes.pop(),['sidebar-collapsed',false]);
+ assert.equal(f.element('#toggle-sidebar').attributes['aria-expanded'],'true');
+});
+
+test('icon-only navigation retains accessible labels and native hover titles',()=>{
+ const f=fixture('#project/p1/source');f.run("shell(heading('','Source',''),{id:'p1',name:'Repo'})");
+ const html=f.element('#root').innerHTML;
+ for(const label of ['All projects','Deployments','Logs','Containers','Domains','Source','Environment','Settings'])
+  assert.ok(html.includes('aria-label="'+label+'" title="'+label+'"'));
+ assert.match(html,/aria-label="Startship" title="Startship"/);
+ assert.match(html,/title="Workspace: Production"/);
+ assert.match(html,/title="Account: sammwy"/);
+});
+
+test('content capsule floats on the sidebar background and mobile keeps full navigation labels',()=>{
+ const styles=readFileSync(require('node:path').join(__dirname,'../web/style.css'),'utf8');
+ assert.match(styles,/\.dashboard\.sidebar-layout \{[^}]*background: var\(--terminal\)/);
+ assert.match(styles,/#desktop-sidebar \{[^}]*background: var\(--terminal\)/);
+ assert.match(styles,/\.dashboard-body \{[^}]*margin: 8px 8px 8px 0[^}]*border-radius: 14px[^}]*background: var\(--bg\)/);
+ const desktop=styles.slice(styles.indexOf('@media (min-width: 761px)'),styles.indexOf('@media (max-width: 1100px)'));
+ assert.match(desktop,/\.dashboard\.sidebar-collapsed \{ grid-template-columns: 72px minmax\(0, 1fr\)/);
+ assert.match(desktop,/\.sidebar-collapsed \.sidebar-nav a > span[^}]*display: none/);
+ assert.match(styles,/@media \(max-width: 760px\) \{[\s\S]*?\.sidebar-fold \{ display: none/);
+});
+
 test('dashboard fills the viewport while content and sidebar navigation scroll independently',()=>{
  const styles=readFileSync(require('node:path').join(__dirname,'../web/style.css'),'utf8');
  assert.match(styles,/:root:has\(\.sidebar-layout\) \{[^}]*overflow: hidden/);

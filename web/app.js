@@ -26,6 +26,7 @@ const icons = {
  moon: '<path d="M20.7 13A9 9 0 0 1 11 3.3 9 9 0 1 0 20.7 13Z"/>',
  chevron: '<path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/>',
  back: '<path d="M19 12H5m6-6-6 6 6 6"/>',
+ sidebar: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18m6-12-3 3 3 3"/>',
  close: '<path d="m6 6 12 12M6 18 18 6"/>'
 };
 function icon(name){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(icons[name]||icons.box)+'</svg>'}
@@ -55,18 +56,19 @@ function modal(title,description,fields,submit,onSubmit){
  d.querySelector('form').onsubmit=async e=>{e.preventDefault();const button=d.querySelector('[type=submit]');button.disabled=true;d.querySelector('.form-error').textContent='';try{if(await onSubmit(new FormData(e.target),e.target)!==false)d.close()}catch(err){d.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}};d.showModal();d.querySelector('form input,form select,form textarea')?.focus();
 }
 function shell(content,project=null){
+ const collapsed=localStorage.getItem('startship-sidebar-collapsed')==='true';
  const workspaceURL='#workspace/'+esc(workspace?.id||''),settings=location.hash.endsWith('/settings')&&!project;
  const projectSection=location.hash.split('/')[2]||'deployments';
- const sidebarLink=(href,shape,label,active)=>'<a href="'+href+'" '+(active?'aria-current="page"':'')+'>'+icon(shape)+'<span>'+esc(label)+'</span></a>';
- const sidebar='<aside class="sidebar" aria-label="Dashboard sidebar"><div class="sidebar-top"><a href="'+workspaceURL+'" class="brand">'+brand()+'</a><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">'+icon('close')+'</button></div>'+
-  '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false" aria-label="Workspace: '+esc(workspace?.name||'Choose workspace')+'">'+icon('layers')+'<span class="selector-name">'+esc(workspace?.name||'Choose workspace')+'</span>'+icon('chevron')+'</button>'+
+ const sidebarLink=(href,shape,label,active)=>'<a href="'+href+'" '+(active?'aria-current="page"':'')+' aria-label="'+esc(label)+'" title="'+esc(label)+'">'+icon(shape)+'<span>'+esc(label)+'</span></a>';
+ const sidebar='<aside class="sidebar" aria-label="Dashboard sidebar"><div class="sidebar-top"><a href="'+workspaceURL+'" class="brand" aria-label="Startship" title="Startship">'+brand()+'</a><button id="toggle-sidebar" class="icon-button sidebar-fold" aria-controls="desktop-sidebar" aria-expanded="'+!collapsed+'" aria-label="'+(collapsed?'Expand sidebar':'Collapse sidebar')+'" title="'+(collapsed?'Expand sidebar':'Collapse sidebar')+'">'+icon('sidebar')+'</button><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">'+icon('close')+'</button></div>'+
+  '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false" aria-label="Workspace: '+esc(workspace?.name||'Choose workspace')+'" title="Workspace: '+esc(workspace?.name||'Choose workspace')+'">'+icon('layers')+'<span class="selector-name">'+esc(workspace?.name||'Choose workspace')+'</span>'+icon('chevron')+'</button>'+
   '<div id="workspace-menu" class="sidebar-menu" popover><div class="menu-caption">Switch workspace</div><div class="workspace-options">'+workspaces.map(w=>'<a href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'><span class="workspace-initial">'+esc(w.name[0]?.toUpperCase())+'</span><span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot" aria-label="Current workspace"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div><button id="create-workspace">'+icon('plus')+'Create workspace</button><a href="#workspaces">'+icon('layers')+'Manage workspaces</a></div>'+
   '<div class="sidebar-body"><nav class="sidebar-nav" aria-label="'+(project?'Project':'Workspace')+' navigation">'+(project?
-   sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-project"><strong>'+esc(project.name)+'</strong><a class="sidebar-source" href="#project/'+esc(project.id)+'/source" title="Project source">'+icon('branch')+'<span>'+esc(project.git_url?(project.branch||'main'):'Connect source')+'</span></a></div>'+projectSections.map(([key,label,shape])=>sidebarLink('#project/'+esc(project.id)+'/'+key,shape,label,key===projectSection)).join(''):
+   sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-project"><strong>'+esc(project.name)+'</strong><a class="sidebar-source" href="#project/'+esc(project.id)+'/source" aria-label="Project source: '+esc(project.name)+'" title="'+esc(project.name)+' · '+esc(project.git_url?(project.branch||'main'):'Connect source')+'">'+icon('branch')+'<span>'+esc(project.git_url?(project.branch||'main'):'Connect source')+'</span></a></div>'+projectSections.map(([key,label,shape])=>sidebarLink('#project/'+esc(project.id)+'/'+key,shape,label,key===projectSection)).join(''):
    '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav></div>'+
-  '<div class="sidebar-bottom"><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false" aria-label="Account: '+esc(user.username)+'"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-name">'+esc(user.username)+'</span>'+icon('chevron')+'</button></div>'+
+  '<div class="sidebar-bottom"><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false" aria-label="Account: '+esc(user.username)+'" title="Account: '+esc(user.username)+'"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-name">'+esc(user.username)+'</span>'+icon('chevron')+'</button></div>'+
   '<div id="account-menu" class="sidebar-menu" popover><div class="menu-caption">Signed in as <strong>'+esc(user.username)+'</strong></div><button id="account-profile">'+icon('settings')+'Account settings</button>'+themeButton()+'<div class="menu-divider"></div><button id="logout">'+icon('logout')+'Sign out</button></div></aside>';
- $('#root').innerHTML='<div class="dashboard sidebar-layout"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="content">'+content+'</div><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></main></div></div>';
+ $('#root').innerHTML='<div class="dashboard sidebar-layout'+(collapsed?' sidebar-collapsed':'')+'"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="content">'+content+'</div><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></main></div></div>';
  bindTheme();bindSidebar();
 }
 function focusMenuItem(menu,item){
@@ -81,7 +83,14 @@ function focusMenuItem(menu,item){
   if(parent===menu)break;
  }
 }
+function setSidebarCollapsed(collapsed){
+ localStorage.setItem('startship-sidebar-collapsed',String(collapsed));
+ $('.sidebar-layout').classList.toggle('sidebar-collapsed',collapsed);
+ const button=$('#toggle-sidebar'),label=collapsed?'Expand sidebar':'Collapse sidebar';
+ button.setAttribute('aria-expanded',String(!collapsed));button.setAttribute('aria-label',label);button.setAttribute('title',label);
+}
 function bindSidebar(){
+ $('#toggle-sidebar').onclick=()=>setSidebarCollapsed(localStorage.getItem('startship-sidebar-collapsed')!=='true');
  const drawer=$('#navigation-drawer'),sidebar=$('.sidebar'),desktop=$('#desktop-sidebar');
  const closeDrawer=()=>{drawer.close();desktop.append(sidebar)};
  $('#open-navigation').onclick=()=>{drawer.append(sidebar);drawer.showModal();$('#close-navigation').focus()};
