@@ -30,6 +30,7 @@ type config struct {
 type cli struct {
 	config
 	path                   string
+	pathErr                error
 	in                     *bufio.Reader
 	out                    io.Writer
 	client                 *http.Client
@@ -78,6 +79,9 @@ func (c *cli) transport() (string, *http.Client, error) {
 }
 
 func (c *cli) save() error {
+	if c.pathErr != nil {
+		return c.pathErr
+	}
 	if err := os.MkdirAll(filepath.Dir(c.path), 0700); err != nil {
 		return err
 	}
@@ -644,15 +648,17 @@ func (c *cli) run(args []string) error {
 }
 
 func Run() {
+	c := &cli{in: bufio.NewReader(os.Stdin), out: os.Stdout, client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	// Services such as startship-update.service run without $HOME; only commands that save login state need it.
 	dir, err := os.UserConfigDir()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	c := &cli{path: filepath.Join(dir, "startship", "config.json"), in: bufio.NewReader(os.Stdin), out: os.Stdout, client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
-	b, err := os.ReadFile(c.path)
 	if err == nil {
-		err = json.Unmarshal(b, &c.config)
+		c.path = filepath.Join(dir, "startship", "config.json")
+		var b []byte
+		if b, err = os.ReadFile(c.path); err == nil {
+			err = json.Unmarshal(b, &c.config)
+		}
+	} else {
+		c.pathErr, err = err, nil
 	}
 	if err != nil && !os.IsNotExist(err) {
 		fmt.Fprintln(os.Stderr, err)
