@@ -79,15 +79,21 @@ test('workspace and account selectors are single-line controls without repeated 
  assert.doesNotMatch(html,/Personal account|Self-hosted instance|sidebar-instance/);
 });
 
-test('sidebar groups project controls without viewport-sized spacer bands',()=>{
+test('dashboard fills the viewport while content and sidebar navigation scroll independently',()=>{
  const styles=readFileSync(require('node:path').join(__dirname,'../web/style.css'),'utf8');
- assert.match(styles,/\.sidebar \{[^}]*height: auto/);
- assert.match(styles,/\.sidebar-body \{[^}]*flex: 0 1 auto/);
+ assert.match(styles,/:root:has\(\.sidebar-layout\) \{[^}]*overflow: hidden/);
+ assert.match(styles,/\.dashboard\.sidebar-layout \{[^}]*height: 100dvh[^}]*margin: 0[^}]*overflow: hidden/);
+ assert.match(styles,/#desktop-sidebar \{[^}]*height: 100%/);
+ assert.match(styles,/\.sidebar \{[^}]*height: 100%/);
+ assert.match(styles,/\.sidebar-body \{[^}]*flex: 1[^}]*min-height: 0[^}]*overflow-y: auto/);
+ assert.match(styles,/\.sidebar-layout \.main \{[^}]*min-height: 0[^}]*overflow-y: auto[^}]*overscroll-behavior: contain/);
  assert.doesNotMatch(styles.match(/\.sidebar-bottom \{([^}]+)/)[1],/margin-top: auto/);
  assert.match(styles,/\.sidebar-selector \{[^}]*border: 0/);
  assert.match(styles,/#navigation-drawer \.sidebar-selector \{[^}]*min-height: 44px/);
  assert.doesNotMatch(styles,/sidebar-deployment|sidebar-instance|selector-copy/);
- assert.match(styles,/#desktop-sidebar \{[^}]*align-self: start/);
+ const f=fixture();f.run("shell(heading('','Projects',''))");
+ const html=f.element('#root').innerHTML;
+ assert.ok(html.indexOf('<footer class="app-footer">')<html.indexOf('</main>'));
 });
 
 test('keyboard menu focus scrolls nested menu containers, never the background page',()=>{
