@@ -69,6 +69,8 @@ test('traffic uses the shared project sidebar without replacing project routes',
  const html=f.element('#root').innerHTML;
  assert.match(html,/href="#project\/p1\/traffic" aria-current="page"/);
  assert.match(html,/Live traffic/);assert.doesNotMatch(html,/traffic-sidebar|traffic-layout/);
+ assert.match(html,/id="open-navigation" aria-label="Open navigation" aria-haspopup="dialog"/);
+ assert.equal((html.match(/<header class="heading"/g)||[]).length,1);
  assert.equal((html.match(/<aside/g)||[]).length,1);
  assert.equal(f.stored.get('workspace'),'w2');
  assert.equal(f.element('#traffic-data').innerHTML,'Metrics loaded');

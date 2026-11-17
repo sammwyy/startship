@@ -7,7 +7,8 @@ async function trafficPage(id) {
  workspace=workspaces.find(w=>w.id===project.workspace_id)||workspace;
  if(workspace)localStorage.setItem('workspace',workspace.id);
  shell(
-  '<section class="traffic-main" aria-labelledby="traffic-title"><div class="traffic-heading"><div><div class="traffic-kicker">OBSERVABILITY / BUILT IN</div><h1 id="traffic-title">Live traffic<span class="traffic-prototype">Prototype</span></h1><p>Your router sees it. Now you do.</p></div><div class="traffic-controls"><span id="traffic-live" class="traffic-live" role="status">Connecting…</span><div class="traffic-ranges" aria-label="Traffic time range">'+[[300,'5m'],[900,'15m'],[3600,'1h']].map(([n,label])=>'<button data-window="'+n+'" aria-pressed="'+(n===300)+'">'+label+'</button>').join('')+'</div></div></div>'+ 
+  '<section class="traffic-main" aria-label="Live project traffic">'+heading('','Live traffic','Your router sees it. Now you do.',
+   '<div class="traffic-controls"><span id="traffic-live" class="traffic-live" role="status">Connecting…</span><div class="traffic-ranges" aria-label="Traffic time range">'+[[300,'5m'],[900,'15m'],[3600,'1h']].map(([n,label])=>'<button data-window="'+n+'" aria-pressed="'+(n===300)+'">'+label+'</button>').join('')+'</div></div>','',project.name)+
   '<div id="traffic-error" role="alert" hidden></div><div id="traffic-data"><div class="traffic-loading">Listening to your project…</div></div>'+ 
   '<div class="traffic-footnote"><span>'+icon('lock')+'No agents. No SDKs. Nothing to configure.</span><span>Last hour · in memory · resets on restart</span></div></section>',project);
  $('.dashboard').classList.add('traffic-shell');
