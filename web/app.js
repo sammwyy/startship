@@ -16,6 +16,7 @@ const icons = {
  activity: '<path d="M2 12h5l3-8 4 16 3-8h5"/>',
  terminal: '<path d="m7 8 4 4-4 4m7 0h4"/><rect x="2" y="3" width="20" height="18" rx="3"/>',
  copy: '<rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
+ expand: '<path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/>',
  settings: '<path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3" fill="var(--bg)"/><circle cx="16" cy="17" r="3" fill="var(--bg)"/>',
  search: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/>',
  lock: '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 5v2"/>',
@@ -112,7 +113,7 @@ async function projectPage(id,selectedId='',initialTab='deployments'){
 async function appPage(id,tab='deployments'){const version=viewVersion,app=await api('apps/'+id);if(version===viewVersion)await projectPage(app.project_id,id,tab)}
 async function mountApplication(project,app,apps,allRoutes,initialTab,deployments){
  const version=viewVersion,isCurrent=()=>version===viewVersion&&!!$('#app-workbench');
- let activeTab='',loading=false,tabVersion=0;
+ let activeTab='',loading=false,tabVersion=0,expandedLog=false;
  const ownRoutes=()=>allRoutes.filter(r=>r.app_id===app.id);
  $('#app-workbench').innerHTML='<div class="app-toolbar"><div class="app-identity"><h2>'+esc(app.name)+'</h2><span id="active-status"></span><span class="repository-label" title="'+esc(app.git_url)+'">'+icon('branch')+esc(app.git_url)+'</span></div><div class="app-actions">'+(ownRoutes().length?'<a class="button" href="'+esc(ownRoutes()[0].url)+'" target="_blank" rel="noreferrer">Open app '+icon('arrow')+'</a>':'')+'<button class="primary" id="deploy">'+icon('arrow')+'Deploy now</button></div></div>'+
  '<div class="app-details"><span>'+icon('branch')+'<span id="app-branch">'+esc(app.branch)+'</span></span><span>'+icon('folder')+'Root '+rootLabel(app.root_dir)+'</span><span>'+icon('server')+esc(app.build_type)+' · :'+app.port+'</span><label class="inline-check"><input type="checkbox" id="quick-auto-deploy" '+(app.auto_deploy?'checked':'')+'>Auto-deploy</label></div>'+
@@ -123,18 +124,20 @@ async function mountApplication(project,app,apps,allRoutes,initialTab,deployment
   if(loading)return;loading=true;
   try{
    const ds=await api('deployments?app_id='+app.id);if(!isCurrent()||activeTab!=='deployments')return;
-   const previousLog=$('#build-log'),previousScroll=previousLog?.scrollTop||0,follow=!previousLog||previousLog.scrollHeight-previousLog.scrollTop-previousLog.clientHeight<40;
+   const previousLog=$('#build-log'),previousScroll=previousLog?.scrollTop||0,logHeight=previousLog?.style.height||'',follow=!previousLog||previousLog.scrollHeight-previousLog.scrollTop-previousLog.clientHeight<40;
    const left=$('#deployment-history')?.scrollLeft||0,top=$('#deployment-history')?.scrollTop||0,focused=document.activeElement?.closest('.select-deploy')?.dataset.id,focusedControl=document.activeElement?.id;
    const latest=ds.slice().reverse();if(!latest.some(d=>d.id===selectedDeployment))selectedDeployment=latest[0]?.id||'';
    $('#tab-content').innerHTML='<div class="deployment-layout"><section class="release-history"><div class="section-head"><h2>Releases<span class="count">'+latest.length+'</span></h2><span class="small muted">Select a release to inspect</span></div>'+
     (latest.length?'<div class="panel table-panel" id="deployment-history"><table><thead><tr><th>Deployment</th><th>Status</th><th>Commit</th><th>Created</th></tr></thead><tbody>'+latest.map(d=>'<tr class="'+(d.id===selectedDeployment?'selected':'')+'"><td><button class="select-deploy" aria-label="Inspect deployment '+esc(d.id.slice(0,8))+'" aria-pressed="'+(d.id===selectedDeployment)+'" data-id="'+esc(d.id)+'">'+icon('box')+esc(d.id.slice(0,8))+'</button></td><td>'+badge(d.status)+'</td><td class="muted commit">'+esc(d.commit?.slice(0,7)||'Pending')+'</td><td class="muted">'+esc(new Date(d.created).toLocaleString())+'</td></tr>').join('')+'</tbody></table></div>':empty('No releases yet','Deploy this application to see its build output.'))+
     '<div class="release-endpoints"><div class="section-head"><h2>Public endpoints</h2><button class="text-button" id="manage-domains">'+(ownRoutes().length?'Manage':'Connect domain')+icon('arrow')+'</button></div>'+
     (ownRoutes().length?ownRoutes().map(r=>'<a class="endpoint" href="'+esc(r.url)+'" target="_blank" rel="noreferrer">'+icon('globe')+'<span>'+esc(r.url)+'</span>'+icon('arrow')+'</a>').join(''):'<p class="small muted">No domain connected to this application.</p>')+'</div></section>'+
-    '<section class="panel log-panel"><div class="log-head"><span class="log-title">'+icon('terminal')+'Build output <span class="muted" id="log-id"></span></span><button class="text-button" id="copy-log">'+icon('copy')+'Copy</button></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section></div>';
+    '<section class="panel log-panel '+(expandedLog?'expanded':'')+'"><div class="log-head"><span class="log-title">'+icon('terminal')+'Build output <span class="muted" id="log-id"></span></span><div class="log-actions"><button class="text-button" id="toggle-log" aria-expanded="'+expandedLog+'" aria-controls="build-log">'+icon('expand')+(expandedLog?'Compact':'Expand')+'</button><button class="text-button" id="copy-log">'+icon('copy')+'Copy</button></div></div><pre class="log" id="build-log">Waiting for a deployment…</pre></section></div>';
    const table=$('#deployment-history');if(table){table.scrollLeft=left;table.scrollTop=top}
+   if(logHeight)$('#build-log').style.height=logHeight;
    document.querySelectorAll('.select-deploy').forEach(b=>b.onclick=async()=>{selectedDeployment=b.dataset.id;try{await showDeployments()}catch(err){toast(err.message)}});
    if(focused)document.querySelector('.select-deploy[data-id="'+focused+'"]')?.focus({preventScroll:true});
-   if(['copy-log','manage-domains'].includes(focusedControl))$('#'+focusedControl)?.focus({preventScroll:true});
+   if(['copy-log','toggle-log','manage-domains'].includes(focusedControl))$('#'+focusedControl)?.focus({preventScroll:true});
+   $('#toggle-log').onclick=e=>{expandedLog=!expandedLog;$('.log-panel').classList.toggle('expanded',expandedLog);$('#build-log').style.height='';e.currentTarget.setAttribute('aria-expanded',String(expandedLog));e.currentTarget.innerHTML=icon('expand')+(expandedLog?'Compact':'Expand')};
    $('#manage-domains').onclick=()=>ownRoutes().length?tab('domains',true).catch(err=>toast(err.message)):addRoute(project,apps,app.id);
    $('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#build-log').textContent);toast('Build output copied')}catch{toast('Select and copy the build output manually')}};
    const current=latest.find(d=>['queued','building','testing','starting'].includes(d.status))||latest.find(d=>d.status==='running')||latest[0];
