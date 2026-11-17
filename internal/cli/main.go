@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sammwyy/startship/internal/update"
 	"github.com/sammwyy/startship/internal/version"
 	"io"
 	"net"
@@ -34,6 +35,9 @@ type cli struct {
 	client                 *http.Client
 	raw                    bool
 	socketPermissionDenied bool
+	updates                *update.Client
+	binDir                 string
+	restart                func() (bool, error)
 }
 
 func (c *cli) transport() (string, *http.Client, error) {
@@ -264,6 +268,11 @@ const usage = `startship [--json] COMMAND
   domains rm WORKSPACE DOMAIN     domain ID or name; delete/remove also accepted
   workspaces domains ...         alias for domains; quote wildcard names
   traffic PROJECT | detect JSON | version
+  update check                   CLI, daemon and latest release versions
+  update [VERSION]               install the latest (or VERSION) CLI and daemon
+                                 beside this binary and restart startshipd (root)
+  update daemon [VERSION]        ask the connected daemon to update itself
+                                 (Platform Admin; needs the installer's updater)
 Names or IDs accepted for workspaces/projects/containers. JSON objects may be
 passed as '-' to read stdin. STARTSHIP_SERVER and STARTSHIP_TOKEN override config.
 Without a saved server, the local admin socket needs no login (root/startship group).
@@ -292,6 +301,9 @@ func (c *cli) run(args []string) error {
 	}
 	cmd := a[0]
 	a = a[1:]
+	if cmd == "update" {
+		return c.runUpdate(a)
+	}
 	if cmd == "domains" {
 		return c.runDomains(a)
 	}
