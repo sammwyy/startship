@@ -69,6 +69,14 @@ test('workspace and account names are escaped in menu markup', () => {
  assert.doesNotMatch(html, /<script>|<img>/);
 });
 
+test('sidebar groups project controls without viewport-sized spacer bands',()=>{
+ const styles=readFileSync(require('node:path').join(__dirname,'../web/style.css'),'utf8');
+ assert.match(styles,/\.sidebar \{[^}]*height: auto/);
+ assert.match(styles,/\.sidebar-body \{[^}]*flex: 0 1 auto/);
+ for(const name of ['sidebar-deployment','sidebar-bottom'])assert.doesNotMatch(styles.match(new RegExp('\\.'+name+' \\{([^}]+)'))[1],/margin-top: auto/);
+ assert.match(styles,/#desktop-sidebar \{[^}]*align-self: start/);
+});
+
 test('keyboard menu focus scrolls nested menu containers, never the background page',()=>{
  const f=fixture();let focusOptions;
  const menu={scrollTop:0,scrollHeight:350,clientHeight:120,clientTop:1,parentElement:null,getBoundingClientRect:()=>({top:0})};

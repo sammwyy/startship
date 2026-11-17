@@ -317,8 +317,8 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .integration-guide p { margin-bottom: 0; }
 .dashboard.sidebar-layout { display: grid; grid-template-columns: 212px minmax(0, 1fr); }
 .dashboard-body { min-width: 0; display: flex; flex-direction: column; }
-#desktop-sidebar { border-right: 1px solid var(--line); background: var(--terminal); }
-.sidebar { position: sticky; top: 0; height: calc(100dvh - 26px); min-height: 0; display: flex; flex-direction: column; padding: 18px 12px 12px; }
+#desktop-sidebar { align-self: start; position: sticky; top: 0; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); border-bottom-right-radius: 14px; background: var(--terminal); }
+.sidebar { max-height: calc(100dvh - 26px); height: auto; min-height: 0; display: flex; flex-direction: column; padding: 18px 12px 12px; }
 .sidebar-top { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 17px; }
 .sidebar .brand { font-size: 16px; }
 .sidebar .mark { width: 25px; height: 25px; }
@@ -330,7 +330,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .selector-copy { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .selector-copy small { color: var(--muted); font-size: 9px; font-weight: 400; }
 .selector-copy strong { font-size: 11px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; margin: 12px -4px 0; padding: 0 4px; overscroll-behavior: contain; }
+.sidebar-body { flex: 0 1 auto; min-height: 0; display: flex; flex-direction: column; overflow-y: auto; margin: 12px -4px 0; padding: 0 4px; overscroll-behavior: contain; }
 .sidebar-nav { padding-top: 0; }
 .sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 12px; margin: 3px 0; color: var(--muted); border: 1px solid transparent; border-radius: 8px; font-size: 11px; }
 .sidebar-nav a:hover { color: var(--text); background: var(--raised); }
@@ -343,11 +343,11 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .sidebar-nav .sidebar-source { margin: 3px 0 0; padding: 2px 0; border: 0; border-radius: 0; font-size: 10px; gap: 6px; }
 .sidebar-source span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-source .icon { width: 12px; height: 12px; }
-.sidebar-deployment { margin-top: auto; padding: 16px 5px 4px; }
+.sidebar-deployment { margin-top: 14px; border-top: 1px solid var(--line); padding: 14px 5px 4px; }
 .deployment-status { display: flex; justify-content: space-between; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; }
 .sidebar-deployment p { font-size: 10px; line-height: 1.8; margin: 10px 0 13px; }
 .sidebar-deployment > button { width: 100%; }
-.sidebar-bottom { padding-top: 16px; margin-top: auto; }
+.sidebar-bottom { padding-top: 16px; }
 .sidebar-instance { display: block; color: var(--muted); font-size: 9px; padding: 0 10px 10px; }
 .account-selector { border-top: 1px solid var(--line); }
 .account-selector .avatar { margin: 0; flex-shrink: 0; }
@@ -388,7 +388,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .workbench .tabs a .icon { width: 13px; height: 13px; }
 .mobile-only { display: none; }
 #navigation-drawer { padding: 0; margin: 0; width: 264px; max-width: calc(100vw - 48px); height: 100dvh; max-height: 100dvh; border: 0; border-right: 1px solid var(--line-strong); border-radius: 0; background: var(--terminal); overflow: visible; }
-#navigation-drawer .sidebar { height: 100dvh; min-height: 0; position: static; }
+#navigation-drawer .sidebar { height: 100dvh; max-height: 100dvh; min-height: 0; }
 @media (max-width: 1100px) {
   .workspace-layout { grid-template-columns: minmax(0, 1.5fr) minmax(240px, 1fr); }
   .project-grid { grid-template-columns: minmax(0, 1fr); }
