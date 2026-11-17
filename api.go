@@ -96,6 +96,95 @@ func (a *Server) user(r *http.Request) string {
 	a.store.db.QueryRow("SELECT user_id FROM sessions WHERE id=? AND expires>?", c.Value, time.Now().Unix()).Scan(&id)
 	return id
 }
+func (a *Server) updateAccount(w http.ResponseWriter, r *http.Request, uid string) {
+	var v struct {
+		Username        *string `json:"username"`
+		CurrentPassword string  `json:"current_password"`
+		NewPassword     *string `json:"new_password"`
+	}
+	if decode(w, r, &v) != nil {
+		fail(w, 400, "invalid JSON")
+		return
+	}
+	if v.Username == nil && v.NewPassword == nil {
+		fail(w, 400, "provide a username or new password")
+		return
+	}
+	if v.Username != nil {
+		name := strings.TrimSpace(*v.Username)
+		if len(name) < 1 || len(name) > 100 {
+			fail(w, 400, "username must be between 1 and 100 bytes")
+			return
+		}
+		v.Username = &name
+	}
+	if v.NewPassword != nil && (len(*v.NewPassword) < 8 || len(*v.NewPassword) > 72) {
+		fail(w, 400, "new password must be between 8 and 72 bytes")
+		return
+	}
+	if v.CurrentPassword == "" {
+		fail(w, 400, "current password required")
+		return
+	}
+	a.store.mu.Lock()
+	defer a.store.mu.Unlock()
+	tx, err := a.store.db.Begin()
+	if err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	defer tx.Rollback()
+	cookie, _ := r.Cookie("startship_session")
+	var name, hash string
+	err = tx.QueryRow("SELECT u.username,u.password FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND s.id=? AND s.expires>?", uid, cookie.Value, time.Now().Unix()).Scan(&name, &hash)
+	if err != nil {
+		fail(w, 401, "session expired; sign in again")
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(v.CurrentPassword)) != nil {
+		fail(w, 403, "current password is incorrect")
+		return
+	}
+	if v.Username != nil {
+		name = *v.Username
+		var count int
+		if err = tx.QueryRow("SELECT count(*) FROM users WHERE username=? AND id<>?", name, uid).Scan(&count); err != nil {
+			fail(w, 500, "account update failed")
+			return
+		}
+		if count != 0 {
+			fail(w, 409, "username is already in use")
+			return
+		}
+	}
+	if v.NewPassword != nil {
+		var generated []byte
+		generated, err = bcrypt.GenerateFromPassword([]byte(*v.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			fail(w, 500, "account update failed")
+			return
+		}
+		hash = string(generated)
+	}
+	if _, err = tx.Exec("UPDATE users SET username=?,password=? WHERE id=?", name, hash, uid); err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	token := randomID()
+	if _, err = tx.Exec("DELETE FROM sessions WHERE user_id=?", uid); err == nil {
+		_, err = tx.Exec("INSERT INTO sessions VALUES(?,?,?)", token, uid, time.Now().Add(7*24*time.Hour).Unix())
+	}
+	if err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	if err = tx.Commit(); err != nil {
+		fail(w, 500, "account update failed")
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode, MaxAge: 604800})
+	reply(w, 200, map[string]string{"id": uid, "username": name})
+}
 func (a *Server) api() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -157,6 +246,8 @@ func (a *Server) api() http.Handler {
 				fail(w, 400, "invalid JSON")
 				return
 			}
+			a.store.mu.Lock()
+			defer a.store.mu.Unlock()
 			var id, hash string
 			e := a.store.db.QueryRow("SELECT id,password FROM users WHERE username=?", strings.TrimSpace(v.Username)).Scan(&id, &hash)
 			if e != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(v.Password)) != nil {
@@ -186,6 +277,15 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		if p[1] == "me" {
+			if r.Method == "PATCH" {
+				a.updateAccount(w, r, uid)
+				return
+			}
+			if r.Method != "GET" {
+				w.Header().Set("Allow", "GET, PATCH")
+				fail(w, 405, "method not allowed")
+				return
+			}
 			var name string
 			a.store.db.QueryRow("SELECT username FROM users WHERE id=?", uid).Scan(&name)
 			reply(w, 200, map[string]string{"id": uid, "username": name})
@@ -273,6 +373,9 @@ func (a *Server) api() http.Handler {
 				}
 				if parent := r.URL.Query().Get("app_id"); parent != "" && v.AppID != parent {
 					continue
+				}
+				if kind == "deployments" && r.URL.Query().Get("logs") == "false" {
+					v.Log = ""
 				}
 				out = append(out, publicRecord(v))
 			}

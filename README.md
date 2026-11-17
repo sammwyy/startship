@@ -16,7 +16,7 @@ Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit ask
 
 From there: use the workspace menu at the top of the sidebar to switch or create workspaces, then create a project connected to **one Git repository**. The project owns the repository, branch, credentials, and GitHub webhook. Choose a single application to build the repository root, or a monorepo to define frontend, backend, or daemon apps in folders of that same repository. Apps only configure their root directory, build, port, variables, and deployment behavior; they cannot select another source. Deploy an app and connect a domain to expose it.
 
-Projects open directly into their application's controls. The same compact application selector is shown for single-app and multi-app projects. Application tabs hold deployments, domains, and app settings; **Project Git** in the sidebar holds the shared source and copyable webhook credentials. **All projects** returns to the selected workspace in one click. On narrow screens, the navigation button opens the sidebar. The account menu at the bottom contains account details, the light/dark theme toggle, and sign out; profile/password editing is not yet supported. The theme choice is remembered. Environment variables use one KEY=VALUE per line.
+Projects open directly into their application's controls. The same compact application selector is shown for single-app and multi-app projects. Application tabs hold deployments, domains, and app settings; **Project Git** in the sidebar holds the shared source and copyable webhook credentials. **All projects** returns to the selected workspace in one click. On narrow screens, the navigation button opens the sidebar. The account menu at the bottom contains **Account settings** to change your username or password, the light/dark theme toggle, and sign out. Account changes require your current password, replace this session, and sign out your other sessions. The theme choice is remembered. Environment variables use one KEY=VALUE per line.
 
 Use **Open app** or a public endpoint in the application's Deployments or Domains tab to visit the deployed app, not the
 dashboard or internal container port. URLs use the configured router port and
@@ -155,6 +155,8 @@ With `STARTSHIP_DASHBOARD_DOMAIN`, proxy requests for that hostname go to the da
 
 All bodies and responses are JSON. Login using `POST /api/login {"username":"admin","password":"..."}`, keep the `startship_session` cookie. `POST /api/logout`, `GET /api/me`. Sessions expire after seven days.
 
+`PATCH /api/me {"username":"new-name","current_password":"...","new_password":"..."}` changes the signed-in account. Supply a username, a new password, or both, plus the current password. Usernames must be unique and 1–100 bytes after trimming; new passwords must be 8–72 bytes (bcrypt's limit). Success returns `{id, username}`, invalidates all previous sessions, and sets a fresh session cookie so the caller stays signed in. This is not a password-reset flow: you must know the current password.
+
 Names are required and trimmed. Ownership-scoped `GET/POST /api/{workspaces,projects,apps,routes}` and `GET/PUT/PATCH/DELETE /api/{collection}/{id}`. Delete children before parents. POST returns the new object including ID. Fields:
 
 - workspace: `name`
@@ -166,7 +168,7 @@ Projects accept `git_url, git_token, branch` in addition to their name and works
 
 On upgrade, an existing source is promoted from apps to their project only when all populated app sources agree. Conflicting legacy repositories/branches/credentials are flagged for an explicit choice in **Project source**, without deleting apps or interrupting active deployments. Builds are blocked until that choice is made. Existing app-specific signed webhook URLs remain compatible but use the project's branch and source.
 
-`POST /api/apps/{id}/deploy {}` queues a build. `GET /api/deployments?app_id=...` and `GET /api/deployments/{id}` include persisted incremental logs. Lists also support `project_id` and `workspace_id` filters.
+`POST /api/apps/{id}/deploy {}` queues a build. `GET /api/deployments?app_id=...` and `GET /api/deployments/{id}` include persisted incremental logs. Use `GET /api/deployments?logs=false` to poll release metadata without transferring every build log. Lists also support `project_id` and `workspace_id` filters.
 
 `POST /api/detect {"project_id":"..."}` clones the authenticated project's shared source and scans its root and immediate child directories. It returns `root_dir, build_type, port` candidates; create apps from these via the apps endpoint without repeating source fields.
 

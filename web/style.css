@@ -266,6 +266,18 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .workbench .deployment-layout { grid-template-columns: minmax(0, .95fr) minmax(0, 1.3fr); gap: 18px; }
 .release-history { min-width: 0; }
 .release-history .section-head { margin-bottom: 10px; }
+.release-directory { max-height: 460px; overflow-y: auto; }
+.release-entry.select-deploy { display: block; width: 100%; text-align: left; white-space: normal; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.release-entry:last-child { border-bottom: 0; }
+.release-entry:hover { background: var(--raised); }
+.release-entry.selected { background: var(--accent-soft); box-shadow: inset 2px 0 var(--success); }
+.release-entry:focus-visible { outline-offset: -3px; }
+.release-main, .release-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.release-id { display: inline-flex; align-items: center; gap: 7px; font: 10px ui-monospace, monospace; }
+.release-id .icon { color: var(--muted); }
+.release-meta { margin-top: 7px; color: var(--muted); font-size: 9px; flex-wrap: wrap; }
+.release-meta time { font-family: Inter, "Helvetica Neue", Arial, sans-serif; }
+.release-meta .commit { color: var(--faint); }
 .workbench .log { height: 260px; min-height: 180px; max-height: 70dvh; resize: vertical; }
 .workbench .log-panel.expanded .log { height: min(65dvh, 650px); }
 .log-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
