@@ -175,7 +175,7 @@ Use a public link in **Domains** to visit a deployed project, not the dashboard 
 Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/dl/), Git and Docker Engine required; no C toolchain):
 
 ```sh
-go build -o startshipd .
+go build -o startshipd ./cmd/startshipd
 STARTSHIP_HTTP_ADDR=:8081 ./startshipd
 ```
 
@@ -346,3 +346,22 @@ node --test scripts/navigation.test.cjs # optional frontend regression checks, N
 ```
 
 E2E requires Python 3, curl, Git and real Docker. It also covers a two-HTTP-container project release, shared config, container domain targets, grouped failure preservation, artifact redeploy, and restart recovery. Uses localhost ports 18080/18081, creates a local Dockerfile + Python + Rust + static monorepo, auto-detects and deploys all four through the API, tests route URLs, prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.
+
+## Project layout
+
+- `cmd/startshipd`, `cmd/startship`: daemon and CLI entrypoints.
+- `internal/server`: HTTP API, authorization, schema migrations, deployment orchestration,
+  Docker/buildx isolation, proxy serving, traffic collection and local socket.
+- `internal/cli`: CLI commands, configuration and API transport.
+- `internal/store`: SQLite records, persistence and migration registration.
+- `internal/detect`: build-root detection and generated Dockerfiles.
+- `internal/routing`: host/path normalization and route matching.
+- `internal/config`: daemon environment and data-directory defaults.
+- `internal/version`: build metadata shared by both binaries.
+- `web`: embedded dashboard assets; `scripts`: UI and deployment integration tests.
+
+Use `go build ./cmd/...` to compile both commands. Release builds set
+`github.com/sammwyy/startship/internal/version.Version` and
+`github.com/sammwyy/startship/internal/version.Commit` using `-ldflags -X`.
+Docker builds accept matching `VERSION` and `COMMIT` build arguments.
+Run `startshipd --version` or `startship version` to print the version.
