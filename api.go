@@ -22,6 +22,9 @@ type Server struct {
 	queues  map[string]chan string
 	routeMu sync.RWMutex
 	targets []Target
+	// dashboardDomain is served by the proxy listeners; https is set when ACME is enabled.
+	dashboardDomain string
+	https           bool
 }
 
 func reply(w http.ResponseWriter, status int, v any) {
@@ -35,7 +38,11 @@ func fail(w http.ResponseWriter, status int, msg string) {
 func decode(w http.ResponseWriter, r *http.Request, v any) error {
 	return json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(v)
 }
+func secureRequest(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https")
+}
 func (a *Server) createUser(user, pass string) (string, error) {
+	user = strings.TrimSpace(user)
 	if len(user) < 1 || len(user) > 100 || len(pass) < 8 {
 		return "", fmt.Errorf("username required; password must be at least 8 characters")
 	}
@@ -54,7 +61,7 @@ func (a *Server) createUser(user, pass string) (string, error) {
 	if _, e = tx.Exec("INSERT INTO users VALUES(?,?,?)", id, user, string(hash)); e != nil {
 		return "", e
 	}
-	ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace"}
+	ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace", Created: time.Now().UTC()}
 	b, _ := json.Marshal(ws)
 	if _, e = tx.Exec("INSERT INTO records VALUES(?,?,?,?,?)", ws.ID, ws.Kind, id, "", string(b)); e != nil {
 		return "", e
@@ -132,9 +139,9 @@ func (a *Server) api() http.Handler {
 				return
 			}
 			var id, hash string
-			e := a.store.db.QueryRow("SELECT id,password FROM users WHERE username=?", v.Username).Scan(&id, &hash)
+			e := a.store.db.QueryRow("SELECT id,password FROM users WHERE username=?", strings.TrimSpace(v.Username)).Scan(&id, &hash)
 			if e != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(v.Password)) != nil {
-				fail(w, 401, "invalid credentials")
+				fail(w, 401, "invalid username or password")
 				return
 			}
 			token := randomID()
@@ -143,7 +150,7 @@ func (a *Server) api() http.Handler {
 				fail(w, 500, "session failed")
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 604800})
+			http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode, MaxAge: 604800})
 			reply(w, 200, map[string]string{"id": id})
 			return
 		}
@@ -155,7 +162,7 @@ func (a *Server) api() http.Handler {
 		if p[1] == "logout" && r.Method == "POST" {
 			c, _ := r.Cookie("startship_session")
 			a.store.db.Exec("DELETE FROM sessions WHERE id=?", c.Value)
-			http.SetCookie(w, &http.Cookie{Name: "startship_session", Path: "/", MaxAge: -1, HttpOnly: true})
+			http.SetCookie(w, &http.Cookie{Name: "startship_session", Path: "/", MaxAge: -1, HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode})
 			reply(w, 200, map[string]bool{"ok": true})
 			return
 		}
@@ -254,12 +261,19 @@ func (a *Server) api() http.Handler {
 		}
 		v.Kind = kind
 		v.Owner = uid
+		v.Name = strings.TrimSpace(v.Name)
+		if v.Name == "" && kind != "routes" {
+			fail(w, 400, "name is required")
+			return
+		}
 		if old.ID == "" {
 			v.ID = randomID()
+			v.Created = time.Now().UTC()
 			v.Active = ""
 			v.WebhookSecret = ""
 		} else {
 			v.ID = old.ID
+			v.Created = old.Created
 			v.Active = old.Active
 			v.WebhookSecret = old.WebhookSecret
 		}

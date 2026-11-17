@@ -55,8 +55,30 @@ func (a *Server) refresh() {
 	a.targets = targets
 	a.routeMu.Unlock()
 }
+
+// certAllowed reports whether ACME may issue a certificate for host: the
+// dashboard domain or any routed host.
+func (a *Server) certAllowed(host string) bool {
+	host = normalizeHost(host)
+	if host == "" {
+		return false
+	}
+	if a.dashboardDomain != "" && host == normalizeHost(a.dashboardDomain) {
+		return true
+	}
+	for _, r := range a.store.list("routes", "") {
+		if normalizeHost(r.Host) == host {
+			return true
+		}
+	}
+	return false
+}
 func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if domain := os.Getenv("STARTSHIP_DASHBOARD_DOMAIN"); domain != "" && normalizeHost(r.Host) == normalizeHost(domain) {
+	if a.dashboardDomain != "" && normalizeHost(r.Host) == normalizeHost(a.dashboardDomain) {
+		if a.https && r.TLS == nil {
+			http.Redirect(w, r, "https://"+normalizeHost(r.Host)+r.URL.RequestURI(), http.StatusPermanentRedirect)
+			return
+		}
 		a.api().ServeHTTP(w, r)
 		return
 	}

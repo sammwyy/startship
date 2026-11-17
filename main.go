@@ -32,7 +32,7 @@ func main() {
 		log.Fatal(e)
 	}
 	defer s.db.Close()
-	a := &Server{store: s, data: data, queues: make(map[string]chan string)}
+	a := &Server{store: s, data: data, queues: make(map[string]chan string), dashboardDomain: os.Getenv("STARTSHIP_DASHBOARD_DOMAIN")}
 	if u, p := os.Getenv("STARTSHIP_ADMIN_USER"), os.Getenv("STARTSHIP_ADMIN_PASSWORD"); u != "" && p != "" {
 		var n int
 		s.db.QueryRow("SELECT count(*) FROM users").Scan(&n)
@@ -47,11 +47,10 @@ func main() {
 	proxy := &http.Server{Addr: env("STARTSHIP_HTTP_ADDR", ":80"), Handler: a, ReadHeaderTimeout: 10 * time.Second}
 	servers := []*http.Server{dash, proxy}
 	if email := os.Getenv("STARTSHIP_ACME_EMAIL"); email != "" {
+		a.https = true
 		m := &autocert.Manager{Prompt: autocert.AcceptTOS, Email: email, Cache: autocert.DirCache(filepath.Join(data, "certs")), HostPolicy: func(ctx context.Context, host string) error {
-			for _, r := range s.list("routes", "") {
-				if normalizeHost(r.Host) == normalizeHost(host) {
-					return nil
-				}
+			if a.certAllowed(host) {
+				return nil
 			}
 			return errInvalid
 		}}
