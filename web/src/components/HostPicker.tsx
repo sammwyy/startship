@@ -31,15 +31,18 @@ export function HostPicker({
     wildcard =
       !exact &&
       domains.find((d) => d.subdomains && host.endsWith(`.${d.name}`));
+  const existingOnly = !!host && !exact && !wildcard && !admin;
   const [selected, setSelected] = useState(
     exact?.name ||
       (wildcard
         ? `*.${wildcard.name}`
-        : host && admin
-          ? ""
-          : domains.length
-            ? domainPatterns(domains[0])[0]
-            : ""),
+        : existingOnly
+          ? host
+          : host && admin
+            ? ""
+            : domains.length
+              ? domainPatterns(domains[0])[0]
+              : ""),
   );
   const [sub, setSub] = useState(
     wildcard ? host.slice(0, -wildcard.name.length - 1) : "",
@@ -55,7 +58,7 @@ export function HostPicker({
           : domain,
     );
   }
-  if (!domains.length && !admin)
+  if (!domains.length && !admin && !existingOnly)
     return (
       <p className="note">
         This workspace has no domains yet. A workspace administrator adds them
@@ -88,6 +91,9 @@ export function HostPicker({
           value={selected}
           onChange={(e) => change(e.target.value)}
         >
+          {existingOnly && (
+            <option value={host}>{host} (existing route)</option>
+          )}
           {domains.flatMap(domainPatterns).map((p) => (
             <option key={p}>{p}</option>
           ))}
@@ -107,6 +113,12 @@ export function HostPicker({
           autoComplete="off"
         />
       </div>
+      {existingOnly && (
+        <p className="small muted">
+          This hostname is outside the workspace’s registered domains. You can
+          keep it on this existing route, or choose a registered domain.
+        </p>
+      )}
     </div>
   );
 }

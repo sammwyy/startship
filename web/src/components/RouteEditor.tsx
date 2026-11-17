@@ -45,7 +45,7 @@ export function RouteEditor({
       "",
   );
   const [strip, setStrip] = useState(route?.strip_prefix || false);
-  const available = !!target && (!!domains.length || !!admin);
+  const available = !!target && (!!domains.length || !!admin || !!route?.host);
   const previewPath = path.startsWith("/") ? path : `/${path}`;
   return (
     <section

@@ -59,6 +59,23 @@ function setup(
 }
 
 describe("domain routing editor", () => {
+  it("lets contributors retain an existing external host without a misleading preview", async () => {
+    const { user, onSave } = setup({
+      route: { ...route, container_id: "web", host: "legacy.test", port: 0 },
+    });
+    expect(screen.getByLabelText("Domain")).toHaveValue("legacy.test");
+    expect(
+      screen.getByText(/outside the workspace’s registered domains/),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Hostname")).toBeDisabled();
+    await user.clear(screen.getByLabelText("Path"));
+    await user.type(screen.getByLabelText("Path"), "/status");
+    expect(screen.getByText("legacy.test/status")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save route" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ host: "legacy.test", path_prefix: "/status" }),
+    );
+  });
   it("automatically targets a single container and follows its detected port", async () => {
     const { user, onSave } = setup();
     expect(

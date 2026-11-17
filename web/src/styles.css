@@ -58,6 +58,9 @@
 .route-editor label {
   font-size: 11px;
 }
+.route-editor :is(input:not([type="checkbox"]), select):focus-visible {
+  outline: none;
+}
 .route-editor .field-label {
   font-size: 11px;
 }

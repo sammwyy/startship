@@ -32,23 +32,19 @@ export function DomainsView() {
   }
   return (
     <>
-      <ProjectHeading title="Domains" />
-      <div className="section-head">
-        <div>
-          <h2>Domains</h2>
-          <p className="small muted">
-            Map public addresses to your containers.
-          </p>
-        </div>
-        <button
-          className="primary"
-          disabled={!editable || !containers.length || loading || !!editor}
-          onClick={() => ui.run(() => edit())}
-        >
-          <Icon name="plus" />
-          {loading ? "Loading…" : "Connect domain"}
-        </button>
-      </div>
+      <ProjectHeading
+        title="Domains"
+        actions={
+          <button
+            className="primary"
+            disabled={!editable || !containers.length || loading || !!editor}
+            onClick={() => ui.run(() => edit())}
+          >
+            <Icon name="plus" />
+            {loading ? "Loading…" : "Connect domain"}
+          </button>
+        }
+      />
       {editor && (
         <>
           {!editor.domains.length && !user?.platform_admin && (
