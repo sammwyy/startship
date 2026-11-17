@@ -27,8 +27,13 @@ const icons = {
  chevron: '<path d="m8 9 4-4 4 4m-8 6 4 4 4-4"/>',
  back: '<path d="M19 12H5m6-6-6 6 6 6"/>',
  sidebar: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 3v18m6-12-3 3 3 3"/>',
- close: '<path d="m6 6 12 12M6 18 18 6"/>'
+ close: '<path d="m6 6 12 12M6 18 18 6"/>',
+ shield: '<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6Z"/>',
+ user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+ users: '<circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0m0-17a4 4 0 0 1 0 8m6 9a7 7 0 0 0-4-6.3"/>',
+ history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 3"/>'
 };
+const can=(perm,record=null)=>!!(record?record.permissions:user?.permissions)?.includes(perm);
 function icon(name){return '<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(icons[name]||icons.box)+'</svg>'}
 function brand(){return '<span class="mark">'+icon('arrow')+'</span><span>Startship</span>'}
 let user, loginPassword='', workspaces=[], workspace, timer, selectedDeployment='', viewVersion=0, accountSaving=false;
@@ -62,10 +67,11 @@ function shell(content,project=null){
  const sidebarLink=(href,shape,label,active)=>'<a href="'+href+'" '+(active?'aria-current="page"':'')+' aria-label="'+esc(label)+'" title="'+esc(label)+'">'+icon(shape)+'<span>'+esc(label)+'</span></a>';
  const sidebar='<aside class="sidebar" aria-label="Dashboard sidebar"><div class="sidebar-top"><a href="'+workspaceURL+'" class="brand" aria-label="Startship" title="Startship">'+brand()+'</a><button id="toggle-sidebar" class="icon-button sidebar-fold" aria-controls="desktop-sidebar" aria-expanded="'+!collapsed+'" aria-label="'+(collapsed?'Expand sidebar':'Collapse sidebar')+'" title="'+(collapsed?'Expand sidebar':'Collapse sidebar')+'">'+icon('sidebar')+'</button><button id="close-navigation" class="icon-button mobile-only" aria-label="Close navigation">'+icon('close')+'</button></div>'+
   '<button class="sidebar-selector" id="workspace-switch" popovertarget="workspace-menu" aria-expanded="false" aria-label="Workspace: '+esc(workspace?.name||'Choose workspace')+'" title="Workspace: '+esc(workspace?.name||'Choose workspace')+'">'+icon('layers')+'<span class="selector-name">'+esc(workspace?.name||'Choose workspace')+'</span>'+icon('chevron')+'</button>'+
-  '<div id="workspace-menu" class="sidebar-menu" popover><div class="menu-caption">Switch workspace</div><div class="workspace-options">'+workspaces.map(w=>'<a href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'><span class="workspace-initial">'+esc(w.name[0]?.toUpperCase())+'</span><span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot" aria-label="Current workspace"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div><button id="create-workspace">'+icon('plus')+'Create workspace</button><a href="#workspaces">'+icon('layers')+'Manage workspaces</a></div>'+
+  '<div id="workspace-menu" class="sidebar-menu" popover><div class="menu-caption">Switch workspace</div><div class="workspace-options">'+workspaces.map(w=>'<a href="#workspace/'+esc(w.id)+'" '+(workspace?.id===w.id?'aria-current="true"':'')+'><span class="workspace-initial">'+esc(w.name[0]?.toUpperCase())+'</span><span>'+esc(w.name)+'</span>'+(workspace?.id===w.id?'<span class="current-dot" aria-label="Current workspace"></span>':'')+'</a>').join('')+'</div><div class="menu-divider"></div>'+(can('workspaces.create')?'<button id="create-workspace">'+icon('plus')+'Create workspace</button>':'')+'<a href="#workspaces">'+icon('layers')+'Manage workspaces</a></div>'+
   '<div class="sidebar-body"><nav class="sidebar-nav" aria-label="'+(project?'Project':'Workspace')+' navigation">'+(project?
    sidebarLink(workspaceURL,'back','All projects',false)+'<div class="sidebar-project"><strong>'+esc(project.name)+'</strong><a class="sidebar-source" href="#project/'+esc(project.id)+'/source" aria-label="Project source: '+esc(project.name)+'" title="'+esc(project.name)+' · '+esc(project.git_url?(project.branch||'main'):'Connect source')+'">'+icon('branch')+'<span>'+esc(project.git_url?(project.branch||'main'):'Connect source')+'</span></a></div>'+projectSections.map(([key,label,shape])=>sidebarLink('#project/'+esc(project.id)+'/'+key,shape,label,key===projectSection)).join(''):
-   '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',!settings&&location.hash!=='#workspaces')+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings))+'</nav></div>'+
+   '<div class="sidebar-caption">Workspace</div>'+sidebarLink(workspaceURL,'grid','Projects',location.hash==='#workspace/'+(workspace?.id||''))+sidebarLink(workspaceURL+'/members','users','Members',location.hash.endsWith('/members'))+sidebarLink(workspaceURL+'/settings','settings','Workspace settings',settings)+
+   '<div class="sidebar-caption">Platform</div>'+sidebarLink('#roles','shield','Roles',location.hash.startsWith('#roles'))+(can('users.manage')?sidebarLink('#users','user','Users',location.hash==='#users'):'')+(can('audit.view')?sidebarLink('#audit','history','Audit log',location.hash==='#audit'):''))+'</nav></div>'+
   '<div class="sidebar-bottom"><button class="sidebar-selector account-selector" id="account-switch" popovertarget="account-menu" aria-expanded="false" aria-label="Account: '+esc(user.username)+'" title="Account: '+esc(user.username)+'"><span class="avatar">'+esc(user.username[0].toUpperCase())+'</span><span class="selector-name">'+esc(user.username)+'</span>'+icon('chevron')+'</button></div>'+
   '<div id="account-menu" class="sidebar-menu" popover><div class="menu-caption">Signed in as <strong>'+esc(user.username)+'</strong></div><button id="account-profile">'+icon('settings')+'Account settings</button>'+themeButton()+'<div class="menu-divider"></div><button id="logout">'+icon('logout')+'Sign out</button></div></aside>';
  $('#root').innerHTML='<div class="dashboard sidebar-layout'+(collapsed?' sidebar-collapsed':'')+'"><div id="desktop-sidebar">'+sidebar+'</div><dialog id="navigation-drawer" aria-label="Navigation"></dialog><div class="dashboard-body"><main class="main"><div class="content">'+content+'</div><footer class="app-footer"><span>Startship <span class="footer-separator">/</span> Deployment platform</span><span>Your infrastructure. No middleman.</span></footer></main></div></div>';
@@ -111,7 +117,7 @@ function bindSidebar(){
   button.onkeydown=e=>{if(e.key==='ArrowDown'){e.preventDefault();menu.showPopover();focusMenuItem(menu,menu.querySelector('a,button'))}};
   menu.onkeydown=e=>{if(!['ArrowDown','ArrowUp','Home','End'].includes(e.key))return;e.preventDefault();const items=[...menu.querySelectorAll('a,button')],index=items.indexOf(document.activeElement);focusMenuItem(menu,items[e.key==='Home'?0:e.key==='End'?items.length-1:(index+(e.key==='ArrowDown'?1:items.length-1))%items.length])};
  });
- $('#create-workspace').onclick=()=>{$('#workspace-menu').hidePopover();if(drawer.open)closeDrawer();createWorkspace()};
+ if($('#create-workspace'))$('#create-workspace').onclick=()=>{$('#workspace-menu').hidePopover();if(drawer.open)closeDrawer();createWorkspace()};
  $('#account-profile').onclick=()=>{
   $('#account-menu').hidePopover();if(drawer.open)closeDrawer();
   accountSettings();
@@ -165,6 +171,12 @@ function sourceContent(project){
  const webhook=project.webhook_secret?location.origin+'/api/webhooks/github/'+project.id:'';
  return '<div class="integration-layout"><section class="panel panel-pad"><div class="section-head"><h2>Project source</h2><button id="edit-project-source">Edit source</button></div><p class="small muted">A single repository and branch for every container.</p><dl class="source-details"><dt>Repository</dt><dd>'+esc(project.git_url||'Not connected')+'</dd><dt>Branch</dt><dd>'+esc(project.branch||'main')+'</dd><dt>Credentials</dt><dd>'+(project.has_git_token?'Token configured':'No token')+'</dd></dl></section><section class="panel panel-pad"><h2>GitHub webhook</h2><p class="small muted">A signed push queues one project deployment when automatic deployment is enabled in Settings.</p>'+field('Payload URL','webhook_url',webhook,'text','readonly')+field('Webhook secret','webhook_secret',project.webhook_secret||'Connect a source first','password','readonly')+'<button id="reveal-webhook" type="button">Show secret</button><p class="small muted">Content type: application/json · Event: push</p></section></div>';
 }
+const sectionPermissions={settings:'project.settings',environment:'project.environment',source:'project.source',domains:'domains.manage'};
+function lockSection(project,section){
+ const perm=sectionPermissions[section];if(!perm||!project.permissions||can(perm,project))return;
+ document.querySelectorAll('.content form :is(input,select,textarea,button),#add-project-domain,#edit-project-source,[data-delete-route]').forEach(el=>el.disabled=true);
+ $('.content .heading').insertAdjacentHTML('afterend','<p class="note locked-note">'+icon('lock')+'You can view this section, but your roles do not let you change it.</p>');
+}
 function projectSettings(project){
  return '<form id="project-settings" class="panel panel-pad project-form"><div class="section-head"><h2>Project settings</h2><span class="small muted">Shared by every container</span></div><div class="split">'+field('Project name','name',project.name,'text','required')+field('Repository root','root_dir',project.root_dir||'.','text','required')+'</div><div class="split"><label>Build strategy<select name="build_type">'+types.map(t=>'<option '+((project.build_type||'auto')===t?'selected':'')+'>'+t+'</option>').join('')+'</select></label>'+field('HTTP port override (0 = detect)','port',project.port||0,'number','min="0" max="65535" required')+'</div>'+field('Test command (optional, run in each detected container)','test_command',project.test_command||'')+'<label class="inline-check"><input type="checkbox" name="auto_deploy" '+(project.auto_deploy?'checked':'')+'>Deploy project on source pushes</label><p class="note">Auto detects one server at the repository root, or multiple server folders in a monorepo. A manual build strategy treats the selected root as one container. Changes apply together on the next deployment.</p><div class="form-error" role="alert"></div><button class="primary">Save project settings</button></form>';
 }
@@ -207,6 +219,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
  const bindForm=(selector,data)=>{const form=$(selector);if(!form)return;form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{await api('projects/'+id,data(new FormData(form)),'PATCH');await render();toast('Project saved; changes apply on next deployment')}catch(err){form.querySelector('.form-error').textContent=err.message}finally{button.disabled=false}}};
  if(section==='settings')bindForm('#project-settings',f=>({name:f.get('name'),root_dir:f.get('root_dir'),build_type:f.get('build_type'),port:Number(f.get('port')),test_command:f.get('test_command'),auto_deploy:f.has('auto_deploy')}));
  if(section==='environment')bindForm('#project-environment',f=>({env:environmentData(f.get('env'))}));
+ lockSection(project,section);
  if(section==='source'){$('#edit-project-source').onclick=()=>editProjectSource(project);$('#reveal-webhook').onclick=()=>{const input=$('[name=webhook_secret]');input.type=input.type==='password'?'text':'password';$('#reveal-webhook').textContent=input.type==='password'?'Show secret':'Hide secret'};}
  if(project.config_conflict)$('#confirm-project-config').onclick=async()=>{try{await api('projects/'+id,{config_confirmed:true},'PATCH');await render();toast('Project configuration confirmed')}catch(e){toast(e.message)}};
  if(section==='domains'){
@@ -236,7 +249,7 @@ async function projectPage(id,section='deployments',runtimeID=''){
  if(section==='deployments')bindReleases();
  if(section==='logs')$('#log-source').onchange=loadLog;
  if(['logs','deployments'].includes(section))$('#copy-log').onclick=async()=>{try{await navigator.clipboard.writeText($('#project-log').textContent);toast('Logs copied')}catch{toast('Clipboard unavailable')}};
- const setDeployDisabled=disabled=>{if(section==='deployments')$('#deploy-project').disabled=disabled};
+ const setDeployDisabled=disabled=>{if(section==='deployments')$('#deploy-project').disabled=disabled||(!!project.permissions&&!can('deploy',project))};
  const refresh=async()=>{
   try{
    const data=await Promise.all([api('projects/'+id),api('containers?project_id='+id),api('releases?project_id='+id+'&logs=false')]);if(version!==viewVersion)return;
@@ -295,25 +308,29 @@ async function render(){
  if(!parts[0]&&workspace){nav('workspace/'+workspace.id);return}
  if(parts[0]==='project'){if(parts[2]==='traffic')await trafficPage(parts[1]);else await projectPage(parts[1],parts[2],parts[3]);return}
  if(parts[0]==='app'){await appPage(parts[1],parts[2]);return}
+ if(parts[0]==='roles'){await rolesPage(parts[1]);return}
+ if(parts[0]==='users'){await usersPage();return}
+ if(parts[0]==='audit'){await auditPage();return}
  if(parts[0]==='workspace'&&workspace){
   localStorage.setItem('workspace',workspace.id);
   if(parts[2]==='settings'){workspaceSettings();return}
+  if(parts[2]==='members'){await membersPage();return}
   const [projects,allApps,allDeployments]=await Promise.all([api('projects?workspace_id='+workspace.id),api('containers'),api('releases?logs=false')]);
   if(version!==viewVersion)return;
   const apps=allApps.filter(a=>projects.some(p=>p.id===a.project_id));
   const deployments=allDeployments.filter(d=>projects.some(p=>p.id===d.project_id));
   const running=apps.filter(a=>a.status==='running').length;
-  shell(heading('Workspace overview','Projects','One source and deployment per project.','<button id="new-project" class="primary">'+icon('plus')+'New project</button>')+
+  shell(heading('Workspace overview','Projects','One source and deployment per project.',can('projects.create',workspace)?'<button id="new-project" class="primary">'+icon('plus')+'New project</button>':'')+
    '<div class="stats"><div class="stat"><div><span>Total projects</span><strong>'+projects.length+'</strong></div>'+icon('grid')+'</div><div class="stat"><div><span>Containers</span><strong>'+apps.length+'</strong></div>'+icon('box')+'</div><div class="stat stat-positive"><div><span>Running containers</span><strong>'+running+'</strong></div>'+icon('activity')+'</div></div>'+
    '<div class="workspace-layout"><section><div class="section-head"><h2>All projects<span class="count">'+projects.length+'</span></h2><label class="search-field">'+icon('search')+'<input type="search" id="project-search" placeholder="Find a project…" aria-label="Find a project"></label></div>'+
    (projects.length?'<div class="panel project-directory">'+projects.map(p=>collectionCard(p,'project',apps,deployments)).join('')+'</div><p class="note" id="no-project-matches" hidden>No projects match your search.</p>':empty('No projects yet','Create a project, then connect your first repository.'))+'</section>'+releasePanel(deployments,projects)+'</div>');
   $('#project-search').oninput=e=>{let matches=0;document.querySelectorAll('[data-project-name]').forEach(a=>{a.hidden=!a.dataset.projectName.includes(e.target.value.trim().toLowerCase());if(!a.hidden)matches++});if($('#no-project-matches'))$('#no-project-matches').hidden=matches>0};
-  $('#new-project').onclick=createProject;return;
+  if($('#new-project'))$('#new-project').onclick=createProject;return;
  }
- shell(heading('Infrastructure','Workspaces','Organize the projects running on your server.','<button class="primary" id="new-workspace">'+icon('plus')+'New workspace</button>')+
+ shell(heading('Infrastructure','Workspaces','Organize the projects running on your server.',can('workspaces.create')?'<button class="primary" id="new-workspace">'+icon('plus')+'New workspace</button>':'')+
   '<div class="section-head"><h2>All workspaces<span class="count">'+workspaces.length+'</span></h2></div>'+
   (workspaces.length?'<div class="grid">'+workspaces.map(w=>collectionCard(w,'workspace')).join('')+'</div>':empty('No workspaces yet','Create a workspace to organize your projects.')));
- $('#new-workspace').onclick=createWorkspace;
+ if($('#new-workspace'))$('#new-workspace').onclick=createWorkspace;
  }catch(e){if(version===viewVersion)$('#root').innerHTML='<div class="error-page"><h1>Something went wrong.</h1><p>'+esc(e.message)+'</p><a class="button" href="#workspaces">Back to workspaces</a></div>'}
 }
 window.addEventListener('hashchange',render);render();

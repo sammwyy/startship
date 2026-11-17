@@ -32,7 +32,10 @@ func (a *Server) bootstrapAdmin(username, password string) error {
 	}
 	var id string
 	if n > 0 {
-		if err := a.store.db.QueryRow("SELECT id,username FROM users WHERE must_change_password=1 LIMIT 1").Scan(&id, &username); err != nil {
+		if a.setupComplete() {
+			return nil
+		}
+		if err := a.store.db.QueryRow("SELECT u.id,u.username FROM users u JOIN role_assignments a ON a.user_id=u.id AND a.role_id=? AND a.scope=? WHERE u.must_change_password=1 ORDER BY u.rowid LIMIT 1", platformAdminRole, scopePlatform).Scan(&id, &username); err != nil {
 			if err != sql.ErrNoRows {
 				return err
 			}

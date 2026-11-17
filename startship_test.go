@@ -418,11 +418,13 @@ func TestSetupAndOwnership(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "alice's Workspace") {
 		t.Fatal(w.Body.String())
 	}
-	id, _ := a.createUser("bob", "password123")
-	private := Record{ID: randomID(), Kind: "workspaces", Owner: id}
-	a.store.save(private)
-	r = httptest.NewRequest("GET", "/api/workspaces/"+private.ID, nil)
-	r.AddCookie(cookie)
+	var aliceWorkspace []Record
+	json.Unmarshal(w.Body.Bytes(), &aliceWorkspace)
+	a.createUser("bob", "password123")
+	w = httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"bob","password":"password123"}`)))
+	r = httptest.NewRequest("GET", "/api/workspaces/"+aliceWorkspace[0].ID, nil)
+	r.AddCookie(w.Result().Cookies()[0])
 	w = httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != 404 {

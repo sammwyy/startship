@@ -188,13 +188,18 @@ func validateGit(raw string) error {
 	}
 	return fmt.Errorf("unsupported git URL scheme")
 }
-func (a *Server) detectAPI(w http.ResponseWriter, r *http.Request) {
+func (a *Server) detectAPI(w http.ResponseWriter, r *http.Request, x *access) {
 	var v Record
 	if decode(w, r, &v) != nil || v.ProjectID == "" || v.GitURL != "" || v.GitToken != "" || v.Branch != "" {
 		fail(w, 400, "detect requires project_id; configure the source on the project")
 		return
 	}
-	source, e := a.projectSource(Record{ProjectID: v.ProjectID, Owner: a.user(r)})
+	project := x.project(v.ProjectID)
+	if !x.can(project, "project.settings") {
+		fail(w, 400, "project source unavailable")
+		return
+	}
+	source, e := a.projectSource(Record{ProjectID: v.ProjectID, Owner: project.Owner})
 	if e != nil {
 		fail(w, 400, e.Error())
 		return

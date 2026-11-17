@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"io"
@@ -32,9 +33,10 @@ type Server struct {
 // Response-only fields must not be persisted or accepted as app configuration.
 type apiRecord struct {
 	Record
-	URL          string `json:"url,omitempty"`
-	Redeployable bool   `json:"redeployable,omitempty"`
-	HasGitToken  bool   `json:"has_git_token,omitempty"`
+	URL          string   `json:"url,omitempty"`
+	Redeployable bool     `json:"redeployable,omitempty"`
+	HasGitToken  bool     `json:"has_git_token,omitempty"`
+	Permissions  []string `json:"permissions,omitempty"`
 }
 
 func publicRecord(v Record) apiRecord {
@@ -68,7 +70,16 @@ func secureRequest(r *http.Request) bool {
 func (a *Server) createUser(user, pass string) (string, error) {
 	return a.createUserPending(user, pass, false)
 }
+
+var errUsernameTaken = errors.New("username is already in use")
+
 func (a *Server) createUserPending(user, pass string, pending bool) (string, error) {
+	return a.insertUser(user, pass, pending, true)
+}
+
+// insertUser creates an account; the first one becomes Platform Admin. A personal workspace is
+// only created for accounts that sign themselves up (setup, first-run bootstrap).
+func (a *Server) insertUser(user, pass string, pending, personal bool) (string, error) {
 	user = strings.TrimSpace(user)
 	if len(user) < 1 || len(user) > 100 || len(pass) < 8 {
 		return "", fmt.Errorf("username required; password must be at least 8 characters")
@@ -85,20 +96,50 @@ func (a *Server) createUserPending(user, pass string, pending bool) (string, err
 	}
 	defer tx.Rollback()
 	id := randomID()
+	var existing int
+	if e = tx.QueryRow("SELECT count(*) FROM users").Scan(&existing); e != nil {
+		return "", e
+	}
 	if _, e = tx.Exec("INSERT INTO users(id,username,password,must_change_password) VALUES(?,?,?,?)", id, user, string(hash), pending); e != nil {
 		return "", e
 	}
-	ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace", Created: time.Now().UTC()}
-	b, _ := json.Marshal(ws)
-	if _, e = tx.Exec("INSERT INTO records VALUES(?,?,?,?,?)", ws.ID, ws.Kind, id, "", string(b)); e != nil {
-		return "", e
+	if existing == 0 {
+		if _, e = a.grant(tx, id, platformAdminRole, scopePlatform, "", "setup"); e != nil {
+			return "", e
+		}
+	}
+	if personal {
+		ws := Record{ID: randomID(), Kind: "workspaces", Owner: id, Name: user + "'s Workspace", Created: time.Now().UTC()}
+		b, _ := json.Marshal(ws)
+		if _, e = tx.Exec("INSERT INTO records VALUES(?,?,?,?,?)", ws.ID, ws.Kind, id, "", string(b)); e != nil {
+			return "", e
+		}
+		if _, e = a.grant(tx, id, "administrator", scopeWorkspace, ws.ID, "setup"); e != nil {
+			return "", e
+		}
 	}
 	return id, tx.Commit()
 }
+
+// resetPassword sets a temporary password that must be replaced at the next sign-in.
+func (a *Server) resetPassword(uid, pass string) error {
+	if len(pass) < 8 || len(pass) > 72 {
+		return fmt.Errorf("password must be between 8 and 72 bytes")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	if _, err = a.store.db.Exec("UPDATE users SET password=?,must_change_password=1 WHERE id=?", string(hash), uid); err == nil {
+		_, err = a.store.db.Exec("DELETE FROM sessions WHERE user_id=?", uid)
+	}
+	return err
+}
 func (a *Server) user(r *http.Request) string {
 	if localRequest(r) {
+		// Whoever can reach the protected socket acts as the longest-serving Platform Admin.
 		var id string
-		a.store.db.QueryRow("SELECT id FROM users ORDER BY rowid LIMIT 1").Scan(&id)
+		a.store.db.QueryRow("SELECT a.user_id FROM role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_id=? AND a.scope=? ORDER BY a.created,a.rowid LIMIT 1", platformAdminRole, scopePlatform).Scan(&id)
 		return id
 	}
 	c, e := r.Cookie("startship_session")
@@ -324,7 +365,8 @@ func (a *Server) api() http.Handler {
 			var name string
 			var pending bool
 			a.store.db.QueryRow("SELECT username,must_change_password FROM users WHERE id=?", uid).Scan(&name, &pending)
-			reply(w, 200, map[string]any{"id": uid, "username": name, "must_change_password": pending, "setup_completed": a.setupComplete(), "local_admin": localRequest(r)})
+			x := a.access(uid)
+			reply(w, 200, map[string]any{"id": uid, "username": name, "must_change_password": pending, "setup_completed": a.setupComplete(), "local_admin": localRequest(r), "platform_admin": x.admin, "permissions": x.list("", "")})
 			return
 		}
 		var pending bool
@@ -336,8 +378,12 @@ func (a *Server) api() http.Handler {
 			fail(w, 403, "change your password to complete setup before continuing")
 			return
 		}
+		x := a.access(uid)
 		if p[1] == "detect" && r.Method == "POST" {
-			a.detectAPI(w, r)
+			a.detectAPI(w, r, x)
+			return
+		}
+		if a.accessAPI(w, r, p, uid, x) {
 			return
 		}
 		kind := p[1]
@@ -357,13 +403,21 @@ func (a *Server) api() http.Handler {
 		if len(p) > 2 {
 			var e error
 			old, e = a.store.get(p[2])
-			if e != nil || old.Owner != uid || old.Kind != kind {
+			if e != nil || old.Kind != kind || !x.visible(old) {
 				fail(w, 404, "not found")
 				return
 			}
 		}
 		if len(p) == 4 && kind == "projects" && p[3] == "traffic" {
+			if !x.can(old, "traffic.view") {
+				forbidden(w)
+				return
+			}
 			a.projectTraffic(w, r, old)
+			return
+		}
+		if len(p) == 4 && (kind == "projects" || kind == "apps") && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" && !x.can(old, "deploy") {
+			forbidden(w)
 			return
 		}
 		if len(p) == 4 && kind == "projects" && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" {
@@ -371,6 +425,10 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		if containers && len(p) == 4 && p[3] == "logs" {
+			if !x.can(old, "logs.view") {
+				forbidden(w)
+				return
+			}
 			a.containerLogs(w, r, old)
 			return
 		}
@@ -398,7 +456,7 @@ func (a *Server) api() http.Handler {
 					return
 				}
 				source, e := a.store.get(sourceID)
-				if e != nil || source.Kind != "deployments" || source.AppID != old.ID || source.Owner != uid {
+				if e != nil || source.Kind != "deployments" || source.AppID != old.ID || source.Owner != old.Owner {
 					fail(w, 404, "release not found")
 					return
 				}
@@ -425,7 +483,7 @@ func (a *Server) api() http.Handler {
 		}
 		if r.Method == "GET" {
 			if len(p) > 2 {
-				result := publicRecord(old)
+				result := x.publicRecord(old)
 				if containers {
 					result = a.containerRecord(old)
 				}
@@ -439,7 +497,10 @@ func (a *Server) api() http.Handler {
 				return
 			}
 			out := []apiRecord{}
-			for _, v := range a.store.list(kind, uid) {
+			for _, v := range a.store.list(kind, "") {
+				if !x.visible(v) {
+					continue
+				}
 				if parent := r.URL.Query().Get("project_id"); parent != "" && v.ProjectID != parent {
 					continue
 				}
@@ -452,7 +513,7 @@ func (a *Server) api() http.Handler {
 				if (kind == "deployments" || kind == "releases") && r.URL.Query().Get("logs") == "false" {
 					v.Log = ""
 				}
-				result := publicRecord(v)
+				result := x.publicRecord(v)
 				if containers {
 					result = a.containerRecord(v)
 				}
@@ -466,8 +527,12 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		if r.Method == "DELETE" && len(p) == 3 {
+			if !x.can(old, map[string]string{"workspaces": "workspace.manage", "projects": "project.delete", "apps": "project.settings", "routes": "domains.manage"}[kind]) {
+				forbidden(w)
+				return
+			}
 			for _, k := range []string{"projects", "apps", "routes"} {
-				for _, v := range a.store.list(k, uid) {
+				for _, v := range a.store.list(k, old.Owner) {
 					if v.Parent == old.ID || (k == "routes" && v.AppID == old.ID) {
 						fail(w, 409, "delete children first")
 						return
@@ -475,7 +540,7 @@ func (a *Server) api() http.Handler {
 				}
 			}
 			if old.Kind == "apps" {
-				for _, d := range a.store.list("deployments", uid) {
+				for _, d := range a.store.list("deployments", old.Owner) {
 					if d.AppID == old.ID && (d.Status == "queued" || d.Status == "building" || d.Status == "testing" || d.Status == "starting") {
 						fail(w, 409, "wait for deployments to finish")
 						return
@@ -485,6 +550,10 @@ func (a *Server) api() http.Handler {
 				a.store.db.Exec("DELETE FROM records WHERE kind='deployments' AND parent=?", old.ID)
 			}
 			a.store.db.Exec("DELETE FROM records WHERE id=?", old.ID)
+			if old.Kind == "workspaces" || old.Kind == "projects" {
+				a.removeScopeAccess(strings.TrimSuffix(old.Kind, "s"), old.ID)
+				a.audit(uid, strings.TrimSuffix(old.Kind, "s")+".delete", old.Name, strings.TrimSuffix(old.Kind, "s"), old.ID, map[string]string{"id": old.ID})
+			}
 			if old.Kind == "projects" {
 				lock := projectBuildLock(old.ID)
 				lock.Lock()
@@ -505,12 +574,29 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		v := old
-		if decode(w, r, &v) != nil {
+		body, e := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+		fields := map[string]json.RawMessage{}
+		if e != nil || json.Unmarshal(body, &fields) != nil || json.Unmarshal(body, &v) != nil {
 			fail(w, 400, "invalid JSON")
 			return
 		}
+		if old.ID != "" && (v.WorkspaceID != old.WorkspaceID || v.ProjectID != old.ProjectID) {
+			fail(w, 400, "records cannot be moved to another workspace or project")
+			return
+		}
+		if old.ID != "" && !x.canUpdate(old, fields) {
+			forbidden(w)
+			return
+		}
+		if old.ID == "" && kind == "workspaces" && !x.platform("workspaces.create") {
+			forbidden(w)
+			return
+		}
 		v.Kind = kind
-		v.Owner = uid
+		v.Owner = old.Owner
+		if old.ID == "" {
+			v.Owner = uid
+		}
 		v.Name = strings.TrimSpace(v.Name)
 		if v.Name == "" && kind != "routes" {
 			fail(w, 400, "name is required")
@@ -593,7 +679,7 @@ func (a *Server) api() http.Handler {
 			v.Host = normalizeHost(v.Host)
 			v.PathPrefix = normalizePrefix(v.PathPrefix)
 			app, e := a.store.get(v.AppID)
-			if e != nil || app.Kind != "apps" || app.ProjectID != v.ProjectID || app.Owner != uid || v.Host == "" || !strings.HasPrefix(v.PathPrefix, "/") {
+			if e != nil || app.Kind != "apps" || app.ProjectID != v.ProjectID || v.Host == "" || !strings.HasPrefix(v.PathPrefix, "/") {
 				fail(w, 400, "invalid route")
 				return
 			}
@@ -610,14 +696,27 @@ func (a *Server) api() http.Handler {
 			if kind == "apps" || kind == "routes" {
 				expected = "projects"
 			}
-			if e != nil || parent.Owner != uid || parent.Kind != expected {
+			if e != nil || parent.Kind != expected || !x.visible(parent) {
 				fail(w, 400, "invalid parent")
 				return
 			}
+			create := map[string]string{"projects": "projects.create", "apps": "project.settings", "routes": "domains.manage"}[kind]
+			if old.ID == "" && !x.can(parent, create) {
+				forbidden(w)
+				return
+			}
+			v.Owner = parent.Owner
 		}
 		if e := a.store.save(v); e != nil {
 			fail(w, 500, "save failed")
 			return
+		}
+		if kind == "workspaces" && old.ID == "" {
+			if tx, e := a.store.db.Begin(); e == nil {
+				a.grant(tx, uid, "administrator", scopeWorkspace, v.ID, uid)
+				tx.Commit()
+			}
+			a.audit(uid, "workspace.create", v.Name, scopeWorkspace, v.ID, map[string]string{"id": v.ID})
 		}
 		if kind == "projects" {
 			if e := a.store.migrateProjectSources(); e != nil {
@@ -626,7 +725,7 @@ func (a *Server) api() http.Handler {
 			}
 		}
 		a.refresh()
-		reply(w, 200, publicRecord(v))
+		reply(w, 200, a.access(uid).publicRecord(v))
 	})
 }
 func verifySignature(secret string, body []byte, signature string) bool {
