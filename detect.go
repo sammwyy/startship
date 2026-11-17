@@ -25,12 +25,37 @@ func validBuildType(t string) bool {
 	return false
 }
 func detect(dir string) string {
-	for _, m := range [][2]string{{"Dockerfile", "dockerfile"}, {"package.json", "node"}, {"requirements.txt", "python"}, {"pyproject.toml", "python"}, {"go.mod", "go"}, {"Cargo.toml", "rust"}, {"index.html", "static"}} {
+	for _, m := range [][2]string{{"Dockerfile", "dockerfile"}, {"package.json", "node"}, {"requirements.txt", "python"}, {"pyproject.toml", "python"}, {"manage.py", "python"}, {"main.py", "python"}, {"app.py", "python"}, {"go.mod", "go"}, {"Cargo.toml", "rust"}, {"index.html", "static"}} {
 		if st, e := os.Stat(filepath.Join(dir, m[0])); e == nil && !st.IsDir() {
 			return m[1]
 		}
 	}
+	if cmd := procfileWeb(dir); cmd != "" {
+		if strings.Contains(cmd, "python") || strings.Contains(cmd, "gunicorn") || strings.Contains(cmd, "uvicorn") {
+			return "python"
+		}
+		if strings.Contains(cmd, "node") || strings.Contains(cmd, "npm") {
+			return "node"
+		}
+	}
 	return ""
+}
+func procfileWeb(dir string) string {
+	b, err := os.ReadFile(filepath.Join(dir, "Procfile"))
+	if err != nil {
+		return ""
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		name, command, ok := strings.Cut(line, ":")
+		if ok && strings.TrimSpace(name) == "web" {
+			return strings.TrimSpace(command)
+		}
+	}
+	return ""
+}
+func launchCMD(command string) string {
+	b, _ := json.Marshal([]string{"sh", "-c", "exec " + command})
+	return "CMD " + string(b) + "\n"
 }
 func candidates(dir string) []Candidate {
 	out := []Candidate{}
@@ -68,13 +93,35 @@ func dockerfile(kind string, port int, dir string) (string, error) {
 		if p.Scripts["build"] != "" {
 			build = "RUN npm run build\n"
 		}
-		return "FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nRUN " + install + "\n" + build + base + "CMD [\"npm\",\"start\"]\n", nil
-	case "python":
-		install := "pip install --no-cache-dir ."
-		if _, e := os.Stat(filepath.Join(dir, "requirements.txt")); e == nil {
-			install = "pip install --no-cache-dir -r requirements.txt"
+		cmd := "CMD [\"npm\",\"start\"]\n"
+		if web := procfileWeb(dir); web != "" {
+			cmd = launchCMD(web)
 		}
-		return "FROM python:3.13-slim\nWORKDIR /app\nCOPY . .\nRUN " + install + "\n" + base + "CMD [\"python\",\"app.py\"]\n", nil
+		return "FROM node:22-alpine\nWORKDIR /app\nCOPY . .\nRUN " + install + "\n" + build + base + cmd, nil
+	case "python":
+		install := ""
+		if _, e := os.Stat(filepath.Join(dir, "pyproject.toml")); e == nil {
+			install = "RUN pip install --no-cache-dir .\n"
+		}
+		if _, e := os.Stat(filepath.Join(dir, "requirements.txt")); e == nil {
+			install = "RUN pip install --no-cache-dir -r requirements.txt\n"
+		}
+		cmd := procfileWeb(dir)
+		if cmd == "" {
+			for _, file := range []string{"main.py", "app.py", "manage.py"} {
+				if _, err := os.Stat(filepath.Join(dir, file)); err == nil {
+					cmd = "python " + file
+					if file == "manage.py" {
+						cmd += " runserver 0.0.0.0:$PORT"
+					}
+					break
+				}
+			}
+		}
+		if cmd == "" {
+			return "", fmt.Errorf("no Python entrypoint found: add main.py, app.py, manage.py or a Procfile web command")
+		}
+		return "FROM python:3.13-slim\nWORKDIR /app\nCOPY . .\n" + install + base + launchCMD(cmd), nil
 	case "go":
 		return "FROM golang:1.26 AS build\nWORKDIR /src\nCOPY . .\nRUN CGO_ENABLED=0 go build -o /app .\nFROM alpine:3.23\nRUN apk add --no-cache ca-certificates\nCOPY --from=build /app /app\n" + base + "CMD [\"/app\"]\n", nil
 	case "rust":

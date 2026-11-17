@@ -34,13 +34,58 @@ func TestDetection(t *testing.T) {
 }
 func TestDockerfiles(t *testing.T) {
 	for _, kind := range []string{"node", "python", "go", "rust"} {
-		f, e := dockerfile(kind, 8123, t.TempDir())
+		dir := t.TempDir()
+		if kind == "python" {
+			os.WriteFile(filepath.Join(dir, "main.py"), nil, 0600)
+		}
+		f, e := dockerfile(kind, 8123, dir)
 		if e != nil || !strings.Contains(f, "ENV PORT=8123") || !strings.Contains(f, "CMD ") {
 			t.Fatal(kind, f, e)
 		}
 	}
 	if _, e := dockerfile("", 0, ""); e == nil {
 		t.Fatal("expected unsupported type")
+	}
+}
+func TestEntrypoints(t *testing.T) {
+	for _, file := range []string{"main.py", "app.py", "manage.py"} {
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, file), nil, 0600)
+		if detect(dir) != "python" {
+			t.Fatal(file)
+		}
+		got, err := dockerfile("python", 8080, dir)
+		if err != nil || !strings.Contains(got, file) {
+			t.Fatal(got, err)
+		}
+		if file == "manage.py" && !strings.Contains(got, "0.0.0.0:$PORT") {
+			t.Fatal(got)
+		}
+	}
+	for _, kind := range []string{"node", "python"} {
+		dir := t.TempDir()
+		cmd := "node server.js"
+		if kind == "python" {
+			cmd = "gunicorn main:app --bind 0.0.0.0:$PORT"
+		}
+		os.WriteFile(filepath.Join(dir, "Procfile"), []byte("worker: ignore\nweb: "+cmd+"\n"), 0600)
+		got, err := dockerfile(kind, 9000, dir)
+		if err != nil || !strings.Contains(got, cmd) || detect(dir) != kind {
+			t.Fatal(got, err)
+		}
+	}
+	if _, err := dockerfile("python", 8080, t.TempDir()); err == nil {
+		t.Fatal("missing entrypoint accepted")
+	}
+}
+func TestDashboardEmbedded(t *testing.T) {
+	a := testServer(t)
+	for _, path := range []string{"/", "/app.js", "/style.css"} {
+		w := httptest.NewRecorder()
+		a.api().ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != 200 || w.Body.Len() == 0 {
+			t.Fatal(path, w.Code)
+		}
 	}
 }
 func TestRoutes(t *testing.T) {

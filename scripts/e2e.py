@@ -96,8 +96,13 @@ try:
             replacement = wait_deploy(app)
             assert request("deployments/" + first)["status"] == "superseded"
             previous = request("deployments/" + first)["container"]
-            assert subprocess.run(["docker", "inspect", previous], stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.DEVNULL).returncode != 0
+            for _ in range(50):
+                if subprocess.run(["docker", "inspect", previous], stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL).returncode != 0:
+                    break
+                time.sleep(0.2)
+            else:
+                raise RuntimeError("superseded container was not removed")
             print("atomic replacement and old-container removal: OK")
     for path, expected in (("/", "hello from Harbor python"), ("/static/", "hello from Harbor static"),
                            ("/static/spa/page", "hello from Harbor static")):

@@ -73,6 +73,10 @@ func (a *Server) user(r *http.Request) string {
 func (a *Server) api() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
+			dashboard.ServeHTTP(w, r)
+			return
+		}
 		// Reject browser cross-origin mutations, including login CSRF.
 		if r.Method != "GET" && r.Method != "HEAD" {
 			if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host && origin != "https://"+r.Host {
