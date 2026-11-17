@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"golang.org/x/crypto/acme/autocert"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,7 +22,7 @@ func env(k, d string) string {
 	return d
 }
 func main() {
-	data, e := filepath.Abs(env("STARTSHIP_DATA", "./data"))
+	data, e := filepath.Abs(env("STARTSHIP_DATA", "./_data"))
 	if e != nil {
 		log.Fatal(e)
 	}
@@ -59,23 +61,27 @@ func main() {
 		https := &http.Server{Addr: env("STARTSHIP_HTTPS_ADDR", ":443"), Handler: a, TLSConfig: m.TLSConfig(), ReadHeaderTimeout: 10 * time.Second}
 		https.TLSConfig.MinVersion = tls.VersionTLS12
 		servers = append(servers, https)
+	}
+	listeners, e := bindServers(servers)
+	if e != nil {
+		log.Fatal(e)
+	}
+	for i, srv := range servers {
+		ln := listeners[i]
 		go func() {
-			if e := https.ListenAndServeTLS("", ""); e != nil && e != http.ErrServerClosed {
-				log.Fatal(e)
+			var err error
+			if srv.TLSConfig != nil {
+				err = srv.ServeTLS(ln, "", "")
+			} else {
+				err = srv.Serve(ln)
+			}
+			if err != nil && err != http.ErrServerClosed {
+				log.Fatal(err)
 			}
 		}()
 	}
-	go func() {
-		if e := dash.ListenAndServe(); e != nil && e != http.ErrServerClosed {
-			log.Fatal(e)
-		}
-	}()
-	go func() {
-		if e := proxy.ListenAndServe(); e != nil && e != http.ErrServerClosed {
-			log.Fatal(e)
-		}
-	}()
 	log.Printf("Startship dashboard listening on %s", dash.Addr)
+	log.Printf("Startship proxy listening on %s", proxy.Addr)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c
@@ -84,4 +90,19 @@ func main() {
 	for _, srv := range servers {
 		srv.Shutdown(ctx)
 	}
+}
+
+func bindServers(servers []*http.Server) ([]net.Listener, error) {
+	var listeners []net.Listener
+	for _, srv := range servers {
+		ln, err := net.Listen("tcp", srv.Addr)
+		if err != nil {
+			for _, opened := range listeners {
+				opened.Close()
+			}
+			return nil, fmt.Errorf("listen on %s: %w; ports below 1024 require root or cap_net_bind_service (sudo setcap cap_net_bind_service=+ep ./startshipd); for a local trial set STARTSHIP_HTTP_ADDR=:8000", srv.Addr, err)
+		}
+		listeners = append(listeners, ln)
+	}
+	return listeners, nil
 }

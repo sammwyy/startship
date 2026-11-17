@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +14,99 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestBindServers(t *testing.T) {
+	occupied, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer occupied.Close()
+	listeners, err := bindServers([]*http.Server{{Addr: "127.0.0.1:0"}, {Addr: occupied.Addr().String()}})
+	if err == nil || len(listeners) != 0 || !strings.Contains(err.Error(), occupied.Addr().String()) || !strings.Contains(err.Error(), "cap_net_bind_service") {
+		t.Fatalf("%v %v", listeners, err)
+	}
+	listeners, err = bindServers([]*http.Server{{Addr: "127.0.0.1:0"}, {Addr: "127.0.0.1:0"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, ln := range listeners {
+		ln.Close()
+	}
+	listeners, err = bindServers(nil)
+	if err != nil || len(listeners) != 0 {
+		t.Fatal(listeners, err)
+	}
+}
+
+func TestNodeEngines(t *testing.T) {
+	for _, tc := range []struct {
+		engine string
+		want   int
+	}{
+		{"", 22}, {"22.x || 24.x", 24}, {">=20", 26}, {"^18", 18}, {"20", 20}, {"~20.0.0", 20}, {">=20 <24", 22}, {">= 20", 26}, {"*", 26}, {"invalid", 22}, {">=99", 22}, {"22.x || 24.x || 26.x", 26},
+	} {
+		t.Run(tc.engine, func(t *testing.T) {
+			if got := nodeMajor(tc.engine); got != tc.want {
+				t.Fatalf("got %d, want %d", got, tc.want)
+			}
+		})
+	}
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"engines":{"node":"24.x"},"scripts":{"start":"node server.js"}}`), 0600)
+	got, err := dockerfile("node", 8080, dir)
+	if err != nil || !strings.HasPrefix(got, "FROM node:24-alpine\n") || !strings.Contains(got, "RUN npm install\n") {
+		t.Fatal(got, err)
+	}
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{invalid`), 0600)
+	got, err = dockerfile("node", 8080, dir)
+	if err != nil || !strings.HasPrefix(got, "FROM node:22-alpine\n") {
+		t.Fatal(got, err)
+	}
+}
+
+func TestDeploymentResultLog(t *testing.T) {
+	a := testServer(t)
+	app := Record{ID: "demo", Name: "Demo app"}
+	var out bytes.Buffer
+	a.logDeploymentResult(&out, app, nil)
+	if out.String() != "Deployment healthy; now serving Demo app\n" {
+		t.Fatal(out.String())
+	}
+	if err := a.store.save(Record{ID: "route", Kind: "routes", AppID: "demo", Host: "demo.localtest.me", PathPrefix: "/"}); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	a.logDeploymentResult(&out, app, nil)
+	if out.String() != "Deployment healthy; now serving demo.localtest.me/\n" {
+		t.Fatal(out.String())
+	}
+	out.Reset()
+	a.logDeploymentResult(&out, app, errors.New("health check timed out"))
+	if out.String() != "Deployment failed: health check timed out\n" {
+		t.Fatal(out.String())
+	}
+}
+
+func TestBuildFailureLog(t *testing.T) {
+	a := testServer(t)
+	app := Record{ID: "missing", Kind: "apps", Name: "Missing", GitURL: "file:///nonexistent-startship-test-repo", Branch: "main", RootDir: ".", BuildType: "auto"}
+	if err := a.store.save(app); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.store.save(Record{ID: "failed", Kind: "deployments", AppID: app.ID}); err != nil {
+		t.Fatal(err)
+	}
+	a.build(app.ID, "failed")
+	d, err := a.store.get("failed")
+	if err != nil || d.Status != "failed" {
+		t.Fatal(d, err)
+	}
+	last := strings.TrimSpace(d.Log)
+	last = last[strings.LastIndex(last, "\n")+1:]
+	if !strings.HasPrefix(last, "Deployment failed:") || !strings.Contains(last, "does not appear to be a git repository") {
+		t.Fatal(d.Log)
+	}
+}
 
 func TestDetection(t *testing.T) {
 	for _, v := range []struct{ file, kind string }{{"Dockerfile", "dockerfile"}, {"package.json", "node"}, {"requirements.txt", "python"}, {"pyproject.toml", "python"}, {"go.mod", "go"}, {"Cargo.toml", "rust"}, {"index.html", "static"}} {
