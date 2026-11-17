@@ -140,24 +140,24 @@ func (a *Server) build(appID, id string) {
 	}
 	if kind == "static" {
 		if app.TestCommand != "" {
-			image := "harbor/" + app.ID + ":" + id
+			image := "startship/" + app.ID + ":" + id
 			content := fmt.Sprintf("FROM alpine:3.23\nWORKDIR /app\nCOPY . .\nENV PORT=%d\n", app.Port)
-			e = os.WriteFile(filepath.Join(root, "Dockerfile.harbor-test"), []byte(content), 0600)
+			e = os.WriteFile(filepath.Join(root, "Dockerfile.startship-test"), []byte(content), 0600)
 			if e != nil {
 				return
 			}
-			e = command(root, logger, "docker", "build", "-t", image, "-f", "Dockerfile.harbor-test", ".")
+			e = command(root, logger, "docker", "build", "-t", image, "-f", "Dockerfile.startship-test", ".")
 			if e != nil {
 				return
 			}
 			a.status(id, "testing")
-			args := []string{"run", "--rm", "--network", "harbor"}
+			args := []string{"run", "--rm", "--network", "startship"}
 			for k, v := range app.Env {
 				args = append(args, "-e", k+"="+v)
 			}
 			args = append(args, image, "sh", "-c", app.TestCommand)
 			e = command("", logger, "docker", args...)
-			os.Remove(filepath.Join(root, "Dockerfile.harbor-test"))
+			os.Remove(filepath.Join(root, "Dockerfile.startship-test"))
 			a.store.update(id, func(r *Record) { r.Image = image })
 			if e != nil {
 				return
@@ -177,22 +177,22 @@ func (a *Server) build(appID, id string) {
 		if e != nil {
 			return
 		}
-		if e = os.WriteFile(filepath.Join(root, "Dockerfile.harbor"), []byte(content), 0600); e != nil {
+		if e = os.WriteFile(filepath.Join(root, "Dockerfile.startship"), []byte(content), 0600); e != nil {
 			return
 		}
 	}
-	image := "harbor/" + app.ID + ":" + id
+	image := "startship/" + app.ID + ":" + id
 	a.store.update(id, func(r *Record) { r.Image = image })
 	dockerPath := "Dockerfile"
 	if kind != "dockerfile" {
-		dockerPath = "Dockerfile.harbor"
+		dockerPath = "Dockerfile.startship"
 	}
 	if e = command(root, logger, "docker", "build", "-t", image, "-f", dockerPath, "."); e != nil {
 		return
 	}
 	if app.TestCommand != "" {
 		a.status(id, "testing")
-		args := []string{"run", "--rm", "--network", "harbor"}
+		args := []string{"run", "--rm", "--network", "startship"}
 		for k, v := range app.Env {
 			args = append(args, "-e", k+"="+v)
 		}
@@ -202,8 +202,8 @@ func (a *Server) build(appID, id string) {
 		}
 	}
 	a.status(id, "starting")
-	container = "harbor-" + app.ID + "-" + id
-	args := []string{"run", "-d", "--network", "harbor", "--name", container, "--restart", "unless-stopped", "--label", "harbor.managed=true", "--label", "harbor.app=" + app.ID, "-e", fmt.Sprintf("PORT=%d", app.Port)}
+	container = "startship-" + app.ID + "-" + id
+	args := []string{"run", "-d", "--network", "startship", "--name", container, "--restart", "unless-stopped", "--label", "startship.managed=true", "--label", "startship.app=" + app.ID, "-e", fmt.Sprintf("PORT=%d", app.Port)}
 	for k, v := range app.Env {
 		args = append(args, "-e", k+"="+v)
 	}
@@ -311,13 +311,13 @@ func (a *Server) activate(app Record, id string) error {
 	return nil
 }
 func containerIP(id string) (string, error) {
-	b, e := exec.Command("docker", "inspect", "--format", "{{(index .NetworkSettings.Networks \"harbor\").IPAddress}}", id).Output()
+	b, e := exec.Command("docker", "inspect", "--format", "{{(index .NetworkSettings.Networks \"startship\").IPAddress}}", id).Output()
 	if e != nil {
 		return "", e
 	}
 	ip := strings.TrimSpace(string(b))
 	if net.ParseIP(ip) == nil {
-		return "", fmt.Errorf("container has no harbor IP")
+		return "", fmt.Errorf("container has no startship IP")
 	}
 	return ip, nil
 }
@@ -328,20 +328,20 @@ func (a *Server) removeActive(app Record) {
 	}
 }
 func (a *Server) restore() {
-	if exec.Command("docker", "network", "inspect", "harbor").Run() != nil {
-		if e := command("", os.Stderr, "docker", "network", "create", "harbor"); e != nil {
+	if exec.Command("docker", "network", "inspect", "startship").Run() != nil {
+		if e := command("", os.Stderr, "docker", "network", "create", "startship"); e != nil {
 			fmt.Fprintln(os.Stderr, "Docker network unavailable:", e)
 		}
 	}
-	self := os.Getenv("HARBOR_SELF_CONTAINER")
+	self := os.Getenv("STARTSHIP_SELF_CONTAINER")
 	if self == "" {
 		if _, e := os.Stat("/.dockerenv"); e == nil {
 			self, _ = os.Hostname()
 		}
 	}
 	if self != "" {
-		if e := command("", os.Stderr, "docker", "network", "connect", "harbor", self); e != nil {
-			fmt.Fprintln(os.Stderr, "Ensure harbord is already attached to harbor:", e)
+		if e := command("", os.Stderr, "docker", "network", "connect", "startship", self); e != nil {
+			fmt.Fprintln(os.Stderr, "Ensure startshipd is already attached to startship:", e)
 		}
 	}
 	for _, d := range a.store.list("deployments", "") {
@@ -360,7 +360,7 @@ func (a *Server) restore() {
 			}
 		case "queued", "building", "testing", "starting":
 			a.store.update(d.ID, func(r *Record) { r.Status = "failed"; r.Log += "daemon restarted during deployment\n" })
-			command("", nil, "docker", "rm", "-f", "harbor-"+d.AppID+"-"+d.ID)
+			command("", nil, "docker", "rm", "-f", "startship-"+d.AppID+"-"+d.ID)
 		}
 	}
 	a.refresh()

@@ -20,20 +20,20 @@ func env(k, d string) string {
 	return d
 }
 func main() {
-	data, e := filepath.Abs(env("HARBOR_DATA", "./data"))
+	data, e := filepath.Abs(env("STARTSHIP_DATA", "./data"))
 	if e != nil {
 		log.Fatal(e)
 	}
 	if e = os.MkdirAll(data, 0700); e != nil {
 		log.Fatal(e)
 	}
-	s, e := openStore(filepath.Join(data, "harbor.db"))
+	s, e := openStore(filepath.Join(data, "startship.db"))
 	if e != nil {
 		log.Fatal(e)
 	}
 	defer s.db.Close()
 	a := &Server{store: s, data: data, queues: make(map[string]chan string)}
-	if u, p := os.Getenv("HARBOR_ADMIN_USER"), os.Getenv("HARBOR_ADMIN_PASSWORD"); u != "" && p != "" {
+	if u, p := os.Getenv("STARTSHIP_ADMIN_USER"), os.Getenv("STARTSHIP_ADMIN_PASSWORD"); u != "" && p != "" {
 		var n int
 		s.db.QueryRow("SELECT count(*) FROM users").Scan(&n)
 		if n == 0 {
@@ -43,10 +43,10 @@ func main() {
 		}
 	}
 	a.restore()
-	dash := &http.Server{Addr: env("HARBOR_DASHBOARD_ADDR", ":8080"), Handler: a.api(), ReadHeaderTimeout: 10 * time.Second}
-	proxy := &http.Server{Addr: env("HARBOR_HTTP_ADDR", ":80"), Handler: a, ReadHeaderTimeout: 10 * time.Second}
+	dash := &http.Server{Addr: env("STARTSHIP_DASHBOARD_ADDR", ":8080"), Handler: a.api(), ReadHeaderTimeout: 10 * time.Second}
+	proxy := &http.Server{Addr: env("STARTSHIP_HTTP_ADDR", ":80"), Handler: a, ReadHeaderTimeout: 10 * time.Second}
 	servers := []*http.Server{dash, proxy}
-	if email := os.Getenv("HARBOR_ACME_EMAIL"); email != "" {
+	if email := os.Getenv("STARTSHIP_ACME_EMAIL"); email != "" {
 		m := &autocert.Manager{Prompt: autocert.AcceptTOS, Email: email, Cache: autocert.DirCache(filepath.Join(data, "certs")), HostPolicy: func(ctx context.Context, host string) error {
 			for _, r := range s.list("routes", "") {
 				if normalizeHost(r.Host) == normalizeHost(host) {
@@ -56,7 +56,7 @@ func main() {
 			return errInvalid
 		}}
 		proxy.Handler = m.HTTPHandler(a)
-		https := &http.Server{Addr: env("HARBOR_HTTPS_ADDR", ":443"), Handler: a, TLSConfig: m.TLSConfig(), ReadHeaderTimeout: 10 * time.Second}
+		https := &http.Server{Addr: env("STARTSHIP_HTTPS_ADDR", ":443"), Handler: a, TLSConfig: m.TLSConfig(), ReadHeaderTimeout: 10 * time.Second}
 		https.TLSConfig.MinVersion = tls.VersionTLS12
 		servers = append(servers, https)
 		go func() {
@@ -75,7 +75,7 @@ func main() {
 			log.Fatal(e)
 		}
 	}()
-	log.Printf("Harbor dashboard listening on %s", dash.Addr)
+	log.Printf("Startship dashboard listening on %s", dash.Addr)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c

@@ -1,22 +1,22 @@
 services:
-  harbor:
+  startship:
     build: .
-    container_name: harbord
+    container_name: startshipd
     restart: unless-stopped
     environment:
-      HARBOR_SELF_CONTAINER: harbord
-      HARBOR_DATA: /data
+      STARTSHIP_SELF_CONTAINER: startshipd
+      STARTSHIP_DATA: /data
     ports:
       - "8080:8080"
       - "80:80"
       - "443:443"
     volumes:
-      - harbor-data:/data
+      - startship-data:/data
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      - harbor
+      - startship
 networks:
-  harbor:
-    name: harbor
+  startship:
+    name: startship
 volumes:
-  harbor-data:
+  startship-data:

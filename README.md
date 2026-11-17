@@ -1,14 +1,14 @@
-# Harbor
+# Startship
 
-Self-hosted deployment platform, single Go binary `harbord`. A dark, responsive dashboard is embedded with Go embed.FS; no Node toolchain or external asset service is required. The same dashboard server also exposes a JSON API.
+Self-hosted deployment platform, single Go binary `startshipd`. A dark, responsive dashboard is embedded with Go embed.FS; no Node toolchain or external asset service is required. The same dashboard server also exposes a JSON API.
 
 ## Run
 
 Requires Go 1.26+, Docker Engine and Git. No C toolchain required.
 
 ```sh
-go build -o harbord .
-HARBOR_ADMIN_USER=admin HARBOR_ADMIN_PASSWORD='change-this-password' ./harbord
+go build -o startshipd .
+STARTSHIP_ADMIN_USER=admin STARTSHIP_ADMIN_PASSWORD='change-this-password' ./startshipd
 # or:
 docker compose up --build -d
 ```
@@ -17,26 +17,26 @@ Visit `GET /api/setup` on port 8080. If no seed user exists, `POST /api/setup` w
 
 Or open `http://localhost:8080` in your browser: first-run setup and login guide you into your workspaces. Create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line.
 
-**Security:** Harbor controls the Docker socket and can execute arbitrary repository code. Treat every dashboard user and repository as a server administrator, not as an untrusted tenant. Do not expose initial setup publicly. Terminate dashboard TLS at a trusted gateway or use `HARBOR_DASHBOARD_DOMAIN` and ACME. Restrict direct access to dashboard port 8080. Cookies are HttpOnly/SameSite=Lax and Secure on HTTPS. Build logs may include secrets printed by application commands: do not print credentials. File URLs are allowed intentionally for local deployment.
+**Security:** Startship controls the Docker socket and can execute arbitrary repository code. Treat every dashboard user and repository as a server administrator, not as an untrusted tenant. Do not expose initial setup publicly. Terminate dashboard TLS at a trusted gateway or use `STARTSHIP_DASHBOARD_DOMAIN` and ACME. Restrict direct access to dashboard port 8080. Cookies are HttpOnly/SameSite=Lax and Secure on HTTPS. Build logs may include secrets printed by application commands: do not print credentials. File URLs are allowed intentionally for local deployment.
 
 ## Configuration
 
 | Environment | Default |
 |---|---|
-| HARBOR_DATA | ./data |
-| HARBOR_DASHBOARD_ADDR | :8080 |
-| HARBOR_HTTP_ADDR | :80 |
-| HARBOR_HTTPS_ADDR | :443 |
-| HARBOR_ACME_EMAIL | empty (HTTPS disabled) |
-| HARBOR_ADMIN_USER / HARBOR_ADMIN_PASSWORD | empty (first-run setup) |
-| HARBOR_DASHBOARD_DOMAIN | empty |
-| HARBOR_SELF_CONTAINER | detected hostname inside Docker |
+| STARTSHIP_DATA | ./data |
+| STARTSHIP_DASHBOARD_ADDR | :8080 |
+| STARTSHIP_HTTP_ADDR | :80 |
+| STARTSHIP_HTTPS_ADDR | :443 |
+| STARTSHIP_ACME_EMAIL | empty (HTTPS disabled) |
+| STARTSHIP_ADMIN_USER / STARTSHIP_ADMIN_PASSWORD | empty (first-run setup) |
+| STARTSHIP_DASHBOARD_DOMAIN | empty |
+| STARTSHIP_SELF_CONTAINER | detected hostname inside Docker |
 
-Point DNS at the server; allow inbound 80/443. ACME only authorizes hosts configured in routes. With `HARBOR_DASHBOARD_DOMAIN`, matching proxy requests go to the API; add that hostname as a route as well if using ACME. The daemon creates Docker network `harbor`. Containerized harbord must join that same network; compose configures it, and startup also attempts connection using `HARBOR_SELF_CONTAINER`. No application ports are published.
+Point DNS at the server; allow inbound 80/443. ACME only authorizes hosts configured in routes. With `STARTSHIP_DASHBOARD_DOMAIN`, matching proxy requests go to the API; add that hostname as a route as well if using ACME. The daemon creates Docker network `startship`. Containerized startshipd must join that same network; compose configures it, and startup also attempts connection using `STARTSHIP_SELF_CONTAINER`. No application ports are published.
 
 ## API
 
-All bodies and responses are JSON. Login using `POST /api/login {"username":"admin","password":"..."}`, keep the `harbor_session` cookie. `POST /api/logout`, `GET /api/me`. Sessions expire after seven days.
+All bodies and responses are JSON. Login using `POST /api/login {"username":"admin","password":"..."}`, keep the `startship_session` cookie. `POST /api/logout`, `GET /api/me`. Sessions expire after seven days.
 
 Ownership-scoped `GET/POST /api/{workspaces,projects,apps,routes}` and `GET/PUT/PATCH/DELETE /api/{collection}/{id}`. Delete children before parents. POST returns the new object including ID. Fields:
 
@@ -70,4 +70,4 @@ go vet ./... && go test ./...
 ./scripts/e2e.sh
 ```
 
-E2E requires Python 3, curl, Git and real Docker. Uses localhost ports 18080/18081, creates a local Python + static monorepo, deploys both through the API, tests longest-prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network harbor is retained.
+E2E requires Python 3, curl, Git and real Docker. Uses localhost ports 18080/18081, creates a local Python + static monorepo, deploys both through the API, tests longest-prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.

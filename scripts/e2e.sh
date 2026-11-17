@@ -2,5 +2,5 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATH="/usr/local/go/bin:$PATH"
-go build -o harbord .
+go build -o startshipd .
 python3 scripts/e2e.py

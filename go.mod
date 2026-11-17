@@ -1,4 +1,4 @@
-module harbor
+module startship
 
 go 1.26
 

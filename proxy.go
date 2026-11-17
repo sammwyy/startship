@@ -56,7 +56,7 @@ func (a *Server) refresh() {
 	a.routeMu.Unlock()
 }
 func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if domain := os.Getenv("HARBOR_DASHBOARD_DOMAIN"); domain != "" && normalizeHost(r.Host) == normalizeHost(domain) {
+	if domain := os.Getenv("STARTSHIP_DASHBOARD_DOMAIN"); domain != "" && normalizeHost(r.Host) == normalizeHost(domain) {
 		a.api().ServeHTTP(w, r)
 		return
 	}
@@ -68,12 +68,12 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	a.routeMu.RUnlock()
 	if t == nil {
-		http.Error(w, "Harbor: no route configured for this address.", 404)
+		http.Error(w, "Startship: no route configured for this address.", 404)
 		return
 	}
 	d := target.Deployment
 	if d.Status != "running" {
-		http.Error(w, "Harbor: this app has no healthy deployment yet.", 502)
+		http.Error(w, "Startship: this app has no healthy deployment yet.", 502)
 		return
 	}
 	if target.Route.StripPrefix {
@@ -102,7 +102,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d.IP == "" {
-		http.Error(w, "Harbor: app unavailable.", 502)
+		http.Error(w, "Startship: app unavailable.", 502)
 		return
 	}
 	upstream, _ := url.Parse("http://" + net.JoinHostPort(d.IP, fmt.Sprint(target.Port)))
@@ -110,7 +110,7 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	proxy.Rewrite = func(pr *httputil.ProxyRequest) { pr.SetURL(upstream); pr.Out.Host = pr.In.Host; pr.SetXForwarded() }
 	proxy.Director = nil
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, e error) {
-		http.Error(w, "Harbor: upstream unavailable.", 502)
+		http.Error(w, "Startship: upstream unavailable.", 502)
 	}
 	proxy.ServeHTTP(w, r)
 }

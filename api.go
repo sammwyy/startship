@@ -62,7 +62,7 @@ func (a *Server) createUser(user, pass string) (string, error) {
 	return id, tx.Commit()
 }
 func (a *Server) user(r *http.Request) string {
-	c, e := r.Cookie("harbor_session")
+	c, e := r.Cookie("startship_session")
 	if e != nil {
 		return ""
 	}
@@ -86,7 +86,7 @@ func (a *Server) api() http.Handler {
 		}
 		p := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 		if len(p) < 2 || p[0] != "api" {
-			fail(w, 404, "Harbor JSON API")
+			fail(w, 404, "Startship JSON API")
 			return
 		}
 		if len(p) == 4 && p[1] == "webhooks" && p[2] == "github" {
@@ -143,7 +143,7 @@ func (a *Server) api() http.Handler {
 				fail(w, 500, "session failed")
 				return
 			}
-			http.SetCookie(w, &http.Cookie{Name: "harbor_session", Value: token, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 604800})
+			http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteLaxMode, MaxAge: 604800})
 			reply(w, 200, map[string]string{"id": id})
 			return
 		}
@@ -153,9 +153,9 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		if p[1] == "logout" && r.Method == "POST" {
-			c, _ := r.Cookie("harbor_session")
+			c, _ := r.Cookie("startship_session")
 			a.store.db.Exec("DELETE FROM sessions WHERE id=?", c.Value)
-			http.SetCookie(w, &http.Cookie{Name: "harbor_session", Path: "/", MaxAge: -1, HttpOnly: true})
+			http.SetCookie(w, &http.Cookie{Name: "startship_session", Path: "/", MaxAge: -1, HttpOnly: true})
 			reply(w, 200, map[string]bool{"ok": true})
 			return
 		}
