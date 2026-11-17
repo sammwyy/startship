@@ -75,6 +75,9 @@ func (a *Server) clone(app Record, dir string, out io.Writer) error {
 	return command("", out, "git", "clone", "--depth", "1", "--branch", app.Branch, "--", raw, dir)
 }
 func (a *Server) enqueue(app Record) (Record, error) {
+	if _, e := a.projectSource(app); e != nil {
+		return Record{}, e
+	}
 	d := Record{ID: randomID(), Kind: "deployments", Owner: app.Owner, Parent: app.ID, AppID: app.ID, Status: "queued", Created: time.Now()}
 	if e := a.store.save(d); e != nil {
 		return d, e
@@ -134,12 +137,18 @@ func (a *Server) build(appID, id string) {
 		a.logDeploymentResult(logger, app, e)
 	}()
 	a.status(id, "building")
+	source, sourceErr := a.projectSource(app)
+	if sourceErr != nil {
+		e = sourceErr
+		return
+	}
+	logger.secret = source.GitToken
 	dir := filepath.Join(a.data, "builds", id)
 	if e = os.MkdirAll(filepath.Dir(dir), 0700); e != nil {
 		return
 	}
 	defer os.RemoveAll(dir)
-	if e = a.clone(app, dir, logger); e != nil {
+	if e = a.clone(source, dir, logger); e != nil {
 		return
 	}
 	var sha []byte

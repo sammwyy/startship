@@ -14,9 +14,11 @@ docker compose up --build -d
 
 Open `http://localhost:8080` (or `http://<server-ip>:8080`). The first visit asks you to create the administrator account (password of at least 8 characters); you are then signed in and land on your workspaces. Every user starts with `<username>'s Workspace`. There is no public registration after setup, and no password reset, so use a strong, unique password and keep it safe.
 
-From there: open a workspace (or create one with **+ New workspace**; the sidebar selector switches between them), create a project, add a Git application (or detect monorepo apps), deploy it, and connect a domain. Application pages include live build logs, editable settings, and copyable GitHub webhook credentials. Environment variables use one KEY=VALUE per line. Sign out with the button next to your username at the bottom of the sidebar.
+From there: open a workspace (or create one with **+ New workspace**; the top-bar selector switches between them) and create a project connected to **one Git repository**. The project owns the repository, branch, credentials, and GitHub webhook. Choose a single application to build the repository root, or a monorepo to define frontend, backend, or daemon apps in folders of that same repository. Apps only configure their root directory, build, port, variables, and deployment behavior; they cannot select another source. Deploy an app and connect a domain to expose it.
 
-Open the route's URL in the project page to visit the deployed app, not the
+Projects open directly into their application's controls. Multi-app projects add an application switcher; single-app projects skip that extra navigation. Both use the same deployments, domains, app settings, and **Project Git** tabs, with live build logs and the project's copyable webhook credentials. **Project source** edits the source shared by every app. Environment variables use one KEY=VALUE per line. Sign out next to your avatar in the top-right corner. The theme button remembers your light/dark choice.
+
+Use **Open app** or a public endpoint in the application's Deployments or Domains tab to visit the deployed app, not the
 dashboard or internal container port. URLs use the configured router port and
 HTTPS when ACME is enabled; if a gateway maps different external ports, use your
 gateway's public URL instead.
@@ -89,17 +91,19 @@ All bodies and responses are JSON. Login using `POST /api/login {"username":"adm
 Names are required and trimmed. Ownership-scoped `GET/POST /api/{workspaces,projects,apps,routes}` and `GET/PUT/PATCH/DELETE /api/{collection}/{id}`. Delete children before parents. POST returns the new object including ID. Fields:
 
 - workspace: `name`
-- project: `workspace_id, name`
-- app: `project_id, name, git_url, git_token, branch, root_dir, build_type, port, env, test_command, auto_deploy`
+- project: `workspace_id, name, git_url, git_token, branch`
+- app: `project_id, name, root_dir, build_type, port, env, test_command, auto_deploy`
 - route: `project_id, app_id, host, path_prefix, strip_prefix`
 
-Defaults: branch `main`, root `.`, build type `auto`, port 8080, path prefix `/`. Env is a JSON object of strings. Git tokens are accepted only with HTTPS and excluded from API responses. API app responses include a random webhook secret.
+Projects accept `git_url, git_token, branch` in addition to their name and workspace. Apps inherit that source; setting source fields on an app is rejected. Defaults: project branch `main`, app root `.`, build type `auto`, port 8080, path prefix `/`. Env is a JSON object of strings. Tokens are used only with HTTPS and excluded from API responses. API project responses include the shared webhook secret.
+
+On upgrade, an existing source is promoted from apps to their project only when all populated app sources agree. Conflicting legacy repositories/branches/credentials are flagged for an explicit choice in **Project source**, without deleting apps or interrupting active deployments. Builds are blocked until that choice is made. Existing app-specific signed webhook URLs remain compatible but use the project's branch and source.
 
 `POST /api/apps/{id}/deploy {}` queues a build. `GET /api/deployments?app_id=...` and `GET /api/deployments/{id}` include persisted incremental logs. Lists also support `project_id` and `workspace_id` filters.
 
-`POST /api/detect {"git_url":"https://github.com/owner/repo","branch":"main","git_token":"optional"}` clones and scans root and immediate child directories. It returns `root_dir, build_type, port` candidates; create apps from these via the apps endpoint.
+`POST /api/detect {"project_id":"..."}` clones the authenticated project's shared source and scans its root and immediate child directories. It returns `root_dir, build_type, port` candidates; create apps from these via the apps endpoint without repeating source fields.
 
-GitHub webhook: `POST /api/webhooks/github/{appID}`; set the app's webhook secret in GitHub, select push events. HMAC SHA-256 signatures are required. Only pushes to the configured branch with `auto_deploy: true` enqueue builds.
+GitHub webhook: `POST /api/webhooks/github/{projectID}`; set the project's webhook secret in GitHub and select push events. HMAC SHA-256 signatures are required. Pushes to the project's branch enqueue builds for its apps with `auto_deploy: true`. One project webhook covers all app folders in that repository.
 
 ## Builds and routing
 

@@ -35,6 +35,9 @@ type apiRecord struct {
 
 func publicRecord(v Record) apiRecord {
 	v.GitToken = ""
+	if v.Kind == "apps" {
+		v.GitURL, v.Branch = "", ""
+	}
 	out := apiRecord{Record: v}
 	if v.Kind == "routes" {
 		out.URL = routeURL(v)
@@ -206,6 +209,10 @@ func (a *Server) api() http.Handler {
 			}
 		}
 		if len(p) == 4 && kind == "apps" && p[3] == "deploy" && r.Method == "POST" {
+			if _, e := a.projectSource(old); e != nil {
+				fail(w, 400, e.Error())
+				return
+			}
 			d, e := a.enqueue(old)
 			if e != nil {
 				fail(w, 500, e.Error())
@@ -293,10 +300,31 @@ func (a *Server) api() http.Handler {
 		switch kind {
 		case "projects":
 			v.Parent = v.WorkspaceID
+			if v.GitURL != "" {
+				if e := validateGit(v.GitURL); e != nil {
+					fail(w, 400, e.Error())
+					return
+				}
+				if v.Branch == "" {
+					v.Branch = "main"
+				}
+				if v.WebhookSecret == "" {
+					v.WebhookSecret = randomID()
+				}
+				v.SourceConflict = false
+			} else if old.GitURL != "" {
+				fail(w, 400, "project source cannot be empty")
+				return
+			}
 		case "apps":
 			v.Parent = v.ProjectID
-			if v.Branch == "" {
-				v.Branch = "main"
+			if v.GitURL != "" || v.GitToken != "" || v.Branch != "" {
+				fail(w, 400, "source is configured on the project, not on individual apps")
+				return
+			}
+			if _, e := a.projectSource(v); e != nil {
+				fail(w, 400, e.Error())
+				return
 			}
 			if v.RootDir == "" {
 				v.RootDir = "."
@@ -307,15 +335,8 @@ func (a *Server) api() http.Handler {
 			if v.Port == 0 {
 				v.Port = 8080
 			}
-			if v.WebhookSecret == "" {
-				v.WebhookSecret = randomID()
-			}
 			if !safeRoot(v.RootDir) || v.Port < 1 || v.Port > 65535 || !validBuildType(v.BuildType) {
 				fail(w, 400, "invalid app configuration")
-				return
-			}
-			if e := validateGit(v.GitURL); e != nil {
-				fail(w, 400, e.Error())
 				return
 			}
 		case "routes":
@@ -349,6 +370,12 @@ func (a *Server) api() http.Handler {
 			fail(w, 500, "save failed")
 			return
 		}
+		if kind == "projects" {
+			if e := a.store.migrateProjectSources(); e != nil {
+				fail(w, 500, "source migration failed")
+				return
+			}
+		}
 		a.refresh()
 		reply(w, 200, publicRecord(v))
 	})
@@ -370,13 +397,13 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 		fail(w, 405, "method not allowed")
 		return
 	}
-	app, e := a.store.get(id)
-	if e != nil || app.Kind != "apps" {
+	target, e := a.store.get(id)
+	if e != nil || (target.Kind != "apps" && target.Kind != "projects") {
 		fail(w, 404, "not found")
 		return
 	}
 	body, e := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-	if e != nil || !verifySignature(app.WebhookSecret, body, r.Header.Get("X-Hub-Signature-256")) {
+	if e != nil || target.WebhookSecret == "" || !verifySignature(target.WebhookSecret, body, r.Header.Get("X-Hub-Signature-256")) {
 		fail(w, 401, "invalid signature")
 		return
 	}
@@ -387,13 +414,44 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 		fail(w, 400, "invalid JSON")
 		return
 	}
-	if r.Header.Get("X-GitHub-Event") == "push" && event.Ref == "refs/heads/"+app.Branch && app.AutoDeploy {
-		d, e := a.enqueue(app)
+	project := target
+	apps := []Record{}
+	if target.Kind == "apps" {
+		project, e = a.projectSource(target)
 		if e != nil {
-			fail(w, 500, e.Error())
+			fail(w, 400, e.Error())
 			return
 		}
-		reply(w, 202, d)
+		apps = append(apps, target)
+	} else {
+		for _, app := range a.store.list("apps", target.Owner) {
+			if app.ProjectID == target.ID {
+				apps = append(apps, app)
+			}
+		}
+	}
+	if r.Header.Get("X-GitHub-Event") != "push" || event.Ref != "refs/heads/"+project.Branch {
+		reply(w, 200, map[string]bool{"ignored": true})
+		return
+	}
+	deployments := []Record{}
+	for _, app := range apps {
+		if !app.AutoDeploy {
+			continue
+		}
+		d, err := a.enqueue(app)
+		if err != nil {
+			fail(w, 500, err.Error())
+			return
+		}
+		deployments = append(deployments, d)
+	}
+	if len(deployments) != 0 {
+		if target.Kind == "apps" {
+			reply(w, 202, deployments[0])
+		} else {
+			reply(w, 202, deployments)
+		}
 		return
 	}
 	reply(w, 200, map[string]bool{"ignored": true})

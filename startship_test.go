@@ -91,7 +91,11 @@ func TestDeploymentResultLog(t *testing.T) {
 
 func TestBuildFailureLog(t *testing.T) {
 	a := testServer(t)
-	app := Record{ID: "missing", Kind: "apps", Name: "Missing", GitURL: "file:///nonexistent-startship-test-repo", Branch: "main", RootDir: ".", BuildType: "auto"}
+	project := Record{ID: "project", Kind: "projects", GitURL: "file:///nonexistent-startship-test-repo", Branch: "main"}
+	if err := a.store.save(project); err != nil {
+		t.Fatal(err)
+	}
+	app := Record{ID: "missing", Kind: "apps", ProjectID: project.ID, Name: "Missing", RootDir: ".", BuildType: "auto"}
 	if err := a.store.save(app); err != nil {
 		t.Fatal(err)
 	}

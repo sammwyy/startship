@@ -189,17 +189,15 @@ func validateGit(raw string) error {
 	return fmt.Errorf("unsupported git URL scheme")
 }
 func (a *Server) detectAPI(w http.ResponseWriter, r *http.Request) {
-	var v struct {
-		GitURL   string `json:"git_url"`
-		GitToken string `json:"git_token"`
-		Branch   string `json:"branch"`
-	}
-	if decode(w, r, &v) != nil || validateGit(v.GitURL) != nil {
-		fail(w, 400, "invalid git URL")
+	var v Record
+	if decode(w, r, &v) != nil || v.ProjectID == "" || v.GitURL != "" || v.GitToken != "" || v.Branch != "" {
+		fail(w, 400, "detect requires project_id; configure the source on the project")
 		return
 	}
-	if v.Branch == "" {
-		v.Branch = "main"
+	source, e := a.projectSource(Record{ProjectID: v.ProjectID, Owner: a.user(r)})
+	if e != nil {
+		fail(w, 400, e.Error())
+		return
 	}
 	dir, e := os.MkdirTemp(a.data, "detect-")
 	if e != nil {
@@ -207,7 +205,7 @@ func (a *Server) detectAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer os.RemoveAll(dir)
-	if e = a.clone(Record{GitURL: v.GitURL, GitToken: v.GitToken, Branch: v.Branch}, dir, nil); e != nil {
+	if e = a.clone(source, dir, nil); e != nil {
 		fail(w, 400, "clone failed")
 		return
 	}
