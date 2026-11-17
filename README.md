@@ -33,6 +33,11 @@ the release asset base URL for testing.
 The daemon checks GitHub releases at start and every 12 hours, logs when a newer
 version exists, and reports it at `GET /api/system/update` (`?refresh=1` checks
 now). Set `STARTSHIP_UPDATE_CHECK=off` to disable the background check.
+Unauthenticated GitHub API calls share a limit of 60 per hour per IP, so behind a
+shared or NAT'd address the check falls back to the `releases/latest` page
+redirect (version only, no notes). Set `STARTSHIP_GITHUB_TOKEN` (any token; no
+scopes needed for this public repo) in `/etc/startship/startshipd.env` to
+authenticate the API instead. Installing a release never uses the API.
 
 ```sh
 startship update check          # CLI, daemon and latest release versions
