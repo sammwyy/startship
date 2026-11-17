@@ -201,10 +201,10 @@ Every project uses the same direct sidebar sections: **Deployments, Logs, Contai
 
 Use a public link in **Domains** to visit a deployed project, not the dashboard or an internal container port. URLs include the configured router port and use HTTPS when ACME is enabled; behind a gateway, use its public URL.
 
-Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/dl/), Git and Docker Engine required; no C toolchain):
+Without Docker Compose, build the binary ([Go 1.26+](https://go.dev/dl/), Node.js 22.12+, npm, Git and Docker Engine required; no C toolchain). Node is only needed at build time, not on servers running the released binaries:
 
 ```sh
-go build -o startshipd ./cmd/startshipd
+make build
 STARTSHIP_HTTP_ADDR=:8081 ./startshipd
 ```
 
@@ -369,8 +369,11 @@ For a monorepo, connect `api.example.com` with prefix `/` to the backend, `examp
 ## Checks
 
 ```sh
+npm ci --prefix web
+npm run build --prefix web # creates the assets embedded by Go; required before Go checks
+npm run format:check --prefix web
+npm test --prefix web
 go vet ./... && go test ./...
-node --test scripts/navigation.test.cjs # optional frontend regression checks, Node 18+
 ./scripts/e2e.sh
 ```
 
@@ -387,9 +390,25 @@ E2E requires Python 3, curl, Git and real Docker. It also covers a two-HTTP-cont
 - `internal/routing`: host/path normalization and route matching.
 - `internal/config`: daemon environment and data-directory defaults.
 - `internal/version`: build metadata shared by both binaries.
-- `web`: embedded dashboard assets; `scripts`: UI and deployment integration tests.
+- `web/src/views`: route-level React views, grouped by project and access management.
+- `web/src/components`, `web/src/layouts`: reusable UI and dashboard/project shells.
+- `web/src/services`: typed API contracts, HTTP transport and query definitions.
+- `web/src/providers`: session lifecycle, dialogs and notifications.
+- `web/dist`: generated Vite production bundle, embedded into the daemon; not committed.
+- `scripts`: deployment integration tests.
 
-Use `go build ./cmd/...` to compile both commands. Release builds set
+Use `make build` to build the frontend and both commands, or `go generate ./web`
+followed by `go build ./cmd/...`. A clean checkout must build the frontend before
+building or testing Go packages that import `web`. CI, Docker and release builds
+do this automatically. The CLI alone still builds with just Go.
+
+For frontend development, run the daemon on port 8080, then `npm run dev --prefix web`.
+Vite proxies `/api` to that daemon; authentication stays same-origin. Hash routes
+preserve existing dashboard bookmarks and need no server-side fallback. Views
+load separately, query polling is scoped to mounted views, and React owns all
+rendered markup. `npm test --prefix web` runs component/service regressions.
+
+Release builds set
 `github.com/sammwyy/startship/internal/version.Version` and
 `github.com/sammwyy/startship/internal/version.Commit` using `-ldflags -X`.
 Docker builds accept matching `VERSION` and `COMMIT` build arguments.

@@ -1,4 +1,5 @@
 /data
 /_data/
 /startshipd
+/startship
 *.db*

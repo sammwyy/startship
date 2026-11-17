@@ -1,0 +1,91 @@
+.form-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.auth-form .form-fields > button {
+  width: 100%;
+}
+.domain-form > .form-fields {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.domain-form > .form-fields > label:first-child {
+  flex: 1;
+}
+.form-error:empty {
+  display: none;
+}
+.update-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  margin-left: auto;
+}
+.update-panel .section-head {
+  padding: 0 0 16px;
+}
+.update-panel h2 {
+  margin: 0;
+}
+.update-panel .form-actions {
+  flex-wrap: wrap;
+}
+.update-notes {
+  margin-top: 20px;
+}
+.update-notes summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+.update-notes pre {
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.7;
+  padding-top: 12px;
+  overflow-wrap: anywhere;
+}
+.traffic-page {
+  --traffic-lime: #c9f56c;
+  --traffic-red: #f17f70;
+  --traffic-blue: #a2c9f5;
+}
+:root[data-theme="light"] .traffic-page {
+  --traffic-lime: #537c16;
+  --traffic-red: #c34534;
+  --traffic-blue: #3975ab;
+}
+.traffic-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.traffic-window {
+  display: flex;
+  gap: 4px;
+}
+.traffic-window button[aria-pressed="true"] {
+  background: var(--raised);
+  border-color: var(--success);
+}
+.sidebar-nav a:not([aria-current="page"]) {
+  color: var(--muted);
+  background: transparent;
+  border-color: transparent;
+}
+.sidebar-nav a:not([aria-current="page"]):hover {
+  background: var(--raised);
+  color: var(--text);
+}
+@media (max-width: 700px) {
+  .domain-form > .form-fields {
+    display: block;
+  }
+}
