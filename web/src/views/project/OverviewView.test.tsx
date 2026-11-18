@@ -82,12 +82,11 @@ describe("project overview", () => {
     await waitFor(() =>
       expect(state.request).toHaveBeenCalledWith(
         "projects/p1",
-        expect.objectContaining({
+        {
           name: "New storefront",
           auto_deploy: true,
-          build_type: "auto",
-          port: 0,
-        }),
+          root_dir: ".",
+        },
         "PATCH",
       ),
     );

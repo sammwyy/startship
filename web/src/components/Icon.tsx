@@ -40,9 +40,13 @@ import {
   X,
   Zap,
   GitBranch,
+  Workflow,
+  Check,
 } from "lucide-react";
 
 const icons = {
+  pipeline: Workflow,
+  check: Check,
   activity: Activity,
   arrow: ArrowUpRight,
   back: ArrowLeft,

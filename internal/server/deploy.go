@@ -3,10 +3,12 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/sammwyy/startship/internal/detect"
+	"github.com/sammwyy/startship/internal/pipeline"
 	"io"
 	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -174,6 +176,7 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 		}
 	}()
 	if d.RedeployOf != "" {
+		app.Pipeline = d.Pipeline
 		fmt.Fprintf(logger, "Redeploying release %s (no clone, build or tests)\n", d.RedeployOf)
 		if e = releaseAvailable(d); e != nil {
 			return
@@ -228,68 +231,131 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 	if e != nil {
 		return
 	}
-	kind := app.BuildType
-	if kind == "auto" {
-		kind = detect.Detect(root)
+	p := app.Pipeline
+	if p == nil {
+		kind := app.BuildType
+		if kind == "auto" {
+			kind = pipeline.DetectTemplate(root)
+		}
+		var resolved pipeline.Pipeline
+		resolved, e = pipeline.Resolve(kind, root)
+		if e != nil {
+			return
+		}
+		if app.TestCommand != "" {
+			resolved.Test.Commands = []string{app.TestCommand}
+		}
+		if app.Port != 0 {
+			resolved.Deploy.Port = app.Port
+		}
+		p = &resolved
 	}
-	if kind == "" {
-		e = fmt.Errorf("no supported app detected")
+	if e = p.Validate(); e != nil {
 		return
 	}
-	if kind == "static" {
-		if app.TestCommand != "" {
-			image := "startship/" + app.ID + ":" + id
-			content := fmt.Sprintf("FROM alpine:3.23\nWORKDIR /app\nCOPY . .\nENV PORT=%d\n", app.Port)
-			e = os.WriteFile(filepath.Join(root, "Dockerfile.startship-test"), []byte(content), 0600)
+	app.Pipeline, app.Port = p, p.Deploy.Port
+	a.store.Update(id, func(r *Record) { r.Pipeline = p; r.Port = app.Port })
+	fmt.Fprintf(logger, "==> 1/3 Build (%s)\n", p.Build.Image)
+	image := "startship/" + app.ID + ":" + id
+	dockerPath := p.Build.Dockerfile
+	generated := dockerPath == ""
+	staticDirect := p.Deploy.Static && len(p.Build.Commands) == 0 && len(p.Test.Commands) == 0 && generated
+	if !staticDirect {
+		if generated {
+			var content string
+			content, e = p.Dockerfile()
 			if e != nil {
 				return
 			}
-			e = buildImage(root, logger, app.ProjectID, image, "Dockerfile.startship-test", d.NoCache)
-			if e != nil {
+			dockerPath = "Dockerfile.startship"
+			if e = os.WriteFile(filepath.Join(root, dockerPath), []byte(content), 0600); e != nil {
 				return
 			}
-			a.status(id, "testing")
-			args := appRunArgs(app, network, true)
-			args = append(args, image, "sh", "-c", app.TestCommand)
-			e = command("", logger, "docker", args...)
-			os.Remove(filepath.Join(root, "Dockerfile.startship-test"))
-			a.store.Update(id, func(r *Record) { r.Image = image })
-			if e != nil {
+			defer os.Remove(filepath.Join(root, dockerPath))
+		}
+		target := ""
+		if generated {
+			target = "build"
+		}
+		if e = buildImage(root, logger, app.ProjectID, image, dockerPath, d.NoCache, target); e != nil {
+			return
+		}
+		a.store.Update(id, func(r *Record) { r.Image = image })
+	}
+	fmt.Fprintln(logger, "==> 2/3 Test")
+	if len(p.Test.Commands) > 0 {
+		a.status(id, "testing")
+		if generated {
+			if e = buildImage(root, logger, app.ProjectID, image, dockerPath, false, "test"); e != nil {
 				return
 			}
 		}
+		args := appRunArgs(app, network, true)
+		args = append(args, image, "sh", "-c", "set -e\n"+strings.Join(p.Test.Commands, "\n"))
+		var output strings.Builder
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+		c := exec.CommandContext(ctx, "docker", args...)
+		c.Stdout = io.MultiWriter(logger, &output)
+		c.Stderr = c.Stdout
+		runErr := c.Run()
+		cancel()
+		code := 0
+		if runErr != nil {
+			var exit *exec.ExitError
+			if !errors.As(runErr, &exit) {
+				e = runErr
+				return
+			}
+			code = exit.ExitCode()
+		}
+		if code != p.Test.ExpectExitCode {
+			e = fmt.Errorf("test expected exit code %d, got %d", p.Test.ExpectExitCode, code)
+			return
+		}
+		if !strings.Contains(output.String(), p.Test.ExpectOutput) {
+			e = fmt.Errorf("test expected output containing %q, got %q", p.Test.ExpectOutput, output.String())
+			return
+		}
+	}
+	fmt.Fprintf(logger, "==> 3/3 Deploy :%d\n", app.Port)
+	if p.Deploy.Static {
+		a.status(id, "starting")
+		artifact := p.Deploy.Artifact
+		if artifact == "" {
+			artifact = "."
+		}
+		src := filepath.Join(root, artifact)
+		if staticDirect {
+			if _, e = checkoutRoot(root, artifact); e != nil {
+				return
+			}
+		}
+		if !staticDirect {
+			extract := filepath.Join(a.data, "builds", id+"-artifact")
+			if e = os.MkdirAll(extract, 0700); e != nil {
+				return
+			}
+			defer os.RemoveAll(extract)
+			name := "startship-artifact-" + id
+			if e = command("", logger, "docker", "create", "--name", name, image, "sh"); e != nil {
+				return
+			}
+			defer command("", nil, "docker", "rm", "-f", name)
+			if e = command("", logger, "docker", "cp", name+":/app/"+artifact+"/.", extract); e != nil {
+				return
+			}
+			src = extract
+		}
 		dest := filepath.Join(a.data, "static", id)
-		if e = copyStatic(root, dest); e != nil {
+		if e = copyStatic(src, dest); e != nil {
 			return
 		}
 		a.store.Update(id, func(r *Record) { r.StaticDir = dest })
 		e = a.activate(app, id)
 		return
 	}
-	if kind != "dockerfile" {
-		var content string
-		content, e = detect.Dockerfile(kind, app.Port, root)
-		if e != nil {
-			return
-		}
-		if e = os.WriteFile(filepath.Join(root, "Dockerfile.startship"), []byte(content), 0600); e != nil {
-			return
-		}
-	}
-	image := "startship/" + app.ID + ":" + id
-	a.store.Update(id, func(r *Record) { r.Image = image })
-	dockerPath := "Dockerfile"
-	if kind != "dockerfile" {
-		dockerPath = "Dockerfile.startship"
-	}
-	if e = buildImage(root, logger, app.ProjectID, image, dockerPath, d.NoCache); e != nil {
-		return
-	}
-	if app.TestCommand != "" {
-		a.status(id, "testing")
-		args := appRunArgs(app, network, true)
-		args = append(args, image, "sh", "-c", app.TestCommand)
-		if e = command("", logger, "docker", args...); e != nil {
+	if generated {
+		if e = buildImage(root, logger, app.ProjectID, image, dockerPath, false, "final"); e != nil {
 			return
 		}
 	}
@@ -330,10 +396,29 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 	}
 	deadline := time.Now().Add(60 * time.Second)
 	for {
-		var c net.Conn
-		c, e = net.DialTimeout("tcp", net.JoinHostPort(ip, fmt.Sprint(app.Port)), time.Second)
+		address := net.JoinHostPort(ip, fmt.Sprint(app.Port))
+		if app.Pipeline != nil && app.Pipeline.Deploy.HealthPath != "" {
+			client := http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+			var response *http.Response
+			response, e = client.Get("http://" + address + app.Pipeline.Deploy.HealthPath)
+			if e == nil {
+				response.Body.Close()
+				expected := app.Pipeline.Deploy.ExpectStatus
+				if expected == 0 {
+					expected = 200
+				}
+				if response.StatusCode != expected {
+					e = fmt.Errorf("expected HTTP status %d, got %d", expected, response.StatusCode)
+				}
+			}
+		} else {
+			var c net.Conn
+			c, e = net.DialTimeout("tcp", address, time.Second)
+			if e == nil {
+				c.Close()
+			}
+		}
 		if e == nil {
-			c.Close()
 			break
 		}
 		if time.Now().After(deadline) {

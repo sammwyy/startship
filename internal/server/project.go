@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/sammwyy/startship/internal/detect"
+	"github.com/sammwyy/startship/internal/pipeline"
 	"io"
 	"io/fs"
 	"maps"
@@ -55,6 +56,9 @@ func runnable(dir, kind string) bool {
 	if kind != "node" {
 		return kind != ""
 	}
+	if detect.ProcfileWeb(dir) != "" {
+		return true
+	}
 	var p struct {
 		Scripts map[string]string
 		Main    string
@@ -70,19 +74,61 @@ func runnable(dir, kind string) bool {
 }
 
 // Workspace manifests are not servers; stop descending after finding a runnable root.
-func projectCandidates(checkout string, p Record) ([]detect.Candidate, error) {
+type pipelineCandidate struct {
+	RootDir   string             `json:"root_dir"`
+	BuildType string             `json:"build_type"`
+	Port      int                `json:"port"`
+	Template  string             `json:"template"`
+	Pipeline  *pipeline.Pipeline `json:"pipeline"`
+}
+
+func resolvedCandidate(dir, root, kind string, p Record) (pipelineCandidate, error) {
+	var resolved pipeline.Pipeline
+	var err error
+	if p.BuildType != "" && p.BuildType != "auto" && p.Pipeline != nil {
+		resolved = *p.Pipeline
+	} else {
+		resolved, err = pipeline.Resolve(kind, dir)
+		if err != nil {
+			return pipelineCandidate{}, err
+		}
+		if p.Pipeline != nil {
+			resolved.Test = p.Pipeline.Test
+		} else if p.TestCommand != "" {
+			resolved.Test.Commands = []string{p.TestCommand}
+		}
+	}
+	if p.Port != 0 {
+		resolved.Deploy.Port = p.Port
+	}
+	if p.Pipeline != nil {
+		if p.Pipeline.Deploy.Port != 0 {
+			resolved.Deploy.Port = p.Pipeline.Deploy.Port
+		}
+		if p.Pipeline.Deploy.HealthPath != "" {
+			resolved.Deploy.HealthPath = p.Pipeline.Deploy.HealthPath
+			resolved.Deploy.ExpectStatus = p.Pipeline.Deploy.ExpectStatus
+		}
+	}
+	if kind == "dockerfile" && p.Port == 0 && (p.Pipeline == nil || p.Pipeline.Deploy.Port == 0) {
+		b, _ := os.ReadFile(filepath.Join(dir, resolved.Build.Dockerfile))
+		if match := exposedPort.FindSubmatch(b); len(match) > 1 {
+			resolved.Deploy.Port, _ = strconv.Atoi(string(match[1]))
+		}
+	}
+	return pipelineCandidate{RootDir: root, BuildType: kind, Port: resolved.Deploy.Port, Template: kind, Pipeline: &resolved}, resolved.Validate()
+}
+
+func projectCandidates(checkout string, p Record) ([]pipelineCandidate, error) {
 	root, err := checkoutRoot(checkout, p.RootDir)
 	if err != nil {
 		return nil, err
 	}
 	if p.BuildType != "" && p.BuildType != "auto" {
-		port := p.Port
-		if port == 0 {
-			port = 8080
-		}
-		return []detect.Candidate{{RootDir: filepath.Clean(p.RootDir), BuildType: p.BuildType, Port: port}}, nil
+		c, err := resolvedCandidate(root, filepath.Clean(p.RootDir), p.BuildType, p)
+		return []pipelineCandidate{c}, err
 	}
-	var found []detect.Candidate
+	var found []pipelineCandidate
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -94,28 +140,16 @@ func projectCandidates(checkout string, p Record) ([]detect.Candidate, error) {
 		if rel != "." && (strings.HasPrefix(entry.Name(), ".") || strings.Contains("|node_modules|vendor|target|dist|build|", "|"+entry.Name()+"|") || strings.Count(filepath.ToSlash(rel), "/") >= 3) {
 			return filepath.SkipDir
 		}
-		kind := detect.Detect(path)
+		kind := pipeline.DetectTemplate(path)
 		if !runnable(path, kind) {
 			return nil
 		}
-		port := p.Port
-		if port == 0 {
-			port = 8080
-			if kind == "node" {
-				port = 3000
-			}
-			if kind == "dockerfile" {
-				b, _ := os.ReadFile(filepath.Join(path, "Dockerfile"))
-				if match := exposedPort.FindSubmatch(b); len(match) > 1 {
-					port, _ = strconv.Atoi(string(match[1]))
-				}
-			}
-		}
-		if port < 1 || port > 65535 {
-			return fmt.Errorf("invalid detected port in %s", rel)
-		}
 		rel, _ = filepath.Rel(checkout, path)
-		found = append(found, detect.Candidate{RootDir: rel, BuildType: kind, Port: port})
+		c, err := resolvedCandidate(path, rel, kind, p)
+		if err != nil {
+			return err
+		}
+		found = append(found, c)
 		return filepath.SkipDir
 	})
 	if err == nil && len(found) == 0 {
@@ -135,6 +169,10 @@ func (a *Server) enqueueProject(p Record, next Record) (Record, error) {
 	next.Status, next.Created, next.Name = "queued", time.Now().UTC(), p.Name
 	next.GitURL, next.GitToken, next.Branch = p.GitURL, p.GitToken, p.Branch
 	next.RootDir, next.BuildType, next.Port, next.Env, next.TestCommand = p.RootDir, p.BuildType, p.Port, maps.Clone(p.Env), p.TestCommand
+	if p.Pipeline != nil {
+		b, _ := json.Marshal(p.Pipeline)
+		_ = json.Unmarshal(b, &next.Pipeline)
+	}
 	if next.RootDir == "" {
 		next.RootDir = "."
 	}
@@ -215,7 +253,7 @@ func (a *Server) buildProject(id string) {
 	}
 	a.status(id, "building")
 	checkout, commit := "", job.Commit
-	var plan []detect.Candidate
+	var plan []pipelineCandidate
 	var artifacts []Record
 	if job.RedeployOf != "" {
 		source, e := a.store.Get(job.RedeployOf)
@@ -234,7 +272,7 @@ func (a *Server) buildProject(id string) {
 			if p.Port != 0 {
 				port = p.Port
 			}
-			plan = append(plan, detect.Candidate{RootDir: d.RootDir, BuildType: d.BuildType, Port: port})
+			plan = append(plan, pipelineCandidate{RootDir: d.RootDir, BuildType: d.BuildType, Port: port, Pipeline: d.Pipeline})
 		}
 		fmt.Fprintf(logger, "Redeploying project release %.8s without rebuilding\n", source.ID)
 	} else {
@@ -275,6 +313,7 @@ func (a *Server) buildProject(id string) {
 			}
 		}
 		c.RootDir, c.BuildType, c.Port, c.Env, c.TestCommand = candidate.RootDir, candidate.BuildType, candidate.Port, maps.Clone(p.Env), p.TestCommand
+		c.Pipeline = candidate.Pipeline
 		c.ReleaseID = id
 		if _, e := a.store.Get(c.ID); e != nil {
 			if err = a.store.Save(c); err != nil {
@@ -282,6 +321,7 @@ func (a *Server) buildProject(id string) {
 			}
 		}
 		d := Record{ID: randomID(), Kind: "deployments", Owner: p.Owner, Parent: c.ID, AppID: c.ID, ProjectID: p.ID, ReleaseID: id, Status: "queued", Created: time.Now().UTC(), RootDir: c.RootDir, BuildType: c.BuildType, Port: c.Port, Name: c.Name, NoCache: job.NoCache}
+		d.Pipeline = c.Pipeline
 		if job.RedeployOf != "" {
 			source := artifacts[i]
 			d.RedeployOf, d.Image, d.StaticDir, d.Commit = source.ID, source.Image, source.StaticDir, source.Commit

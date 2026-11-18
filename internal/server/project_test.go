@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"github.com/sammwyy/startship/internal/pipeline"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -79,6 +80,30 @@ func TestProjectConfigMigration(t *testing.T) {
 	p, _ = a.store.Get("p")
 	if p.Env["CHOSEN"] != "yes" || p.ConfigConflict {
 		t.Fatal("migration overwrote an explicit choice")
+	}
+}
+
+func TestPipelineCandidateCompatibility(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts":{"start":"node app.js"}}`), 0600)
+	for _, strategy := range []string{"auto", "node"} {
+		candidates, err := projectCandidates(dir, Record{RootDir: ".", BuildType: strategy, TestCommand: "echo legacy", Port: 9000})
+		if err != nil || len(candidates) != 1 {
+			t.Fatal(candidates, err)
+		}
+		p := candidates[0].Pipeline
+		if p.Deploy.Port != 9000 || len(p.Test.Commands) != 1 || p.Test.Commands[0] != "echo legacy" {
+			t.Fatal(p)
+		}
+	}
+	overlay := &pipeline.Pipeline{Build: pipeline.Build{Image: "ignored"}, Test: pipeline.Test{Commands: []string{"echo overlay"}, ExpectOutput: "overlay"}, Deploy: pipeline.Deploy{Port: 9090, HealthPath: "/ready", ExpectStatus: 204}}
+	candidates, err := projectCandidates(dir, Record{RootDir: ".", BuildType: "auto", Pipeline: overlay})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := candidates[0].Pipeline
+	if p.Build.Image != "node:22-alpine" || p.Test.ExpectOutput != "overlay" || p.Deploy.Port != 9090 || p.Deploy.ExpectStatus != 204 {
+		t.Fatal(p)
 	}
 }
 
@@ -208,6 +233,25 @@ func TestProjectDeploymentAPI(t *testing.T) {
 		return w.Body.Bytes()
 	}
 	var release Record
+	templates := request("GET", "pipeline/templates", "", 200)
+	var registry []pipeline.Template
+	if err := json.Unmarshal(templates, &registry); err != nil || len(registry) != 16 {
+		t.Fatal(string(templates), err)
+	}
+	request("PATCH", "projects/project", `{"build_type":"custom"}`, 400)
+	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"bad image"}}}`, 400)
+	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"},"deploy":{"artifact":"../escape"}}}`, 400)
+	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"},"test":{"expect_output":"pipeline-actual"}}}`, 200)
+	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"}}}`, 200)
+	request("PATCH", "projects/project", `{"name":"Project renamed"}`, 200)
+	var replaced Record
+	if err := json.Unmarshal(request("GET", "projects/project", "", 200), &replaced); err != nil {
+		t.Fatal(err)
+	}
+	if replaced.Pipeline == nil || replaced.Pipeline.Test.ExpectOutput != "" || replaced.Pipeline.Build.Image != "alpine:3.23" || replaced.Env["MODE"] != "snapshot" {
+		t.Fatal("pipeline was not replaced or omitted project fields changed", replaced)
+	}
+	request("PATCH", "projects/project", `{"build_type":"custom","pipeline":{"build":{"image":"alpine:3.23"},"test":{"commands":["echo ok"],"expect_exit_code":0},"deploy":{"port":8080,"health_path":"/health"}}}`, 200)
 	body := request("POST", "projects/project/deploy", `{"no_cache":true}`, 202)
 	json.Unmarshal(body, &release)
 	if release.ProjectID != p.ID || release.AppID != "" || !release.NoCache || strings.Contains(string(body), "private-token") {
@@ -217,6 +261,9 @@ func TestProjectDeploymentAPI(t *testing.T) {
 	snapshot, _ := a.store.Get(release.ID)
 	if snapshot.Env["MODE"] != "snapshot" {
 		t.Fatal("queued configuration changed")
+	}
+	if snapshot.Pipeline == nil || snapshot.Pipeline.Deploy.HealthPath != "/health" {
+		t.Fatal(snapshot)
 	}
 	request("POST", "projects/foreign/deploy", "{}", 404)
 	request("POST", "containers", "{}", 405)

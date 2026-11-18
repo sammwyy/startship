@@ -141,7 +141,7 @@ func buildArgs(builder, image, dockerfile string, noCache bool) []string {
 	return append(args, ".")
 }
 
-func buildImage(root string, out io.Writer, projectID, image, dockerfile string, noCache bool) error {
+func buildImage(root string, out io.Writer, projectID, image, dockerfile string, noCache bool, target string) error {
 	builder, opts, err := buildConfig(projectID)
 	if err != nil {
 		return err
@@ -159,5 +159,9 @@ func buildImage(root string, out io.Writer, projectID, image, dockerfile string,
 		}
 	}
 	defer command("", out, "docker", "buildx", "prune", "--builder", builder, "--max-used-space", limitEnv("STARTSHIP_BUILD_CACHE", "5g"), "--reserved-space", "0", "-f")
-	return command(root, out, "docker", buildArgs(builder, image, dockerfile, noCache)...)
+	args := buildArgs(builder, image, dockerfile, noCache)
+	if target != "" {
+		args = append(args[:len(args)-1], "--target", target, ".")
+	}
+	return command(root, out, "docker", args...)
 }

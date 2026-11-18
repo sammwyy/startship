@@ -16,7 +16,8 @@
     "lucide-react": "^0.468.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
-    "react-router-dom": "^7.9.6"
+    "react-router-dom": "^7.9.6",
+    "simple-icons": "^16.38.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
