@@ -9,6 +9,7 @@ import { domainPatterns, HostPicker, pickedHost } from "./HostPicker";
 import { AsyncForm, Field } from "./ui";
 import { Icon } from "./Icon";
 import { certificateCovers, certificateUsable } from "../services/certificates";
+import { CertificatePicker } from "./CertificatePicker";
 
 export interface RouteInput {
   host: string;
@@ -27,6 +28,7 @@ export function RouteEditor({
   admin,
   certificates = [],
   certificatesAvailable = true,
+  workspaceId,
   onSave,
   onCancel,
 }: {
@@ -36,6 +38,7 @@ export function RouteEditor({
   admin?: boolean;
   certificates?: Certificate[];
   certificatesAvailable?: boolean;
+  workspaceId?: string;
   onSave: (data: RouteInput) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -137,41 +140,16 @@ export function RouteEditor({
             <p className="small muted">
               Use / for the whole site, or /api for a specific path.
             </p>
-            <label>
-              Certificate
-              <select
-                name="certificate_id"
-                value={certificateId}
-                disabled={!certificatesAvailable}
-                onChange={(event) => setCertificateId(event.target.value)}
-              >
-                <option value="">Automatic — any matching certificate</option>
-                {certificateId &&
-                  !matching.some(
-                    (certificate) => certificate.id === certificateId,
-                  ) && (
-                    <option value={certificateId} disabled>
-                      Current certificate — unavailable or does not cover this
-                      host
-                    </option>
-                  )}
-                {matching.map((certificate) => (
-                  <option key={certificate.id} value={certificate.id}>
-                    {certificate.domains.join(", ")} ·{" "}
-                    {certificate.source === "acme"
-                      ? "Let’s Encrypt"
-                      : "Uploaded"}{" "}
-                    · {certificate.status} · {certificate.id.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {!certificatesAvailable && (
-              <p className="small muted">
-                Certificate selection requires workspace.domains permission and
-                access to the certificate list. Existing binding is preserved.
-              </p>
-            )}
+            <CertificatePicker
+              host={host}
+              domains={domains}
+              admin={admin}
+              workspaceId={workspaceId}
+              certificates={certificates}
+              available={certificatesAvailable}
+              value={certificateId}
+              onChange={setCertificateId}
+            />
             <label className="inline-check">
               <input
                 type="checkbox"
