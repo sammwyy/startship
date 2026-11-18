@@ -248,7 +248,6 @@
     list-style: none;
     padding: 0 0 0 14px;
     margin: 8px 0 0 12px;
-    border-left: 1px solid var(--map-edge-idle);
   }
   .map-tree li {
     position: relative;
@@ -264,6 +263,20 @@
     left: -14px;
     width: 14px;
     border-top: 1px solid var(--map-edge-idle);
+  }
+  .map-tree li::after {
+    content: "";
+    position: absolute;
+    top: -8px;
+    bottom: 0;
+    left: -14px;
+    border-left: 1px solid var(--map-edge-idle);
+  }
+  .map-tree li:first-child::after {
+    top: 0;
+  }
+  .map-tree li:last-child::after {
+    bottom: calc(100% - 29px);
   }
   .map-tree .map-node {
     min-height: 58px;
@@ -300,7 +313,8 @@
     margin-left: 0;
     padding-left: 0;
   }
-  .map-tree-orphans > ul > li::before {
+  .map-tree-orphans > ul > li::before,
+  .map-tree-orphans > ul > li::after {
     display: none;
   }
   .workspace-map .map-legend > .map-hint {
