@@ -172,6 +172,7 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		a.refreshVolumeSizes(s.WorkspaceID)
 		return map[string]any{"volumes": listResources[Volume](a, "volumes", s.WorkspaceID)}, nil, r, ""
 	case "backups":
+		a.refreshVolumeSizes(s.WorkspaceID)
 		return a.backupsData(s.WorkspaceID, ""), nil, r, ""
 	case "certificates":
 		return map[string]any{"certificates": a.certificates(s.WorkspaceID)}, nil, r, ""

@@ -185,10 +185,10 @@ func (a *Server) runBackup(s Service, trigger, uid string) (Backup, error) {
 		b.SizeBytes, _ = strconv.ParseInt(fields[len(fields)-1], 10, 64)
 	}
 	b.Status, b.Finished = "completed", time.Now().UTC()
+	a.staleVolumeSizes()
 	if err = a.saveBackup(b); err != nil {
 		return b, err
 	}
-	a.volumeSizeAt = time.Time{}
 	if trigger == "scheduled" && s.Backup != nil {
 		a.pruneBackups(s.ID, s.Backup.Keep)
 	}
@@ -213,8 +213,15 @@ func (a *Server) deleteBackup(b Backup) error {
 			return err
 		}
 	}
+	a.staleVolumeSizes()
 	a.deleteResource("backups", b.ID, b.WorkspaceID)
 	return nil
+}
+
+func (a *Server) staleVolumeSizes() {
+	a.volumeSizeMu.Lock()
+	a.volumeSizeAt = time.Time{}
+	a.volumeSizeMu.Unlock()
 }
 
 // restoreBackup replaces a service's data with a backup. The caller holds the service lock.
