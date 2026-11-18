@@ -47,6 +47,7 @@ export function DashboardLayout() {
       : null,
   );
   useLiveSubscription({ topic: "system_update" });
+  useLiveSubscription({ topic: "workspaces" });
   const liveStatus = useLiveStatus();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("startship-sidebar-collapsed") === "true",
@@ -196,12 +197,6 @@ export function DashboardLayout() {
                   </span>
                 </Link>
               </div>
-              {can("activity.view", project) &&
-                navLink(
-                  `/project/${project.id}/activity`,
-                  "Activity log",
-                  "history",
-                )}
               {projectSections.map(([section, label, icon]) =>
                 navLink(`/project/${project.id}/${section}`, label, icon),
               )}
@@ -225,8 +220,6 @@ export function DashboardLayout() {
                     "shield-check",
                   )}
                   {navLink(`${url}/members`, "Members", "users")}
-                  {can("activity.view", workspace) &&
-                    navLink(`${url}/activity`, "Activity log", "history")}
                   {navLink(`${url}/settings`, "Workspace settings", "settings")}
                 </>
               )}

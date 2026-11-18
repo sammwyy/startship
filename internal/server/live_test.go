@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 func liveTestSession(t *testing.T, a *Server, uid string) (sid, token string) {
@@ -23,6 +24,53 @@ func liveTestSession(t *testing.T, a *Server, uid string) (sid, token string) {
 		t.Fatal(err)
 	}
 	return sid, token
+}
+
+func TestLiveStaleAccessCookie(t *testing.T) {
+	a := testServer(t)
+	srv := httptest.NewServer(a.api())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cookie := "startship_session=" + randomID()
+	origin := srv.URL
+	for _, tc := range []struct {
+		name, cookie, origin string
+		status               int
+	}{
+		{"legacy browser", cookie, origin, http.StatusSwitchingProtocols},
+		{"no cookie", "", origin, http.StatusUnauthorized},
+		{"can refresh", cookie + "; startship_refresh=" + randomID(), origin, http.StatusUnauthorized},
+		{"cross-origin", cookie, "https://other.example", http.StatusForbidden},
+		{"no origin", cookie, "", http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := http.Header{}
+			if tc.origin != "" {
+				headers.Set("Origin", tc.origin)
+			}
+			if tc.cookie != "" {
+				headers.Set("Cookie", tc.cookie)
+			}
+			c, res, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: headers})
+			if c != nil {
+				defer c.CloseNow()
+			}
+			if res == nil || res.StatusCode != tc.status {
+				t.Fatalf("dial: %v (%v), want status %d", res, err, tc.status)
+			}
+			if tc.status == http.StatusSwitchingProtocols {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, b, err := c.Read(ctx); websocket.CloseStatus(err) != 4401 {
+					t.Fatalf("first read: %q, %v; want close code 4401 without a ready message", b, err)
+				}
+			} else if err == nil {
+				t.Fatal("unauthenticated handshake succeeded")
+			}
+		})
+	}
 }
 
 func TestLive(t *testing.T) {
@@ -273,6 +321,8 @@ func TestLiveRelevant(t *testing.T) {
 		{liveSub{Topic: "workspace", WorkspaceID: "w"}, Record{ID: "w"}, true},
 		{liveSub{Topic: "workspace", WorkspaceID: "w"}, Record{Kind: "projects", WorkspaceID: "w"}, true},
 		{liveSub{Topic: "workspace", WorkspaceID: "w"}, Record{Kind: "releases", WorkspaceID: "w"}, false},
+		{liveSub{Topic: "workspaces"}, Record{ID: "w", Kind: "workspaces"}, true},
+		{liveSub{Topic: "workspaces"}, Record{Kind: "projects", WorkspaceID: "w"}, false},
 		{liveSub{Topic: "release_log", ReleaseID: "r"}, Record{ID: "r"}, true},
 		{liveSub{Topic: "release_log", ReleaseID: "r"}, Record{ID: "other"}, false},
 		{liveSub{Topic: "container_log", ContainerID: "c"}, Record{ID: "c"}, true},
@@ -518,5 +568,51 @@ func TestRuntimeTransactionNotifications(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestLiveWorkspacesFollowRenames(t *testing.T) {
+	a := testServer(t)
+	alice, err := a.createUser("alice", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := a.api()
+	cookie := accountLogin(t, h, "alice", "password123")
+	ws := a.store.List("workspaces", alice)[0]
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	c, _, err := websocket.Dial(ctx, srv.URL+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{cookie.String()}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	var msg struct {
+		Type string
+		Data []apiRecord
+	}
+	read := func(kind string) []apiRecord {
+		t.Helper()
+		if err := wsjson.Read(ctx, c, &msg); err != nil || msg.Type != kind {
+			t.Fatalf("expected %s: %+v, %v", kind, msg, err)
+		}
+		return msg.Data
+	}
+	read("ready")
+	if err := wsjson.Write(ctx, c, map[string]string{"type": "subscribe", "id": "w", "topic": "workspaces"}); err != nil {
+		t.Fatal(err)
+	}
+	if list := read("snapshot"); len(list) != 1 || list[0].ID != ws.ID {
+		t.Fatal(list)
+	}
+	accountRequest(t, h, "PATCH", "workspaces/"+ws.ID, `{"name":"renamed"}`, cookie, 200)
+	if list := read("snapshot"); len(list) != 1 || list[0].Name != "renamed" {
+		t.Fatal("rename not pushed", list)
+	}
+	accountRequest(t, h, "POST", "workspaces", `{"name":"second"}`, cookie, 200)
+	if list := read("snapshot"); len(list) != 2 {
+		t.Fatal("new workspace not pushed", list)
 	}
 }

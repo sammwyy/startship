@@ -10,6 +10,7 @@ import type { Project } from "../services/types";
 import { sourceData, sortReleases, text } from "../lib/project";
 import { SourceFields } from "../components/SourceFields";
 import { Heading } from "../components/Heading";
+import { ScopedActivityTabs } from "../components/ScopedActivityTabs";
 import { Badge, Empty } from "../components/ui";
 import { Icon } from "../components/Icon";
 import {
@@ -80,6 +81,10 @@ export function WorkspaceView() {
             </button>
           )
         }
+      />
+      <ScopedActivityTabs
+        scope="workspace"
+        resource={workspace?.id === id ? workspace : undefined}
       />
       <div className="stats">
         {[

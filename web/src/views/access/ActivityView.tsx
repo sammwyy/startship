@@ -1,6 +1,10 @@
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { Heading } from "../../components/Heading";
 import { Icon } from "../../components/Icon";
+import {
+  ScopedActivityTabs,
+  scopedActivityTitle,
+} from "../../components/ScopedActivityTabs";
 import { ErrorMessage, Loading } from "../../components/ui";
 import { useDashboard } from "../../layouts/DashboardLayout";
 import { useLiveFeed } from "../../providers/LiveProvider";
@@ -169,23 +173,30 @@ export function ActivityView() {
   const { workspaceId, projectId } = useParams();
   const { workspaces, project } = useDashboard();
   const workspace = workspaces.find((entry) => entry.id === workspaceId);
+  const scope = projectId ? "project" : "workspace";
+  const resource = projectId
+    ? project?.id === projectId
+      ? project
+      : undefined
+    : workspace;
   const spec: LiveSubscription | null = projectId
     ? { topic: "project_activity", project_id: projectId }
     : workspaceId
       ? { topic: "workspace_activity", workspace_id: workspaceId }
       : null;
   return (
-    <div className="account-page">
+    <>
       <Heading
-        title="Activity log"
+        title={scopedActivityTitle(scope)}
         kicker={projectId ? "Project" : "Workspace"}
         subtitle={
           projectId
-            ? `Recorded actions for ${project?.name || "this project"}.`
+            ? `Recorded actions for ${resource?.name || "this project"}.`
             : `Recorded actions across ${workspace?.name || "this workspace"} and its projects.`
         }
       />
+      <ScopedActivityTabs scope={scope} resource={resource} />
       {spec && <ActivityFeed spec={spec} />}
-    </div>
+    </>
   );
 }

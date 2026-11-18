@@ -108,6 +108,8 @@ func (a *Server) publishActivity(uid string, scope activityScope) {
 		a.live.publish(liveEvent{changeKey: "project_activity:" + scope.id})
 	}
 	a.live.publish(liveEvent{changeKey: "audit_activity"})
+	// Role and member changes are audited; they can change which workspaces a user sees.
+	a.live.publish(liveEvent{changeKey: "workspaces"})
 }
 
 func (a *Server) publishAccount(uid string) {
@@ -254,7 +256,7 @@ func (s *liveSub) activityKey(uid string) string {
 		return s.Topic + ":" + s.WorkspaceID
 	case "project_activity":
 		return s.Topic + ":" + s.ProjectID
-	case "audit_activity":
+	case "audit_activity", "workspaces":
 		return s.Topic
 	default:
 		return ""

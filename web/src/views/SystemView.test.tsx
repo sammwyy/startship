@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { reloadDashboard } from "../lib/dashboardReload";
 import { UIProvider } from "../providers/UIProvider";
 import { ApiError, request } from "../services/api";
 import { SystemView } from "./SystemView";
@@ -9,6 +10,7 @@ import type { UpdateInfo } from "../services/types";
 
 const session = vi.hoisted(() => ({ user: { platform_admin: true } }));
 vi.mock("../providers/SessionProvider", () => ({ useSession: () => session }));
+vi.mock("../lib/dashboardReload", () => ({ reloadDashboard: vi.fn() }));
 vi.mock("../services/api", async (original) => ({
   ...(await original<typeof import("../services/api")>()),
   request: vi.fn(),
@@ -98,6 +100,17 @@ describe("system updates", () => {
       await screen.findByText(/v1.1.0 is running/, {}, { timeout: 4000 }),
     ).toBeInTheDocument();
     expect(screen.getByText("Reload dashboard")).toBeInTheDocument();
+    expect(reloadDashboard).toHaveBeenCalledOnce();
+  });
+  it("detects the restarted daemon over HTTP when live updates are disconnected", async () => {
+    info.pending = { version: "v1.1.0" };
+    renderView();
+    await screen.findByText(/Waiting for the daemon to restart/);
+    expect(reloadDashboard).not.toHaveBeenCalled();
+    installed = "v1.1.0";
+    await waitFor(() => expect(reloadDashboard).toHaveBeenCalledOnce(), {
+      timeout: 4000,
+    });
   });
   it.each([
     "member",

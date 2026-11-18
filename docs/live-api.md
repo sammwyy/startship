@@ -25,6 +25,7 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | Topic | Params | Permission | Snapshot `data` | Then | Replaces |
 |---|---|---|---|---|---|
 | `project` | `project_id` | project visible | `{project, containers[], releases[] (no log), routes[]}` = GET `projects/:id`, `containers?project_id=`, `releases?project_id=&logs=false`, `routes?project_id=` | `upsert`/`delete` with kind project, container, release, route | ProjectLayout 2s queries, DashboardLayout project 2s |
+| `workspaces` | none | signed in | = GET `workspaces` | replacement snapshot when a workspace is created, renamed or deleted, or an audited change may alter which workspaces you see | sidebar workspace list |
 | `workspace` | `workspace_id` | workspace visible | `{projects[]}` = GET `projects?workspace_id=` | `upsert`/`delete` kind project | projects list refetch |
 | `certificates` | `workspace_id` | `workspace.domains` | `{certificates[]}` = GET `workspaces/:id/certificates` (no private keys) | a full `snapshot` on certificate create/status/renew/delete; access rechecked | workspace certificate list |
 | `firewall` | `workspace_id` | workspace visible + `firewall.view` | `{policy, lists, events, stats, can_manage}` | replacement snapshots on policy/list changes and at most once per second during telemetry activity; access rechecked | workspace firewall data |

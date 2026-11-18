@@ -95,6 +95,8 @@ func (s *liveSub) relevant(r Record) bool {
 		return r.ID == s.ProjectID || r.ProjectID == s.ProjectID
 	case "workspace":
 		return r.ID == s.WorkspaceID || r.Kind == "projects" && r.WorkspaceID == s.WorkspaceID
+	case "workspaces":
+		return r.Kind == "workspaces"
 	case "certificates":
 		return r.Kind == "certificates" && r.WorkspaceID == s.WorkspaceID
 	case "services", "volumes", "backups":
@@ -161,7 +163,7 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 			return x, Record{}, "forbidden"
 		}
 		return x, Record{}, ""
-	case "system_update", "account_activity", "account_sessions", "account_tokens":
+	case "system_update", "account_activity", "account_sessions", "account_tokens", "workspaces":
 		return x, Record{}, ""
 	default:
 		return x, Record{}, "invalid subscription"
@@ -197,6 +199,14 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return out
 	}
 	switch s.Topic {
+	case "workspaces":
+		out := []apiRecord{}
+		for _, v := range a.store.List("workspaces", "") {
+			if x.visible(v) {
+				out = append(out, x.publicRecord(v))
+			}
+		}
+		return out, nil, r, ""
 	case "account_sessions", "account_activity", "account_tokens", "workspace_activity", "project_activity", "audit_activity":
 		data, err := a.activityLive(uid, s)
 		if err != nil {
@@ -285,6 +295,11 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 		return
 	}
 	defer conn.CloseNow()
+	if uid == "" {
+		// Legacy dashboards can see a WebSocket close code but not a handshake's HTTP 401.
+		conn.Close(websocket.StatusCode(4401), "reauthentication required")
+		return
+	}
 	conn.SetReadLimit(8192)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
