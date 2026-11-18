@@ -95,7 +95,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 					env := e.Connection(at.Alias, e.Port, s.Config)
 					if !x.at(s.WorkspaceID, "")["services.manage"] {
 						for k := range env {
-							if strings.HasSuffix(k, "_PASSWORD") || strings.HasSuffix(k, "_URL") {
+							if strings.HasSuffix(k, "_PASSWORD") || strings.HasSuffix(k, "_URL") || strings.HasSuffix(k, "_SECRET_KEY") {
 								env[k] = "********"
 							}
 						}

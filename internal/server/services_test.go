@@ -127,6 +127,34 @@ func TestServiceLifecycle(t *testing.T) {
 	}
 }
 
+func TestSeaweedSecretVisibility(t *testing.T) {
+	f := newRBACFixture(t)
+	e, _ := catalog.Lookup("seaweedfs")
+	config, err := catalog.Validate(e, e.Versions[0], nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := Service{ID: "objects", Name: "objects", WorkspaceID: f.workspace.ID, Engine: e.ID, Version: e.Versions[0], Config: config, Attachments: []Attachment{{ProjectID: f.project.ID, Alias: "objects"}}}
+	f.a.saveService(s)
+	f.assign(t, f.alice, f.bobID, "member", scopeWorkspace, f.workspace.ID, 201)
+	r := accountRequest(t, f.h, "GET", "projects/"+f.project.ID+"/services", "", f.bob, 200)
+	if strings.Contains(r.Body.String(), config["secret_key"]) || !strings.Contains(r.Body.String(), `"OBJECTS_SECRET_KEY":"********"`) {
+		t.Fatal("S3 secret exposed or masking missing")
+	}
+	r = accountRequest(t, f.h, "GET", "projects/"+f.project.ID+"/services", "", f.alice, 200)
+	if !strings.Contains(r.Body.String(), config["secret_key"]) {
+		t.Fatal("manager lost S3 secret")
+	}
+	calls := []string{}
+	f.a.dockerService = func(args ...string) (string, error) { calls = append(calls, strings.Join(args, " ")); return "ok", nil }
+	if err := f.a.serviceAction(s.ID, "recreate"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(calls, "\n"), "--entrypoint /bin/sh chrislusf/seaweedfs:3.85 -c") {
+		t.Fatal("missing Seaweed bootstrap entrypoint")
+	}
+}
+
 func TestServiceNetworkNames(t *testing.T) {
 	f := newRBACFixture(t)
 	calls := []string{}

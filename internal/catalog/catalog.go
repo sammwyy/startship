@@ -3,6 +3,7 @@ package catalog
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -53,7 +54,7 @@ var engines = []Engine{
 	{ID: "kafka", Name: "Kafka", Category: "queue", Image: "apache/kafka", Versions: []string{"3.9.0"}, Port: 9092, DataPath: "/var/lib/kafka/data", Fields: []Field{{Key: "external_host", Label: "External hostname", Type: "text", Default: "localhost", Required: true, Help: "Public hostname or IP advertised to external Kafka clients (without a port)."}}},
 	{ID: "nats", Name: "NATS", Category: "queue", Image: "nats", Versions: []string{"2.10"}, Port: 4222, DataPath: "/data"},
 	{ID: "clickhouse", Name: "ClickHouse", Category: "database", Image: "clickhouse/clickhouse-server", Versions: []string{"25.3", "24.8"}, Port: 8123, DataPath: "/var/lib/clickhouse", Fields: credentials()},
-	{ID: "minio", Name: "MinIO", Category: "storage", Image: "minio/minio", Versions: []string{"RELEASE.2025-04-22T22-12-26Z"}, Port: 9000, DataPath: "/data", Fields: credentials()[:2]},
+	{ID: "seaweedfs", Name: "SeaweedFS", Category: "storage", Image: "chrislusf/seaweedfs", Versions: []string{"3.85"}, Port: 8333, DataPath: "/data", Fields: []Field{{Key: "access_key", Label: "Access key", Type: "text", Generate: true, Required: true}, {Key: "secret_key", Label: "Secret key", Type: "password", Generate: true, Required: true}}},
 	{ID: "opensearch", Name: "OpenSearch", Category: "search", Image: "opensearchproject/opensearch", Versions: []string{"2.19.1"}, Port: 9200, DataPath: "/usr/share/opensearch/data", Fields: []Field{field("user", "admin"), credentials()[1]}},
 }
 
@@ -146,9 +147,9 @@ func (e Engine) Env(v map[string]string) map[string]string {
 		set("CLICKHOUSE_")
 		out["CLICKHOUSE_DB"] = v["database"]
 		out["CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT"] = "1"
-	case "minio":
-		out["MINIO_ROOT_USER"] = v["user"]
-		out["MINIO_ROOT_PASSWORD"] = v["password"]
+	case "seaweedfs":
+		b, _ := json.Marshal(map[string]any{"identities": []any{map[string]any{"name": "startship", "credentials": []map[string]string{{"accessKey": v["access_key"], "secretKey": v["secret_key"]}}, "actions": []string{"Admin", "Read", "Write", "List", "Tagging"}}}})
+		out["STARTSHIP_S3_CONFIG"] = string(b)
 	case "opensearch":
 		out["discovery.type"] = "single-node"
 		out["OPENSEARCH_INITIAL_ADMIN_PASSWORD"] = v["password"]
@@ -169,8 +170,8 @@ func (e Engine) Command(v map[string]string) []string {
 		return args
 	case "nats":
 		return []string{"-js", "-sd", "/data"}
-	case "minio":
-		return []string{"server", "/data"}
+	case "seaweedfs":
+		return []string{"-c", `set -e; umask 077; printf '%s' "$STARTSHIP_S3_CONFIG" > /tmp/startship-s3.json; cd /data; exec weed server -dir=/data -ip=127.0.0.1 -ip.bind=0.0.0.0 -s3 -s3.port=8333 -s3.config=/tmp/startship-s3.json`}
 	}
 	return nil
 }
@@ -180,7 +181,7 @@ var separator = regexp.MustCompile(`[^A-Z0-9]`)
 func (e Engine) Connection(alias string, port int, v map[string]string) map[string]string {
 	host := alias + ".local"
 	prefix := separator.ReplaceAllString(strings.ToUpper(alias), "_") + "_"
-	scheme := map[string]string{"postgresql": "postgres", "mariadb": "mysql", "rabbitmq": "amqp", "valkey": "redis", "clickhouse": "http", "minio": "http", "opensearch": "https"}[e.ID]
+	scheme := map[string]string{"postgresql": "postgres", "mariadb": "mysql", "rabbitmq": "amqp", "valkey": "redis", "clickhouse": "http", "seaweedfs": "http", "opensearch": "https"}[e.ID]
 	if scheme == "" {
 		scheme = e.ID
 	}
@@ -195,10 +196,13 @@ func (e Engine) Connection(alias string, port int, v map[string]string) map[stri
 		u.RawQuery = "authSource=admin"
 	}
 	out := map[string]string{prefix + "HOST": host, prefix + "PORT": strconv.Itoa(port), prefix + "URL": u.String()}
-	for _, k := range []string{"user", "password", "database"} {
+	for _, k := range []string{"user", "password", "database", "access_key", "secret_key"} {
 		if v[k] != "" {
 			out[prefix+strings.ToUpper(k)] = v[k]
 		}
+	}
+	if e.ID == "seaweedfs" {
+		out[prefix+"ENDPOINT"] = u.String()
 	}
 	return out
 }

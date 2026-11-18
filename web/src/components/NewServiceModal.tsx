@@ -21,7 +21,7 @@ const descriptions: Record<string, string> = {
   kafka: "High-throughput event streaming.",
   nats: "Simple, cloud-native messaging.",
   clickhouse: "Real-time analytics at any scale.",
-  minio: "S3-compatible object storage.",
+  seaweedfs: "S3-compatible object storage.",
   opensearch: "Search, analyze and explore your data.",
 };
 export function NewServiceModal({

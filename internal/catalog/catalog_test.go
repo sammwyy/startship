@@ -1,7 +1,9 @@
 package catalog
 
 import (
+	"encoding/json"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -13,7 +15,7 @@ func TestCatalog(t *testing.T) {
 				t.Fatal(err)
 			}
 			c := e.Connection("my_db", e.Port, v)
-			schemes := map[string]string{"postgresql": "postgres", "mysql": "mysql", "mariadb": "mysql", "mongodb": "mongodb", "redis": "redis", "valkey": "redis", "memcached": "memcached", "rabbitmq": "amqp", "kafka": "kafka", "nats": "nats", "clickhouse": "http", "minio": "http", "opensearch": "https"}
+			schemes := map[string]string{"postgresql": "postgres", "mysql": "mysql", "mariadb": "mysql", "mongodb": "mongodb", "redis": "redis", "valkey": "redis", "memcached": "memcached", "rabbitmq": "amqp", "kafka": "kafka", "nats": "nats", "clickhouse": "http", "seaweedfs": "http", "opensearch": "https"}
 			u, err := url.Parse(c["MY_DB_URL"])
 			if err != nil || u.Hostname() != "my_db.local" || c["MY_DB_HOST"] != "my_db.local" || u.Scheme != schemes[e.ID] {
 				t.Fatal(c, err)
@@ -41,7 +43,7 @@ func TestCatalog(t *testing.T) {
 }
 
 func TestEngineConfiguration(t *testing.T) {
-	keys := map[string]string{"postgresql": "POSTGRES_DB", "mysql": "MYSQL_DATABASE", "mariadb": "MARIADB_DATABASE", "mongodb": "MONGO_INITDB_DATABASE", "rabbitmq": "RABBITMQ_DEFAULT_USER", "clickhouse": "CLICKHOUSE_DB", "minio": "MINIO_ROOT_USER"}
+	keys := map[string]string{"postgresql": "POSTGRES_DB", "mysql": "MYSQL_DATABASE", "mariadb": "MARIADB_DATABASE", "mongodb": "MONGO_INITDB_DATABASE", "rabbitmq": "RABBITMQ_DEFAULT_USER", "clickhouse": "CLICKHOUSE_DB"}
 	for id, key := range keys {
 		e, _ := Lookup(id)
 		v, err := Validate(e, e.Versions[0], nil)
@@ -75,6 +77,39 @@ func TestEngineConfiguration(t *testing.T) {
 		if e.ID == "kafka" && e.Env(v)["KAFKA_PROCESS_ROLES"] != "broker,controller" {
 			t.Fatal("missing KRaft configuration")
 		}
+	}
+}
+
+func TestSeaweedCredentials(t *testing.T) {
+	e, _ := Lookup("seaweedfs")
+	v, err := Validate(e, e.Versions[0], nil)
+	if err != nil || len(v["access_key"]) != 48 || len(v["secret_key"]) != 48 || v["access_key"] == v["secret_key"] {
+		t.Fatal("S3 credentials not generated", err)
+	}
+	v["secret_key"] = "quoted\"secret\\with\nnewline"
+	var config struct {
+		Identities []struct {
+			Credentials []struct {
+				AccessKey string
+				SecretKey string
+			}
+			Actions []string
+		}
+	}
+	if err := json.Unmarshal([]byte(e.Env(v)["STARTSHIP_S3_CONFIG"]), &config); err != nil {
+		t.Fatal(err)
+	}
+	identity := config.Identities[0]
+	if identity.Credentials[0].AccessKey != v["access_key"] || identity.Credentials[0].SecretKey != v["secret_key"] || len(identity.Actions) != 5 {
+		t.Fatal("S3 config lost credentials or actions")
+	}
+	args := strings.Join(e.Command(v), " ")
+	if !strings.Contains(args, "umask 077") || !strings.Contains(args, "cd /data") || !strings.Contains(args, "-s3.config=/tmp/startship-s3.json") || strings.Contains(args, v["secret_key"]) {
+		t.Fatal("unsafe S3 startup command")
+	}
+	env := e.Connection("objects", e.Port, v)
+	if env["OBJECTS_ACCESS_KEY"] != v["access_key"] || env["OBJECTS_SECRET_KEY"] != v["secret_key"] || env["OBJECTS_ENDPOINT"] != "http://objects.local:8333" || env["OBJECTS_URL"] != env["OBJECTS_ENDPOINT"] {
+		t.Fatal("incorrect S3 connection environment")
 	}
 }
 

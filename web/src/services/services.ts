@@ -55,7 +55,7 @@ export function connectionEnv(
         rabbitmq: "amqp",
         valkey: "redis",
         clickhouse: "http",
-        minio: "http",
+        seaweedfs: "http",
         opensearch: "https",
       } as Record<string, string>
     )[engine.id] || engine.id;
@@ -76,8 +76,16 @@ export function connectionEnv(
     [`${prefix}_PORT`]: String(engine.port),
     [`${prefix}_URL`]: `${scheme}://${auth}${host}:${engine.port}${database}${engine.id === "mongodb" ? "?authSource=admin" : ""}`,
   };
-  for (const key of ["user", "password", "database"])
+  for (const key of [
+    "user",
+    "password",
+    "database",
+    "access_key",
+    "secret_key",
+  ])
     if (config[key]) result[`${prefix}_${key.toUpperCase()}`] = config[key];
+  if (engine.id === "seaweedfs")
+    result[`${prefix}_ENDPOINT`] = result[`${prefix}_URL`];
   return Object.fromEntries(orderedConnectionEnv(result));
 }
 export const externalEndpoint = (service: Service) =>
@@ -85,12 +93,26 @@ export const externalEndpoint = (service: Service) =>
     ? `${window.location.hostname}:${service.external_port}`
     : "Internal only";
 export function secretValue(key: string) {
-  return key.endsWith("_PASSWORD") || key.endsWith("_URL");
+  return (
+    key.endsWith("_PASSWORD") ||
+    key.endsWith("_URL") ||
+    key.endsWith("_SECRET_KEY")
+  );
 }
 export function orderedConnectionEnv(env: Record<string, string>) {
-  const fields = ["HOST", "PORT", "USER", "PASSWORD", "DATABASE", "URL"];
+  const fields = [
+    "HOST",
+    "PORT",
+    "USER",
+    "PASSWORD",
+    "DATABASE",
+    "URL",
+    "ACCESS_KEY",
+    "SECRET_KEY",
+    "ENDPOINT",
+  ];
   const rank = (key: string) => {
-    const index = fields.indexOf(key.slice(key.lastIndexOf("_") + 1));
+    const index = fields.findIndex((field) => key.endsWith("_" + field));
     return index < 0 ? fields.length : index;
   };
   return Object.entries(env).sort(

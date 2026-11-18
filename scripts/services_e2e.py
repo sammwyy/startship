@@ -8,7 +8,7 @@ import ssl
 import subprocess
 import time
 import urllib.request
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 
 def docker(args, data=None, environment=None, timeout=120):
@@ -121,12 +121,33 @@ def run_services(request):
                         with urllib.request.urlopen(req, timeout=5) as response:
                             assert response.read().strip() == b"1"
                         return "authenticated HTTP SELECT 1: 1"
-                    if kind == "minio":
-                        mc = {"MC_HOST_smoke": "http://" + quote(config["user"], safe="") + ":" + quote(config["password"], safe="") + "@127.0.0.1:" + str(port)}
-                        client(["mc", "mb", "--ignore-existing", "smoke/catalog-probe"], environment=mc, client_image="minio/mc:latest")
-                        out = client(["mc", "ls", "smoke"], environment=mc, client_image="minio/mc:latest")
-                        assert "catalog-probe" in out, out
-                        return "mc authenticated mb + ls: catalog-probe/"
+                    if kind == "seaweedfs":
+                        credentials = {"AWS_ACCESS_KEY_ID": config["access_key"], "AWS_SECRET_ACCESS_KEY": config["secret_key"], "AWS_DEFAULT_REGION": "us-east-1", "AWS_EC2_METADATA_DISABLED": "true"}
+                        endpoint="http://127.0.0.1:"+str(port)
+                        def aws(args,data=None,internal=False):
+                            return client(["aws","--endpoint-url",env["PROBE_ENDPOINT"] if internal else endpoint]+args,data,credentials,
+                                          network="startship-"+project["id"] if internal else "host",client_image="amazon/aws-cli:2.27.49")
+                        aws(["s3api","list-buckets"])
+                        aws(["s3","mb","s3://catalog-probe"])
+                        aws(["s3","cp","-","s3://catalog-probe/probe.txt"],"persistent-s3-data\n")
+                        out=aws(["s3","ls","s3://catalog-probe"])
+                        assert "probe.txt" in out,out
+                        try:
+                            urllib.request.urlopen(endpoint+"/catalog-probe/probe.txt",timeout=5)
+                        except urllib.error.HTTPError as error:
+                            assert error.code==403,error
+                        else:
+                            raise AssertionError("anonymous S3 object read accepted")
+                        request("services/"+service["id"]+"/restart",{})
+                        for _ in range(30):
+                            try:
+                                assert aws(["s3","cp","s3://catalog-probe/probe.txt","-"],internal=True)=="persistent-s3-data"
+                                break
+                            except RuntimeError:
+                                time.sleep(2)
+                        else:
+                            raise AssertionError("S3 object did not survive service restart")
+                        return "aws-cli mb + put + ls: probe.txt; anonymous: 403; restart/project-endpoint get: persistent-s3-data"
                     if kind == "opensearch":
                         assert config.get("password"), "catalog disables security and generates no credentials"
                         auth = base64.b64encode((config["user"] + ":" + config["password"]).encode()).decode()

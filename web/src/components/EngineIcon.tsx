@@ -9,7 +9,6 @@ import {
   siApachekafka,
   siNatsdotio,
   siClickhouse,
-  siMinio,
   siOpensearch,
 } from "simple-icons";
 const brands = {
@@ -22,7 +21,6 @@ const brands = {
   kafka: siApachekafka,
   nats: siNatsdotio,
   clickhouse: siClickhouse,
-  minio: siMinio,
   opensearch: siOpensearch,
 };
 export function EngineIcon({ engine }: { engine: string }) {
@@ -49,7 +47,9 @@ export function EngineIcon({ engine }: { engine: string }) {
           <path d={brand.path} />
         </svg>
       ) : (
-        <span>{engine === "memcached" ? "mc" : "vk"}</span>
+        <span>
+          {engine === "memcached" ? "mc" : engine === "seaweedfs" ? "sw" : "vk"}
+        </span>
       )}
     </span>
   );

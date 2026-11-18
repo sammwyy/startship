@@ -212,6 +212,9 @@ func (a *Server) serviceAction(id, action string) error {
 		for k, v := range env {
 			args = append(args, "-e", k+"="+v)
 		}
+		if e.ID == "seaweedfs" {
+			args = append(args, "--entrypoint", "/bin/sh")
+		}
 		args = append(args, e.Image+":"+s.Version)
 		args = append(args, e.Command(s.Config)...)
 		_, err = a.serviceDocker(args...)

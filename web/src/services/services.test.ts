@@ -6,6 +6,7 @@ import {
   connectionEnv,
   orderedConnectionEnv,
   resourceDeployNeeded,
+  secretValue,
   validServiceName,
 } from "./services";
 import type { Project, Release, Service, ServiceEngine } from "./types";
@@ -87,6 +88,26 @@ describe("service and volume live snapshots", () => {
   });
 });
 describe("connection previews", () => {
+  it("previews S3 endpoints and keys, keeping secret keys masked", () => {
+    const env = connectionEnv(
+      {
+        config: { access_key: "access", secret_key: "private" },
+      } as unknown as Service,
+      { id: "seaweedfs", port: 8333 } as ServiceEngine,
+      "objects",
+    );
+    expect(env).toEqual({
+      OBJECTS_HOST: "objects.local",
+      OBJECTS_PORT: "8333",
+      OBJECTS_ACCESS_KEY: "access",
+      OBJECTS_SECRET_KEY: "private",
+      OBJECTS_URL: "http://objects.local:8333",
+      OBJECTS_ENDPOINT: "http://objects.local:8333",
+    });
+    expect(secretValue("OBJECTS_SECRET_KEY")).toBe(true);
+    expect(secretValue("OBJECTS_ACCESS_KEY")).toBe(false);
+    expect(secretValue("OBJECTS_ENDPOINT")).toBe(false);
+  });
   it("includes password-only cache authentication and secure OpenSearch URLs", () => {
     expect(
       connectionEnv(
