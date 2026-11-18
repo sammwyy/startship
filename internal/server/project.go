@@ -102,6 +102,7 @@ func resolvedCandidate(dir, root, kind string, p Record) (pipelineCandidate, err
 		resolved.Deploy.Port = p.Port
 	}
 	if p.Pipeline != nil {
+		resolved.Deploy.HealthTimeout = p.Pipeline.Deploy.HealthTimeout
 		if p.Pipeline.Deploy.Port != 0 {
 			resolved.Deploy.Port = p.Pipeline.Deploy.Port
 		}

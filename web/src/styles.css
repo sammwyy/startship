@@ -81,6 +81,59 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
+.pipeline-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.pipeline-tabs [role="tab"] {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pipeline-tabs [aria-selected="true"] {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+.pipeline-tab-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.pipeline-editor-tabs .pipeline-stage[hidden] {
+  display: none;
+}
+.pipeline-editor-tabs .pipeline-stage > header::after {
+  display: none;
+}
+.pipeline-editor-tabs .pipeline-stage-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.pipeline-editor-tabs .pipeline-stage-body > label:has(textarea),
+.pipeline-editor-tabs .pipeline-stage-body > .split,
+.pipeline-editor-tabs .pipeline-stage-body > p,
+.pipeline-editor-tabs .pipeline-stage-body > .pipeline-auto-note {
+  grid-column: 1 / -1;
+}
+.pipeline-editor-tabs .pipeline-health-grid {
+  display: contents;
+}
+@media (max-width: 600px) {
+  .pipeline-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pipeline-editor-tabs .pipeline-stage-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .pipeline-stage {
   min-width: 0;
   overflow: visible;
@@ -127,6 +180,12 @@
 }
 .pipeline-stage-body {
   padding: 18px;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+.pipeline-strategy-controls {
+  display: contents;
 }
 .pipeline-stage:first-child {
   display: flex;

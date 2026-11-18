@@ -68,14 +68,14 @@ const staticDeploy = {
   health_path: "",
   expect_status: 0,
 };
-function show() {
+function show(entry = "/") {
   return render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[entry]}>
         <PipelineView />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -165,6 +165,7 @@ describe("project pipeline", () => {
       },
     };
     show();
+    fireEvent.click(await screen.findByRole("tab", { name: /3 Deploy/ }));
     expect(
       await screen.findByText("Served directly by Startship"),
     ).toBeVisible();
@@ -199,6 +200,45 @@ describe("project pipeline", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByLabelText("HTTP port")).toBeEnabled();
     expect(screen.getByLabelText("Start command")).toHaveValue("npm start");
+  });
+  it("keeps unsaved edits across tabs and supports keyboard navigation", async () => {
+    state.project.build_type = "go";
+    show("/?tab=health");
+    const health = await screen.findByRole("tab", { name: /4 Health check/ });
+    expect(health).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/TCP connection on port/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Health check path"), {
+      target: { value: "/ready" },
+    });
+    fireEvent.change(screen.getByLabelText("Readiness timeout (seconds)"), {
+      target: { value: "90" },
+    });
+    expect(
+      screen.getByText("HTTP GET /ready — expect status 200"),
+    ).toBeVisible();
+    fireEvent.keyDown(health, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: /1 Build/ })).toHaveFocus();
+    expect(screen.getByRole("tabpanel", { name: /1 Build/ })).toBeVisible();
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(screen.getByLabelText("Health check path")).toHaveValue("/ready");
+    expect(screen.getByLabelText("Readiness timeout (seconds)")).toHaveValue(
+      90,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({
+          pipeline: expect.objectContaining({
+            deploy: expect.objectContaining({
+              health_path: "/ready",
+              health_timeout: 90,
+            }),
+          }),
+        }),
+        "PATCH",
+      ),
+    );
   });
   it("filters templates by search and category", async () => {
     show();
@@ -381,5 +421,10 @@ describe("project pipeline", () => {
     expect(
       screen.getByText(/your roles do not let you change it/),
     ).toBeVisible();
+    const testTab = screen.getByRole("tab", { name: /2 Test/ });
+    expect(testTab).toBeEnabled();
+    fireEvent.click(testTab);
+    expect(screen.getByRole("tabpanel", { name: /2 Test/ })).toBeVisible();
+    expect(screen.getByLabelText("Test image")).toBeDisabled();
   });
 });

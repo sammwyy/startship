@@ -394,7 +394,11 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 	if e != nil {
 		return
 	}
-	deadline := time.Now().Add(60 * time.Second)
+	timeout := 60 * time.Second
+	if app.Pipeline != nil && app.Pipeline.Deploy.HealthTimeout > 0 {
+		timeout = time.Duration(app.Pipeline.Deploy.HealthTimeout) * time.Second
+	}
+	deadline := time.Now().Add(timeout)
 	for {
 		address := net.JoinHostPort(ip, fmt.Sprint(app.Port))
 		if app.Pipeline != nil && app.Pipeline.Deploy.HealthPath != "" {
@@ -423,7 +427,7 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 		}
 		if time.Now().After(deadline) {
 			command("", logger, "docker", "logs", "--tail", "100", container)
-			e = fmt.Errorf("health check timed out after 60s on port %d: %w", app.Port, e)
+			e = fmt.Errorf("health check timed out after %s on port %d: %w", timeout, app.Port, e)
 			return
 		}
 		time.Sleep(300 * time.Millisecond)

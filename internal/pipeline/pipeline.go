@@ -24,13 +24,14 @@ type Test struct {
 	ExpectOutput   string   `json:"expect_output,omitempty"`
 }
 type Deploy struct {
-	Image        string `json:"image,omitempty"`
-	Artifact     string `json:"artifact,omitempty"`
-	Static       bool   `json:"static,omitempty"`
-	Command      string `json:"command,omitempty"`
-	Port         int    `json:"port,omitempty"`
-	HealthPath   string `json:"health_path,omitempty"`
-	ExpectStatus int    `json:"expect_status,omitempty"`
+	Image         string `json:"image,omitempty"`
+	Artifact      string `json:"artifact,omitempty"`
+	Static        bool   `json:"static,omitempty"`
+	Command       string `json:"command,omitempty"`
+	Port          int    `json:"port,omitempty"`
+	HealthPath    string `json:"health_path,omitempty"`
+	ExpectStatus  int    `json:"expect_status,omitempty"`
+	HealthTimeout int    `json:"health_timeout,omitempty"`
 }
 type Pipeline struct {
 	Build  Build  `json:"build"`
@@ -101,7 +102,7 @@ func Templates() []Template {
 		}
 		out = append(out, Template{s.id, s.name, descriptions[s.id], s.icon, s.category, p})
 	}
-	return out
+	return append(out, additionalTemplates()...)
 }
 func exists(dir, name string) bool {
 	s, e := os.Stat(filepath.Join(dir, name))
@@ -110,6 +111,9 @@ func exists(dir, name string) bool {
 func DetectTemplate(dir string) string {
 	if exists(dir, "Dockerfile") {
 		return "dockerfile"
+	}
+	if id := detectAdditional(dir); id != "" {
+		return id
 	}
 	if exists(dir, "package.json") {
 		b, _ := os.ReadFile(filepath.Join(dir, "package.json"))
@@ -232,6 +236,7 @@ func Resolve(id, dir string) (Pipeline, error) {
 	if web := detect.ProcfileWeb(dir); web != "" {
 		p.Deploy.Command = web
 	}
+	p = resolveAdditional(id, dir, p)
 	return p, p.Validate()
 }
 
@@ -241,6 +246,9 @@ func safePath(s string) bool {
 	return !filepath.IsAbs(s) && s != ".." && !strings.HasPrefix(filepath.Clean(s), "../") && !strings.ContainsAny(s, "\r\n\x00\\")
 }
 func (p Pipeline) Validate() error {
+	if p.Deploy.HealthTimeout < 0 || p.Deploy.HealthTimeout > 600 {
+		return fmt.Errorf("health timeout must be between 0 and 600 seconds")
+	}
 	for _, s := range []string{p.Build.Image, p.Test.Image, p.Deploy.Image} {
 		if s != "" && !imageName.MatchString(s) {
 			return fmt.Errorf("invalid image %q", s)
@@ -278,7 +286,7 @@ func (p Pipeline) Dockerfile() (string, error) {
 		return "", fmt.Errorf("use repository Dockerfile")
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "FROM %s AS build\nWORKDIR /app\nCOPY . .\n", p.Build.Image)
+	fmt.Fprintf(&b, "FROM %s AS build\nUSER root\nENTRYPOINT []\nWORKDIR /app\nCOPY . .\n", p.Build.Image)
 	for _, c := range p.Build.Commands {
 		v, _ := json.Marshal([]string{"sh", "-c", c})
 		fmt.Fprintf(&b, "RUN %s\n", v)
@@ -306,6 +314,7 @@ func (p Pipeline) Dockerfile() (string, error) {
 	}
 	fmt.Fprintf(&b, "ENV PORT=%d\nEXPOSE %d\n", p.Deploy.Port, p.Deploy.Port)
 	if p.Deploy.Command != "" {
+		b.WriteString("ENTRYPOINT []\n")
 		v, _ := json.Marshal([]string{"sh", "-c", "exec " + p.Deploy.Command})
 		fmt.Fprintf(&b, "CMD %s\n", v)
 	}

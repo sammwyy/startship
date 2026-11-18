@@ -97,7 +97,7 @@ func TestValidateAndDockerfile(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	for _, want := range []string{"AS build", "AS test", "AS final", "COPY --from=build /app /app", `COPY --from=build ["/app/dist","/app"]`, `CMD ["sh","-c","exec echo \"hello\""]`, `RUN ["sh","-c",`} {
+	for _, want := range []string{"AS build", "USER root", "ENTRYPOINT []", "AS test", "AS final", "COPY --from=build /app /app", `COPY --from=build ["/app/dist","/app"]`, `CMD ["sh","-c","exec echo \"hello\""]`, `RUN ["sh","-c",`} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("missing %s in %s", want, content)
 		}

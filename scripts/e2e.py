@@ -401,7 +401,7 @@ fn main() {
     custom_pipeline = {
         "build": {"image": "python:3.13-slim", "commands": []},
         "test": {"commands": ["echo pipeline-output"], "expect_exit_code": 0, "expect_output": "missing-output"},
-        "deploy": {"command": "python app.py", "port": 8080, "health_path": "/health", "expect_status": 200},
+        "deploy": {"command": "python app.py", "port": 8080, "health_path": "/health", "expect_status": 200, "health_timeout": 15},
     }
     custom = request("projects", {"workspace_id": ws["id"], "name": "Custom pipeline", "git_url": repo.as_uri(),
                                   "build_type": "custom", "pipeline": custom_pipeline})
@@ -424,6 +424,12 @@ fn main() {
     app_ids.extend(c["id"] for c in custom_containers)
     revision = request("deployments/" + successful_pipeline["container_releases"][0])
     assert revision["pipeline"]["deploy"]["health_path"] == "/health"
+    assert revision["pipeline"]["deploy"]["health_timeout"] == 15
+    custom_pipeline["deploy"]["expect_status"] = 201
+    custom_pipeline["deploy"]["health_timeout"] = 1
+    request("projects/" + custom["id"], {"pipeline": custom_pipeline}, "PATCH")
+    timed_out = pipeline_release("failed")
+    assert "health check timed out after 1s" in timed_out["log"], timed_out["log"]
     runtime_logs = subprocess.check_output(["docker", "logs", revision["container"]], text=True, stderr=subprocess.STDOUT)
     assert 'GET /health HTTP/1.1' in runtime_logs, runtime_logs
     ip = revision["ip"]
