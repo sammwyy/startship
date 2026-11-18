@@ -90,6 +90,7 @@ func Run(settings config.Daemon) {
 	go a.sampleTrafficResources(metricsContext)
 	go a.watchUpdates(metricsContext)
 	go a.watchCertificates(metricsContext)
+	go a.scheduleBackups(metricsContext)
 	var proxyHandler http.Handler = a
 	if email := os.Getenv("STARTSHIP_ACME_EMAIL"); email != "" {
 		a.https = true

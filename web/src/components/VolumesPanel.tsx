@@ -42,7 +42,9 @@ function VolumeModal({
     [name, setName] = useState(""),
     [mount, setMount] = useState("/data"),
     [selected, setSelected] = useState("");
-  const available = volumes.filter((v) => !v.project_id && !v.service_id),
+  const available = volumes.filter(
+      (v) => !v.project_id && !v.service_id && !v.purpose,
+    ),
     mountValid =
       mount.startsWith("/") &&
       mount !== "/" &&
@@ -297,7 +299,15 @@ export function VolumesPanel({
                   </span>
                   {!project && (
                     <span className="volume-owner">
-                      {inUse ? (
+                      {v.purpose === "backups" ? (
+                        <Link
+                          className="attachment-chip"
+                          to={`/workspace/${workspaceId}/backups`}
+                        >
+                          <Icon name="history" />
+                          Service backups
+                        </Link>
+                      ) : inUse ? (
                         <Link
                           className="attachment-chip"
                           to={
@@ -314,7 +324,9 @@ export function VolumesPanel({
                       )}
                     </span>
                   )}
-                  <code className="volume-path">{mountPath || "—"}</code>
+                  <code className="volume-path">
+                    {(v.purpose === "backups" ? "/backups" : mountPath) || "—"}
+                  </code>
                   <time className="volume-created" dateTime={v.created}>
                     {new Date(v.created).toLocaleDateString(undefined, {
                       month: "short",

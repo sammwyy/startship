@@ -264,6 +264,7 @@ export function DashboardLayout() {
                   {navLink(`${url}/map`, "Map", "pipeline")}
                   {navLink(`${url}/services`, "Services", "database")}
                   {navLink(`${url}/volumes`, "Volumes", "hard-drive")}
+                  {navLink(`${url}/backups`, "Backups", "history")}
                   {navLink(`${url}/domains`, "Domains", "globe")}
                   {navLink(
                     `${url}/certificates`,

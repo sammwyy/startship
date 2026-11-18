@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { useDashboard } from "../../layouts/DashboardLayout";
 import { useSession } from "../../providers/SessionProvider";
 import { useUI } from "../../providers/UIProvider";
@@ -30,6 +35,11 @@ import {
 import { ServiceConfig } from "../../components/ServiceConfig";
 import { ServiceActions } from "../../components/ServiceActions";
 import { ConnectServiceModal } from "../../components/ConnectServiceModal";
+import {
+  BackupStorage,
+  BackupsPanel,
+  ScheduleEditor,
+} from "../../components/BackupsPanel";
 export function ServiceDetailView() {
   const { workspaceId: id, serviceId } = useParams(),
     { workspace } = useDashboard(),
@@ -40,7 +50,9 @@ export function ServiceDetailView() {
   const list = useServices(id!),
     catalog = useQuery(queries.catalog()),
     projects = useQuery(queries.projects(id!));
-  const [tab, setTab] = useState("connection"),
+  const [tab, setTab] = useState(
+      useSearchParams()[0].get("tab") || "connection",
+    ),
     [alias, setAlias] = useState(""),
     [reveal, setReveal] = useState(false),
     [open, setOpen] = useState(false),
@@ -124,7 +136,12 @@ export function ServiceDetailView() {
         </span>
       </div>
       <nav className="service-tabs" aria-label="Service sections">
-        {["connection", "logs", ...(allowed ? ["settings"] : [])].map((t) => (
+        {[
+          "connection",
+          "logs",
+          ...(s.volume_id ? ["backups"] : []),
+          ...(allowed ? ["settings"] : []),
+        ].map((t) => (
           <button
             key={t}
             className={tab === t ? "active" : ""}
@@ -327,6 +344,28 @@ export function ServiceDetailView() {
             </pre>
           )}
         </section>
+      )}
+      {tab === "backups" && s.volume_id && (
+        <div className="service-detail-grid">
+          <div className="service-detail-main">
+            <BackupsPanel
+              workspaceId={id!}
+              services={list.data?.services || []}
+              service={s}
+              allowed={allowed}
+            />
+          </div>
+          <aside>
+            {allowed && (
+              <ScheduleEditor
+                key={JSON.stringify(s.backup)}
+                service={s}
+                disabled={s.status === "restoring"}
+              />
+            )}
+            <BackupStorage workspaceId={id!} />
+          </aside>
+        </div>
       )}
       {tab === "settings" && allowed && (
         <section className="panel service-settings">

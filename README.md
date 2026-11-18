@@ -211,6 +211,29 @@ startship volumes detach VOLUME_ID
 startship volumes delete VOLUME_ID        # rejected while attached to a project/service
 ```
 
+### Service backups
+
+Services with a persistent volume can be backed up on a schedule. Copies are
+compressed archives in the workspace `service-backups` volume (created on the
+first backup). Scheduled copies rotate by `--keep`; manual and pre-restore
+copies stay until deleted. Restores stop the target service, take a safety
+backup, replace its data and start it again. Times are UTC.
+
+```sh
+startship backups schedule SERVICE_ID --every daily --at 03:00 --keep 7
+startship backups schedule SERVICE_ID --every weekly --weekday sun --at 02:30
+startship backups schedule SERVICE_ID --off
+startship backups create SERVICE_ID      # back up now
+startship backups Team                   # shorthand for backups list Team
+startship backups list Team --service SERVICE_ID
+startship backups restore BACKUP_ID      # into its service; --service ID for another of the same engine
+startship backups download BACKUP_ID --output db.tar.gz
+startship backups delete BACKUP_ID
+```
+
+The helper image defaults to `busybox:1.37`; set `STARTSHIP_BACKUP_IMAGE` on the
+daemon to use a mirror.
+
 Workspace and project arguments accept names or IDs; service and volume targets
 use IDs. Every command supports `--json`, preserving its API response (including
 list wrappers and log objects). `services [list] WORKSPACE` and
