@@ -179,12 +179,16 @@ func (a *Server) serviceAction(id, action string) error {
 		if err != nil {
 			return err
 		}
-		a.serviceDocker("rm", "-f", serviceContainer(id))
+		a.serviceDocker("rm", "-f", "-v", serviceContainer(id))
 		update("starting")
 		if err = a.serviceNetwork("startship-services"); err != nil {
 			return err
 		}
-		args := []string{"run", "-d", "--name", serviceContainer(id), "--hostname", serviceContainer(id), "--network", "startship-services", "--restart", "unless-stopped", "--label", "startship.managed=true", "--label", "startship.service=" + id, "--memory", limitEnv("STARTSHIP_SERVICE_MEMORY", "1g"), "--cpus", limitEnv("STARTSHIP_SERVICE_CPUS", "1")}
+		memory := "1g"
+		if e.ID == "opensearch" {
+			memory = "2g"
+		}
+		args := []string{"run", "-d", "--name", serviceContainer(id), "--hostname", serviceContainer(id), "--network", "startship-services", "--restart", "unless-stopped", "--label", "startship.managed=true", "--label", "startship.service=" + id, "--memory", limitEnv("STARTSHIP_SERVICE_MEMORY", memory), "--cpus", limitEnv("STARTSHIP_SERVICE_CPUS", "1")}
 		if s.ExternalPort != 0 {
 			port := e.Port
 			if e.ID == "kafka" {
@@ -209,7 +213,7 @@ func (a *Server) serviceAction(id, action string) error {
 			args = append(args, "-e", k+"="+v)
 		}
 		args = append(args, e.Image+":"+s.Version)
-		args = append(args, e.Command()...)
+		args = append(args, e.Command(s.Config)...)
 		_, err = a.serviceDocker(args...)
 	} else {
 		_, err = a.serviceDocker(action, serviceContainer(id))

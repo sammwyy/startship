@@ -532,6 +532,12 @@ go vet ./... && go test ./...
 
 E2E requires Python 3, curl, Git and real Docker. It also covers a two-HTTP-container project release, shared config, container domain targets, grouped failure preservation, artifact redeploy, and restart recovery. Uses localhost ports 18080/18081, creates a local Dockerfile + Python + Rust + static monorepo, auto-detects and deploys all four through the API, tests route URLs, prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.
 
+`STARTSHIP_E2E_SERVICES=1 ./scripts/e2e.sh` additionally exercises all 13 catalog engines with real clients and API-generated credentials, including generated connection URLs and Kafka host/project-network listeners. It pulls several large images and removes its test workspace, services, volumes, project and helper client image. Run just this catalog check against an existing daemon with `STARTSHIP_SERVICES_USER=admin STARTSHIP_SERVICES_PASSWORD=... python3 scripts/services_e2e.py` (`STARTSHIP_SERVICES_API` defaults to `http://127.0.0.1:18080/api/`).
+
+The catalog check is strict: missing upstream images (currently MinIO's removed public repositories) fail the opt-in run rather than being skipped.
+
+New Redis/Valkey services require a generated password. OpenSearch uses the built-in `admin` user, a strong generated password, HTTPS with the image's self-signed demo certificate, a 512 MiB heap and a 2 GiB default container limit (overridable with `STARTSHIP_SERVICE_MEMORY`). Configure trusted TLS before production use. Memcached, NATS and Kafka have no authentication configured by default; do not expose them on untrusted networks.
+
 ## Project layout
 
 - `cmd/startshipd`, `cmd/startship`: daemon and CLI entrypoints.

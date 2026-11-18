@@ -365,8 +365,11 @@ fn main() {
     else:
         raise TimeoutError("Redis service did not start: " + service.get("last_error", ""))
     with socket.create_connection(("127.0.0.1", service_port), timeout=5) as redis:
+        stream = redis.makefile("rb")
+        redis.sendall(("AUTH " + service["config"]["password"] + "\r\n").encode())
+        assert stream.readline() == b"+OK\r\n"
         redis.sendall(b"*1\r\n$4\r\nPING\r\n")
-        assert redis.recv(1024) == b"+PONG\r\n"
+        assert stream.readline() == b"+PONG\r\n"
     print("Redis service running via API and external host-port PING: +PONG")
     request("services/" + service["id"] + "/attachments", {"project_id": grouped["id"], "alias": "shared-cache"})
     project_volume = request("workspaces/" + ws["id"] + "/volumes",
@@ -388,6 +391,7 @@ fn main() {
                  'assert host=="shared-cache.local"; '
                  'assert socket.gethostbyname(host)==socket.gethostbyname("e2e-cache.local"); '
                  's=socket.create_connection((host,int(os.environ["SHARED_CACHE_PORT"])),5); '
+                 's.sendall(("AUTH "+os.environ["SHARED_CACHE_PASSWORD"]+"\\r\\n").encode()); assert s.recv(1024)==b"+OK\\r\\n"; '
                  's.sendall(b"PING\\r\\n"); assert s.recv(1024)==b"+PONG\\r\\n"; s.close()')
         subprocess.run(["docker", "exec", revision["container"], "python", "-c", probe], check=True)
         assert any(mount["Name"] == "startship-vol-" + project_volume["id"] and mount["Destination"] == "/e2e-data"
@@ -551,6 +555,9 @@ fn main() {
                 print("buildpacks exit 3: stage failed (test expected exit code 0, got 3), matching output did not mask failure; Deploy skipped and healthy release preserved: OK")
     else:
         print("engine deployments: SKIP (set STARTSHIP_E2E_ENGINES=1; pinned Nixpacks and large CNB downloads required)")
+    if os.getenv("STARTSHIP_E2E_SERVICES") == "1":
+        from services_e2e import run_services
+        run_services(request)
     print("E2E PASS")
 finally:
     if process and process.poll() is None:

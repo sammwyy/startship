@@ -66,7 +66,7 @@ func TestServiceLifecycle(t *testing.T) {
 	calls := []string{}
 	f.a.dockerService = func(args ...string) (string, error) { calls = append(calls, strings.Join(args, " ")); return "ok", nil }
 	e, _ := catalog.Lookup("redis")
-	s := Service{ID: "lifecycle", WorkspaceID: f.workspace.ID, Name: "cache", Engine: e.ID, Version: e.Versions[0], VolumeID: "data", ExternalPort: 16379, Attachments: []Attachment{{ProjectID: f.project.ID, Alias: "cache"}}}
+	s := Service{ID: "lifecycle", WorkspaceID: f.workspace.ID, Name: "cache", Engine: e.ID, Version: e.Versions[0], Config: map[string]string{"password": "test-password"}, VolumeID: "data", ExternalPort: 16379, Attachments: []Attachment{{ProjectID: f.project.ID, Alias: "cache"}}}
 	f.a.saveVolume(Volume{ID: "data", WorkspaceID: f.workspace.ID, ServiceID: s.ID})
 	f.a.saveService(s)
 	for _, action := range []string{"recreate", "stop", "start", "restart"} {
@@ -75,7 +75,7 @@ func TestServiceLifecycle(t *testing.T) {
 		}
 	}
 	all := strings.Join(calls, "\n")
-	for _, want := range []string{"pull redis:7.4", "--memory 1g --cpus 1", "-p 16379:6379", "-v startship-vol-data:/data", "--alias cache --alias cache.local", "redis:7.4 --appendonly yes", "stop startship-svc-lifecycle", "start startship-svc-lifecycle", "restart startship-svc-lifecycle"} {
+	for _, want := range []string{"pull redis:7.4", "--memory 1g --cpus 1", "-p 16379:6379", "-v startship-vol-data:/data", "--alias cache --alias cache.local", "redis:7.4 --appendonly yes --requirepass test-password", "stop startship-svc-lifecycle", "start startship-svc-lifecycle", "restart startship-svc-lifecycle"} {
 		if !strings.Contains(all, want) {
 			t.Fatal(want, all)
 		}
@@ -92,7 +92,23 @@ func TestServiceLifecycle(t *testing.T) {
 			t.Fatal(want, calls)
 		}
 	}
+	s.Engine = "opensearch"
+	s.Version = "2.19.1"
+	s.Config = map[string]string{"user": "admin", "password": "strong-password"}
+	f.a.saveService(s)
+	if err := f.a.serviceAction(s.ID, "recreate"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"--memory 2g --cpus 1", "OPENSEARCH_INITIAL_ADMIN_PASSWORD=strong-password", "node.store.allow_mmap=false"} {
+		if !strings.Contains(strings.Join(calls, "\n"), want) {
+			t.Fatal(want)
+		}
+	}
+	calls = nil
 	accountRequest(t, f.h, "DELETE", "services/"+s.ID+"?delete_volume=true", "", f.alice, 200)
+	if !strings.Contains(strings.Join(calls, "\n"), "rm -f -v startship-svc-lifecycle") {
+		t.Fatal("anonymous service volumes not removed", calls)
+	}
 	if _, err := getResource[Volume](f.a, "volumes", "data"); err == nil {
 		t.Fatal("volume not deleted")
 	}

@@ -56,7 +56,7 @@ export function connectionEnv(
         valkey: "redis",
         clickhouse: "http",
         minio: "http",
-        opensearch: "http",
+        opensearch: "https",
       } as Record<string, string>
     )[engine.id] || engine.id;
   const escape = (value: string) =>
@@ -64,9 +64,10 @@ export function connectionEnv(
       /[!'()*]/g,
       (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
     );
-  const auth = config.user
-    ? `${escape(config.user)}:${escape(config.password || "")}@`
-    : "";
+  const auth =
+    config.user || config.password
+      ? `${escape(config.user || "")}:${escape(config.password || "")}@`
+      : "";
   const database = config.database
     ? `/${config.database.split("/").map(escape).join("/")}`
     : "";

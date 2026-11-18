@@ -46,15 +46,15 @@ var engines = []Engine{
 	{ID: "mysql", Name: "MySQL", Category: "database", Image: "mysql", Versions: []string{"8.4", "8.0"}, Port: 3306, DataPath: "/var/lib/mysql", Fields: credentials()},
 	{ID: "mariadb", Name: "MariaDB", Category: "database", Image: "mariadb", Versions: []string{"11.4", "10.11"}, Port: 3306, DataPath: "/var/lib/mysql", Fields: credentials()},
 	{ID: "mongodb", Name: "MongoDB", Category: "database", Image: "mongo", Versions: []string{"8.0", "7.0"}, Port: 27017, DataPath: "/data/db", Fields: credentials()},
-	{ID: "redis", Name: "Redis", Category: "cache", Image: "redis", Versions: []string{"7.4", "7.2"}, Port: 6379, DataPath: "/data"},
-	{ID: "valkey", Name: "Valkey", Category: "cache", Image: "valkey/valkey", Versions: []string{"8.0", "7.2"}, Port: 6379, DataPath: "/data"},
+	{ID: "redis", Name: "Redis", Category: "cache", Image: "redis", Versions: []string{"7.4", "7.2"}, Port: 6379, DataPath: "/data", Fields: credentials()[1:2]},
+	{ID: "valkey", Name: "Valkey", Category: "cache", Image: "valkey/valkey", Versions: []string{"8.0", "7.2"}, Port: 6379, DataPath: "/data", Fields: credentials()[1:2]},
 	{ID: "memcached", Name: "Memcached", Category: "cache", Image: "memcached", Versions: []string{"1.6"}, Port: 11211},
 	{ID: "rabbitmq", Name: "RabbitMQ", Category: "queue", Image: "rabbitmq", Versions: []string{"4.1", "4.0"}, Port: 5672, DataPath: "/var/lib/rabbitmq", Fields: credentials()[:2]},
 	{ID: "kafka", Name: "Kafka", Category: "queue", Image: "apache/kafka", Versions: []string{"3.9.0"}, Port: 9092, DataPath: "/var/lib/kafka/data", Fields: []Field{{Key: "external_host", Label: "External hostname", Type: "text", Default: "localhost", Required: true, Help: "Public hostname or IP advertised to external Kafka clients (without a port)."}}},
 	{ID: "nats", Name: "NATS", Category: "queue", Image: "nats", Versions: []string{"2.10"}, Port: 4222, DataPath: "/data"},
 	{ID: "clickhouse", Name: "ClickHouse", Category: "database", Image: "clickhouse/clickhouse-server", Versions: []string{"25.3", "24.8"}, Port: 8123, DataPath: "/var/lib/clickhouse", Fields: credentials()},
 	{ID: "minio", Name: "MinIO", Category: "storage", Image: "minio/minio", Versions: []string{"RELEASE.2025-04-22T22-12-26Z"}, Port: 9000, DataPath: "/data", Fields: credentials()[:2]},
-	{ID: "opensearch", Name: "OpenSearch", Category: "search", Image: "opensearchproject/opensearch", Versions: []string{"2.19.1"}, Port: 9200, DataPath: "/usr/share/opensearch/data"},
+	{ID: "opensearch", Name: "OpenSearch", Category: "search", Image: "opensearchproject/opensearch", Versions: []string{"2.19.1"}, Port: 9200, DataPath: "/usr/share/opensearch/data", Fields: []Field{field("user", "admin"), credentials()[1]}},
 }
 
 func All() []Engine {
@@ -96,6 +96,9 @@ func Validate(e Engine, version string, values map[string]string) (map[string]st
 					return nil, err
 				}
 				v = hex.EncodeToString(b)
+				if e.ID == "opensearch" {
+					v = "Ss1!" + v
+				}
 			}
 		}
 		if f.Required && v == "" {
@@ -105,6 +108,15 @@ func Validate(e Engine, version string, values map[string]string) (map[string]st
 			return nil, fmt.Errorf("external_host must be a hostname or IPv4 address without a port")
 		}
 		out[f.Key] = v
+	}
+	if e.ID == "opensearch" {
+		if out["user"] != "admin" {
+			return nil, fmt.Errorf("OpenSearch uses the built-in admin user")
+		}
+		p := out["password"]
+		if len(p) < 8 || !regexp.MustCompile(`[A-Z]`).MatchString(p) || !regexp.MustCompile(`[a-z]`).MatchString(p) || !regexp.MustCompile(`[0-9]`).MatchString(p) || !regexp.MustCompile(`[^A-Za-z0-9]`).MatchString(p) {
+			return nil, fmt.Errorf("OpenSearch password needs at least 8 characters with uppercase, lowercase, number and symbol")
+		}
 	}
 	return out, nil
 }
@@ -139,18 +151,22 @@ func (e Engine) Env(v map[string]string) map[string]string {
 		out["MINIO_ROOT_PASSWORD"] = v["password"]
 	case "opensearch":
 		out["discovery.type"] = "single-node"
-		out["DISABLE_SECURITY_PLUGIN"] = "true"
-		out["DISABLE_INSTALL_DEMO_CONFIG"] = "true"
+		out["OPENSEARCH_INITIAL_ADMIN_PASSWORD"] = v["password"]
+		out["node.store.allow_mmap"] = "false"
 		out["OPENSEARCH_JAVA_OPTS"] = "-Xms512m -Xmx512m"
 	case "kafka":
 		out = map[string]string{"KAFKA_NODE_ID": "1", "KAFKA_PROCESS_ROLES": "broker,controller", "KAFKA_LISTENERS": "PLAINTEXT://:9092,CONTROLLER://:9093", "KAFKA_ADVERTISED_LISTENERS": "PLAINTEXT://localhost:9092", "KAFKA_CONTROLLER_LISTENER_NAMES": "CONTROLLER", "KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT", "KAFKA_CONTROLLER_QUORUM_VOTERS": "1@localhost:9093", "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1", "KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR": "1", "KAFKA_TRANSACTION_STATE_LOG_MIN_ISR": "1", "KAFKA_LOG_DIRS": e.DataPath}
 	}
 	return out
 }
-func (e Engine) Command() []string {
+func (e Engine) Command(v map[string]string) []string {
 	switch e.ID {
 	case "redis", "valkey":
-		return []string{"--appendonly", "yes"}
+		args := []string{"--appendonly", "yes"}
+		if v["password"] != "" {
+			args = append(args, "--requirepass", v["password"])
+		}
+		return args
 	case "nats":
 		return []string{"-js", "-sd", "/data"}
 	case "minio":
@@ -164,12 +180,12 @@ var separator = regexp.MustCompile(`[^A-Z0-9]`)
 func (e Engine) Connection(alias string, port int, v map[string]string) map[string]string {
 	host := alias + ".local"
 	prefix := separator.ReplaceAllString(strings.ToUpper(alias), "_") + "_"
-	scheme := map[string]string{"postgresql": "postgres", "mariadb": "mysql", "rabbitmq": "amqp", "valkey": "redis", "clickhouse": "http", "minio": "http", "opensearch": "http"}[e.ID]
+	scheme := map[string]string{"postgresql": "postgres", "mariadb": "mysql", "rabbitmq": "amqp", "valkey": "redis", "clickhouse": "http", "minio": "http", "opensearch": "https"}[e.ID]
 	if scheme == "" {
 		scheme = e.ID
 	}
 	u := url.URL{Scheme: scheme, Host: net.JoinHostPort(host, strconv.Itoa(port))}
-	if v["user"] != "" {
+	if v["user"] != "" || v["password"] != "" {
 		u.User = url.UserPassword(v["user"], v["password"])
 	}
 	if v["database"] != "" {

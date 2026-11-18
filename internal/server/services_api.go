@@ -368,7 +368,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				return true
 			}
 			if existsErr == nil {
-				_, err = a.serviceDocker("rm", "-f", serviceContainer(s.ID))
+				_, err = a.serviceDocker("rm", "-f", "-v", serviceContainer(s.ID))
 			}
 			if err != nil {
 				fail(w, 500, err.Error())

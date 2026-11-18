@@ -87,6 +87,22 @@ describe("service and volume live snapshots", () => {
   });
 });
 describe("connection previews", () => {
+  it("includes password-only cache authentication and secure OpenSearch URLs", () => {
+    expect(
+      connectionEnv(
+        { config: { password: "p@ss" } } as unknown as Service,
+        { id: "redis", port: 6379 } as ServiceEngine,
+        "cache",
+      ).CACHE_URL,
+    ).toBe("redis://:p%40ss@cache.local:6379");
+    expect(
+      connectionEnv(
+        { config: { user: "admin", password: "secret" } } as unknown as Service,
+        { id: "opensearch", port: 9200 } as ServiceEngine,
+        "search",
+      ).SEARCH_URL,
+    ).toBe("https://admin:secret@search.local:9200");
+  });
   it("orders connection fields consistently, with extra variables last", () => {
     expect(
       orderedConnectionEnv({

@@ -9,7 +9,11 @@ import { NewServiceModal } from "./NewServiceModal";
 import { ConnectServiceModal } from "./ConnectServiceModal";
 import { EnvPreview, ServicePicker } from "./ServiceUI";
 import { EngineIcon } from "./EngineIcon";
+import { generateServiceSecret } from "./ServiceConfig";
 vi.mock("../services/api", () => ({ request: vi.fn() }));
+it("generates secrets accepted by engines requiring mixed password classes", () => {
+  expect(generateServiceSecret()).toMatch(/^Ss1![a-f0-9]{48}$/);
+});
 vi.mock("../providers/UIProvider", () => ({
   useUI: () => ({ run: vi.fn(), notify: vi.fn() }),
 }));

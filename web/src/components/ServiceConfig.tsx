@@ -7,9 +7,12 @@ import { EngineIcon } from "./EngineIcon";
 import { Icon } from "./Icon";
 
 export function generateServiceSecret() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(24)), (v) =>
-    v.toString(16).padStart(2, "0"),
-  ).join("");
+  return (
+    "Ss1!" +
+    Array.from(crypto.getRandomValues(new Uint8Array(24)), (v) =>
+      v.toString(16).padStart(2, "0"),
+    ).join("")
+  );
 }
 export function ServiceConfig({
   engine,
