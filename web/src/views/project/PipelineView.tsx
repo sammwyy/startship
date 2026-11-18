@@ -34,6 +34,38 @@ const autoTemplate: PipelineTemplate = {
 const lines = (value: string) => value.split("\n");
 const tabs = ["build", "test", "deploy", "health"] as const;
 const tabNames = ["Build", "Test", "Deploy", "Health check"];
+function stageValues(p: Pipeline, tab: (typeof tabs)[number], auto: boolean) {
+  const { build, test, deploy } = clean(p);
+  switch (tab) {
+    case "build":
+      return auto
+        ? []
+        : [build.image || "", build.dockerfile || "", build.commands || []];
+    case "test":
+      return [
+        test.image || "",
+        test.commands || [],
+        test.expect_exit_code || 0,
+        test.expect_output || "",
+      ];
+    case "deploy":
+      return auto
+        ? [deploy.port || 0]
+        : [
+            deploy.image || "",
+            deploy.artifact || "",
+            !!deploy.static,
+            deploy.command || "",
+            deploy.port || 0,
+          ];
+    case "health":
+      return [
+        deploy.health_path || "",
+        deploy.expect_status || 0,
+        deploy.health_timeout || 0,
+      ];
+  }
+}
 const clean = (p: Pipeline): Pipeline => ({
   ...p,
   build: { ...p.build, commands: p.build.commands?.filter((s) => s.trim()) },
@@ -118,6 +150,14 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
   const detectedPort = detected.find((d) => auto || d.template === strategy)
     ?.pipeline?.deploy.port;
   const portHint = detectedPort || current?.pipeline.deploy.port;
+  const defaults =
+    detected.find(
+      (d) =>
+        d.template === strategy && d.root_dir === (project.root_dir || "."),
+    )?.pipeline ||
+    detected.find((d) => d.template === strategy)?.pipeline ||
+    current?.pipeline ||
+    emptyPipeline();
   function stage<K extends keyof Pipeline>(
     key: K,
     patch: Partial<Pipeline[K]>,
@@ -248,29 +288,8 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
           >
             {tabs.map((value, index) => {
               const configured =
-                value === "health"
-                  ? !!(
-                      pipeline.deploy.health_path ||
-                      pipeline.deploy.expect_status ||
-                      pipeline.deploy.health_timeout
-                    )
-                  : value === "deploy"
-                    ? !!(
-                        pipeline.deploy.command ||
-                        pipeline.deploy.static ||
-                        pipeline.deploy.port
-                      )
-                    : value === "build"
-                      ? !!(
-                          pipeline.build.commands?.length ||
-                          pipeline.build.dockerfile
-                        )
-                      : !!(
-                          pipeline.test.commands?.length ||
-                          pipeline.test.expect_output ||
-                          pipeline.test.image ||
-                          pipeline.test.expect_exit_code
-                        );
+                JSON.stringify(stageValues(pipeline, value, auto)) !==
+                JSON.stringify(stageValues(defaults, value, auto));
               return (
                 <button
                   key={value}
@@ -301,7 +320,8 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                   {configured && (
                     <span
                       className="pipeline-tab-dot"
-                      aria-label="Configured"
+                      aria-label="Differs from template defaults"
+                      title="Differs from template defaults"
                     />
                   )}
                 </button>
@@ -315,14 +335,6 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             aria-labelledby="pipeline-tab-build"
             className="pipeline-stage"
           >
-            <header>
-              <span className="pipeline-step">1</span>
-              <div>
-                <h2>Build</h2>
-                <p>Prepare your application</p>
-              </div>
-              <Icon name="code" />
-            </header>
             <fieldset disabled={!editable} className="pipeline-stage-body">
               {auto ? (
                 <DetectedNote />
@@ -344,6 +356,9 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                       }
                     />
                   ) : (
+                    <Field label="Working directory" value="/app" readOnly />
+                  )}
+                  {!pipeline.build.dockerfile && strategy !== "dockerfile" && (
                     <label>
                       Build commands
                       <textarea
@@ -370,14 +385,6 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             aria-labelledby="pipeline-tab-test"
             className="pipeline-stage"
           >
-            <header>
-              <span className="pipeline-step">2</span>
-              <div>
-                <h2>Test</h2>
-                <p>Verify before going live</p>
-              </div>
-              <Icon name="check" />
-            </header>
             <fieldset disabled={!editable} className="pipeline-stage-body">
               {pipeline.build.dockerfile && !auto ? (
                 <p className="small muted">
@@ -430,14 +437,6 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             aria-labelledby="pipeline-tab-deploy"
             className="pipeline-stage"
           >
-            <header>
-              <span className="pipeline-step">3</span>
-              <div>
-                <h2>Deploy</h2>
-                <p>Serve & check your application</p>
-              </div>
-              <Icon name="rocket" />
-            </header>
             <fieldset disabled={!editable} className="pipeline-stage-body">
               {auto ? (
                 <DetectedNote />
@@ -513,14 +512,6 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             aria-labelledby="pipeline-tab-health"
             className="pipeline-stage"
           >
-            <header>
-              <span className="pipeline-step">4</span>
-              <div>
-                <h2>Health check</h2>
-                <p>Wait until your application is ready to serve traffic</p>
-              </div>
-              <Icon name="check" />
-            </header>
             <fieldset disabled={!editable} className="pipeline-stage-body">
               <p className="small muted">
                 {staticServing

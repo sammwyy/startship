@@ -122,6 +122,33 @@ describe("project pipeline", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Use Vite" }));
     expect(screen.getByLabelText("Build image")).toHaveValue("node:22-alpine");
+    expect(screen.getByLabelText("Working directory")).toHaveValue("/app");
+    expect(screen.getByLabelText("Working directory")).toHaveAttribute(
+      "readonly",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Build" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText("Build image"), {
+      target: { value: "node:24-alpine" },
+    });
+    expect(
+      within(screen.getByRole("tab", { name: /1 Build/ })).getByLabelText(
+        "Differs from template defaults",
+      ),
+    ).toHaveAttribute("title", "Differs from template defaults");
+    expect(
+      screen.getAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(1);
+    fireEvent.change(screen.getByLabelText("Build image"), {
+      target: { value: "node:22-alpine" },
+    });
+    expect(
+      screen.queryAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(0);
     expect(screen.getByLabelText("Build commands")).toHaveValue(
       "npm ci\nnpm run build",
     );
@@ -346,6 +373,9 @@ describe("project pipeline", () => {
     expect(screen.getByLabelText("Build commands")).toHaveValue(
       "pnpm install\npnpm run build",
     );
+    expect(
+      screen.queryAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(0);
   });
   it.each(["vite", "go", "auto"])(
     "marks a detected template in use only when the saved strategy is %s",
