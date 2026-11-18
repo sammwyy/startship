@@ -87,18 +87,28 @@ describe("project pipeline", () => {
     async (engine) => {
       state.project.build_type = "go";
       show();
-      fireEvent.change(await screen.findByLabelText("Engine"), {
-        target: { value: engine },
-      });
+      fireEvent.click(
+        await screen.findByRole("radio", {
+          name: engine === "nixpacks" ? "Nixpacks" : "Buildpacks",
+        }),
+      );
       expect(screen.queryByLabelText("Build image")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Build commands")).not.toBeInTheDocument();
       expect(screen.getByRole("tab", { name: /1 Build/ })).toHaveTextContent(
         "Modified",
       );
+      for (const name of [/2 Test/, /3 Deploy/, /4 Health check/]) {
+        expect(screen.getByRole("tab", { name })).not.toHaveTextContent(
+          "Modified",
+        );
+      }
       fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
       fireEvent.change(screen.getByLabelText("Test commands"), {
         target: { value: "echo engine-test" },
       });
+      expect(screen.getByRole("tab", { name: /2 Test/ })).toHaveTextContent(
+        "Modified",
+      );
       fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
       await waitFor(() =>
         expect(state.request).toHaveBeenCalledWith(
@@ -115,10 +125,11 @@ describe("project pipeline", () => {
         ),
       );
       fireEvent.click(screen.getByRole("tab", { name: /1 Build/ }));
-      fireEvent.change(screen.getByLabelText("Engine"), {
-        target: { value: "docker" },
-      });
+      fireEvent.click(screen.getByRole("radio", { name: "Dockerfile" }));
       expect(screen.getByLabelText("Build image")).toHaveValue("golang:1.26");
+      expect(
+        screen.getByRole("tab", { name: /1 Build/ }),
+      ).not.toHaveTextContent("Modified");
     },
   );
   it("keeps Auto as the strategy when changing engines and preserves a saved engine", async () => {
@@ -128,10 +139,10 @@ describe("project pipeline", () => {
       deploy: { port: 0 },
     };
     show();
-    expect(await screen.findByLabelText("Engine")).toHaveValue("nixpacks");
-    fireEvent.change(screen.getByLabelText("Engine"), {
-      target: { value: "buildpacks" },
-    });
+    expect(
+      await screen.findByRole("radio", { name: "Nixpacks" }),
+    ).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "Buildpacks" }));
     fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
     await waitFor(() =>
       expect(state.request).toHaveBeenCalledWith(
@@ -145,6 +156,22 @@ describe("project pipeline", () => {
         "PATCH",
       ),
     );
+  });
+  it("shows an accessible engine group with descriptions and read-only options", async () => {
+    state.editable = false;
+    show();
+    const group = await screen.findByRole("group", { name: "Engine" });
+    expect(within(group).getAllByRole("radio")).toHaveLength(3);
+    expect(
+      group.querySelector(".template-icon-neutral .lucide-box"),
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByRole("radio", { name: "Dockerfile" }),
+    ).toBeChecked();
+    for (const radio of within(group).getAllByRole("radio")) {
+      expect(radio).toBeDisabled();
+      expect(radio).toHaveAccessibleDescription();
+    }
   });
   beforeEach(() => {
     vi.clearAllMocks();

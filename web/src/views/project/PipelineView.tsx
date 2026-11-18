@@ -34,6 +34,26 @@ const autoTemplate: PipelineTemplate = {
 const lines = (value: string) => value.split("\n");
 const tabs = ["build", "test", "deploy", "health"] as const;
 const tabNames = ["Build", "Test", "Deploy", "Health check"];
+const engines = [
+  {
+    id: "docker",
+    name: "Dockerfile",
+    icon: "docker",
+    hint: "Dockerfile or commands.",
+  },
+  {
+    id: "nixpacks",
+    name: "Nixpacks",
+    icon: "nixos",
+    hint: "Nix app detection.",
+  },
+  {
+    id: "buildpacks",
+    name: "Buildpacks",
+    icon: "box",
+    hint: "Paketo app detection.",
+  },
+] as const;
 type ValidatableField =
   HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 function stageValues(p: Pipeline, tab: (typeof tabs)[number], auto: boolean) {
@@ -375,36 +395,38 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             className="pipeline-stage"
           >
             <fieldset disabled={!editable} className="pipeline-stage-body">
-              <div className="pipeline-engine-row">
-                <label>
-                  Engine
-                  <select
-                    value={engine}
-                    onChange={(event) =>
-                      stage("build", {
-                        engine: event.target
-                          .value as Pipeline["build"]["engine"],
-                      })
-                    }
-                  >
-                    <option value="docker">Dockerfile</option>
-                    <option value="nixpacks">Nixpacks</option>
-                    <option value="buildpacks">Buildpacks</option>
-                  </select>
-                </label>
-              </div>
-              {engine !== "docker" ? (
-                <div className="pipeline-auto-note">
-                  <TemplateIcon
-                    slug={engine === "nixpacks" ? "nixos" : "cncf"}
-                  />
-                  <p className="small muted">
-                    {engine === "nixpacks"
-                      ? "Nixpacks detects and builds your app; its start command is kept unless overridden in Deploy."
-                      : "Paketo Buildpacks detects and builds your app into a container using the bounded build worker."}
-                  </p>
+              <fieldset className="pipeline-engine-picker">
+                <legend>Engine</legend>
+                <div className="pipeline-engine-options">
+                  {engines.map((option) => (
+                    <label className="pipeline-engine-option" key={option.id}>
+                      <input
+                        type="radio"
+                        name="build-engine"
+                        value={option.id}
+                        checked={engine === option.id}
+                        aria-labelledby={`engine-name-${option.id}`}
+                        aria-describedby={`engine-hint-${option.id}`}
+                        onChange={() => stage("build", { engine: option.id })}
+                      />
+                      <span
+                        className="pipeline-engine-name"
+                        id={`engine-name-${option.id}`}
+                      >
+                        <TemplateIcon slug={option.icon} />
+                        {option.name}
+                      </span>
+                      <span
+                        className="small muted"
+                        id={`engine-hint-${option.id}`}
+                      >
+                        {option.hint}
+                      </span>
+                    </label>
+                  ))}
                 </div>
-              ) : auto ? (
+              </fieldset>
+              {engine !== "docker" ? null : auto ? (
                 <DetectedNote />
               ) : (
                 <>
