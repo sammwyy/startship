@@ -71,18 +71,20 @@ func TestEngineImageCommands(t *testing.T) {
 	if !strings.Contains(stage, "FROM node:22-alpine") || !strings.Contains(stage, "COPY app/ /app/") || strings.Contains(stage, "ENTRYPOINT") || strings.Contains(stage, "CMD") {
 		t.Fatal("stage image must retain its base start command", stage)
 	}
-	for _, engine := range []string{"nixpacks", "buildpacks"} {
+	for _, engine := range []string{"", "docker", "nixpacks", "buildpacks"} {
 		p := &pipeline.Pipeline{Build: pipeline.Build{Engine: engine}}
 		for _, custom := range []bool{false, true} {
-			args := engineCommand(p, "app", "echo ok", custom)
-			if args[0] != "--entrypoint" || args[len(args)-1] != "echo ok" {
-				t.Fatal(args)
-			}
-			if (args[1] == "/cnb/lifecycle/launcher") != (engine == "buildpacks" && !custom) {
-				t.Fatal(args)
+			for _, command := range []string{"", "set -e\nnode -e \"console.log('engine-test ' + process.version)\"", "set -e\necho engine-test\nexit 3", "exec node -e \"require('./server.js')\" -- --override"} {
+				want := []string{"--entrypoint", "/bin/sh", "app", "-c", command}
+				if engine == "buildpacks" && !custom {
+					want = []string{"--entrypoint", "/cnb/lifecycle/launcher", "app", "--", "/bin/sh", "-c", command}
+				}
+				if args := engineCommand(p, "app", command, custom); !reflect.DeepEqual(args, want) {
+					t.Fatalf("engine %q custom %v: got %#v, want %#v", engine, custom, args, want)
+				}
 			}
 		}
-		if !externalEngine(p) {
+		if externalEngine(p) != (engine == "nixpacks" || engine == "buildpacks") {
 			t.Fatal(engine)
 		}
 	}

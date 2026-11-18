@@ -316,7 +316,7 @@ func engineStageDockerfile(base string) string {
 
 func engineCommand(p *pipeline.Pipeline, image, command string, customImage bool) []string {
 	if p.Build.Engine == "buildpacks" && !customImage {
-		return []string{"--entrypoint", "/cnb/lifecycle/launcher", image, "/bin/sh", "-c", command}
+		return []string{"--entrypoint", "/cnb/lifecycle/launcher", image, "--", "/bin/sh", "-c", command}
 	}
 	return []string{"--entrypoint", "/bin/sh", image, "-c", command}
 }

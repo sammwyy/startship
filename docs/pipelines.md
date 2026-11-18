@@ -97,14 +97,17 @@ CPU/memory limits and BuildKit pruning. Plan/OCI staging is outside the worker;
 image downloads and Docker imports, like ordinary `--load`, are not compilation.
 
 Tests run in the engine image, with inherited entrypoints replaced (CNB's launcher
-still sets up layer environments). A separate Test image receives application
-files at `/app` and must supply its own tools. A separate Deploy image similarly
-receives the artifact at `/app` and must supply its own runtime/start command.
+still sets up layer environments). CNB overrides use the launcher's `--`
+direct-process form so Test/Deploy shell commands are not parsed a second time.
+A separate Test image receives application files at `/app` and must supply its
+own tools. A separate Deploy image similarly receives the artifact at `/app` and
+must supply its own runtime/start command.
 Artifacts are relative to `/app` for Nixpacks or `/workspace` for Buildpacks.
 Static extraction, when explicitly configured, uses that same application path.
 
 `STARTSHIP_E2E_ENGINES=1 ./scripts/e2e.sh` additionally exercises real Node engine
 deployments, tests, command override, snapshots, worker limits and proxy responses.
+Use `STARTSHIP_E2E_ENGINES=buildpacks` or `nixpacks` to run just one engine.
 This is opt-in: pinned host tooling and large CNB/Nix downloads are unsuitable for
 the default 20-minute CI job. Unit/API tests always cover engine configuration.
 To mirror Docker Hub for Docker/Nixpacks stages, configure the daemon user's

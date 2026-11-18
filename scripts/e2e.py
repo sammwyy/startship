@@ -436,7 +436,9 @@ fn main() {
     ip = revision["ip"]
     assert subprocess.check_output(["curl", "-fsS", "http://" + ip + ":8080/health"], text=True)
     print("custom pipeline expected output fails then passes, HTTP health path succeeds: OK")
-    if os.getenv("STARTSHIP_E2E_ENGINES") == "1":
+    engine_selection = os.getenv("STARTSHIP_E2E_ENGINES")
+    engines = ("nixpacks", "buildpacks") if engine_selection == "1" else (engine_selection,) if engine_selection in ("nixpacks", "buildpacks") else ()
+    if engines:
         engine_repo = work / "engine-source"
         engine_repo.mkdir()
         (engine_repo / "package.json").write_text(json.dumps({"name": "engine-fixture", "version": "1.0.0", "private": True,
@@ -446,26 +448,30 @@ fn main() {
             "requires": True, "packages": {"": json.loads((engine_repo / "package.json").read_text())}}))
         for args in (["init", "-b", "main"], ["add", "."], ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "engine fixture"]):
             subprocess.run(["git", "-C", str(engine_repo)] + args, check=True, stdout=subprocess.DEVNULL)
-        for engine in ("nixpacks", "buildpacks"):
+        def wait_engine_release(queued, status):
+            for _ in range(3600):
+                release = request("releases/" + queued["id"])
+                if release["status"] in ("running", "failed"):
+                    assert release["status"] == status, release.get("log")
+                    return release
+                time.sleep(0.5)
+            raise TimeoutError(engine + " did not complete:\n" + release.get("log", "")[-5000:])
+
+        for engine in engines:
             engine_pipeline = {"build": {"engine": engine, "image": "ignored image", "commands": ["false"], "dockerfile": "../ignored"},
                 "test": {"commands": ["node -e \"console.log('engine-test')\""], "expect_exit_code": 0, "expect_output": "engine-test"},
                 "deploy": {"port": 3000, "health_path": "/health", "expect_status": 200}}
             if engine == "nixpacks":
                 engine_pipeline["test"]["image"] = "mirror.gcr.io/library/node:22-alpine"
             else:
-                engine_pipeline["deploy"]["command"] = "node server.js --override"
+                engine_pipeline["test"]["commands"] = ["node -e \"console.log('engine-test ' + process.version); console.log(JSON.stringify(process.argv.slice(1)))\" 'a b' '' '$HOME' '$(exit 99)'"]
+                engine_pipeline["test"]["expect_output"] = '["a b","","$HOME","$(exit 99)"]'
+                engine_pipeline["deploy"]["command"] = "node -e \"require('./server.js')\" -- --override"
             engine_project = request("projects", {"workspace_id": ws["id"], "name": "Engine " + engine,
                 "git_url": engine_repo.as_uri(), "branch": "main", "build_type": "custom", "pipeline": engine_pipeline})
             project_ids.append(engine_project["id"])
             queued = request("projects/" + engine_project["id"] + "/deploy", {})
-            for _ in range(3600):
-                engine_release = request("releases/" + queued["id"])
-                if engine_release["status"] in ("running", "failed"):
-                    assert engine_release["status"] == "running", engine_release.get("log")
-                    break
-                time.sleep(0.5)
-            else:
-                raise TimeoutError(engine + " did not complete:\n" + engine_release.get("log", "")[-5000:])
+            engine_release = wait_engine_release(queued, "running")
             engine_containers = request("containers?project_id=" + engine_project["id"])
             app_ids.extend(c["id"] for c in engine_containers)
             revision = request("deployments/" + engine_release["container_releases"][0])
@@ -479,6 +485,19 @@ fn main() {
             config = inspect_if_present(workers[0])["HostConfig"]
             assert (config["Memory"], config["CpuPeriod"], config["CpuQuota"]) == (805306368, 100000, 50000), config
             print(engine + " deployment: Running; 3 stages, tests, snapshot and bounded builder OK; proxy curl: " + result)
+            if engine == "buildpacks":
+                assert "engine-test v" in revision["log"] and "syntax error" not in revision["log"], revision["log"]
+                print("buildpacks quoting-heavy Test and Deploy.Command executed verbatim: OK")
+                engine_pipeline["test"]["commands"].append("exit 3")
+                engine_pipeline["test"]["expect_output"] = "engine-test"
+                request("projects/" + engine_project["id"], {"pipeline": engine_pipeline}, "PATCH")
+                failed = wait_engine_release(request("projects/" + engine_project["id"] + "/deploy", {}), "failed")
+                failed_revision = request("deployments/" + failed["container_releases"][0])
+                assert "test expected exit code 0, got 3" in failed_revision["log"], failed_revision["log"]
+                assert "engine-test v" in failed_revision["log"] and "==> 3/3 Deploy" not in failed_revision["log"], failed_revision["log"]
+                assert request("projects/" + engine_project["id"])["active_deployment"] == engine_release["id"]
+                assert subprocess.check_output(["curl", "-fsS", "-H", "Host: buildpacks.local", proxy_url + "/"], text=True) == result
+                print("buildpacks exit 3: stage failed (test expected exit code 0, got 3), matching output did not mask failure; Deploy skipped and healthy release preserved: OK")
     else:
         print("engine deployments: SKIP (set STARTSHIP_E2E_ENGINES=1; pinned Nixpacks and large CNB downloads required)")
     print("E2E PASS")
