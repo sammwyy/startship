@@ -85,7 +85,9 @@ describe("domain routing editor", () => {
     expect(
       screen.queryByRole("option", { name: /other.test/ }),
     ).not.toBeInTheDocument();
-    await user.selectOptions(screen.getByLabelText("Certificate"), "cert");
+    await user.click(
+      screen.getByRole("option", { name: /example.com.*Uploaded/ }),
+    );
     await user.click(screen.getByLabelText("Force HTTPS"));
     await user.click(screen.getByRole("button", { name: "Connect domain" }));
     expect(onSave).toHaveBeenCalledWith(
@@ -97,8 +99,10 @@ describe("domain routing editor", () => {
       route: { ...route, certificate_id: "hidden" },
       certificatesAvailable: false,
     });
-    expect(screen.getByLabelText("Certificate")).toBeDisabled();
-    expect(screen.getByLabelText("Certificate")).toHaveValue("hidden");
+    expect(screen.getByRole("button", { name: "Certificate" })).toBeDisabled();
+    expect(document.querySelector('[name="certificate_id"]')).toHaveValue(
+      "hidden",
+    );
   });
   it("lets contributors retain an existing external host without a misleading preview", async () => {
     const { user, onSave } = setup({

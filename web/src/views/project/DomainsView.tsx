@@ -80,6 +80,7 @@ export function DomainsView() {
             route={editor.route}
             admin={user?.platform_admin}
             certificates={certificates.data?.certificates}
+            workspaceId={project.workspace_id}
             certificatesAvailable={
               certificateAccess && !!certificates.data && !certificates.error
             }

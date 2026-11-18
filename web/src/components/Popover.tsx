@@ -7,12 +7,18 @@ export function Popover({
   className,
   trigger,
   children,
+  menuRole,
+  menuClassName,
+  disabled,
 }: {
   id: string;
   label: string;
   className?: string;
   trigger: ReactNode;
   children: ReactNode;
+  menuRole?: "listbox";
+  menuClassName?: string;
+  disabled?: boolean;
 }) {
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -35,11 +41,16 @@ export function Popover({
     return () => node.removeEventListener("toggle", sync);
   }, []);
   function keyboard(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+      menu.current?.hidePopover?.();
+      button.current?.focus();
+      return;
+    }
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     menu.current?.showPopover();
     const items = Array.from(
-      menu.current!.querySelectorAll<HTMLElement>("a,button"),
+      menu.current!.querySelectorAll<HTMLElement>("a,button:not(:disabled)"),
     );
     const index = items.indexOf(document.activeElement as HTMLElement);
     const target =
@@ -48,8 +59,12 @@ export function Popover({
           ? 0
           : event.key === "End"
             ? items.length - 1
-            : (index + (event.key === "ArrowDown" ? 1 : items.length - 1)) %
-              items.length
+            : index < 0
+              ? event.key === "ArrowUp"
+                ? items.length - 1
+                : 0
+              : (index + (event.key === "ArrowDown" ? 1 : items.length - 1)) %
+                items.length
       ];
     target?.focus({ preventScroll: true });
     target?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -63,6 +78,9 @@ export function Popover({
         aria-label={label}
         title={label}
         aria-expanded={open}
+        aria-haspopup={menuRole}
+        aria-controls={id}
+        disabled={disabled}
         popoverTarget={id}
         onKeyDown={keyboard}
       >
@@ -71,12 +89,18 @@ export function Popover({
       <div
         id={id}
         ref={menu}
-        className="sidebar-menu"
+        className={`sidebar-menu ${menuClassName || ""}`}
+        role={menuRole}
+        aria-label={menuRole ? label : undefined}
         popover="auto"
         onKeyDown={keyboard}
         onClick={(event) => {
-          if ((event.target as HTMLElement).closest("a,button"))
-            menu.current?.hidePopover();
+          if (
+            (event.target as HTMLElement).closest("a,button:not(:disabled)")
+          ) {
+            menu.current?.hidePopover?.();
+            if (menuRole) button.current?.focus();
+          }
         }}
       >
         {children}
