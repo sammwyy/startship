@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/sammwyy/startship/internal/detect"
+	"github.com/sammwyy/startship/internal/pipeline"
 	"github.com/sammwyy/startship/internal/routing"
 	"golang.org/x/crypto/bcrypt"
 	"io"
@@ -399,6 +400,10 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		x := a.access(uid)
+		if len(p) == 3 && p[1] == "pipeline" && p[2] == "templates" && r.Method == "GET" {
+			reply(w, 200, pipeline.Templates())
+			return
+		}
 		if a.certificatesAPI(w, r, p, uid, x) {
 			return
 		}
@@ -491,7 +496,7 @@ func (a *Server) api() http.Handler {
 					fail(w, 409, e.Error())
 					return
 				}
-				next = Record{RedeployOf: source.ID, Image: source.Image, StaticDir: source.StaticDir, Commit: source.Commit}
+				next = Record{RedeployOf: source.ID, Image: source.Image, StaticDir: source.StaticDir, Commit: source.Commit, Pipeline: source.Pipeline}
 			} else if _, e := a.projectSource(old); e != nil {
 				fail(w, 400, e.Error())
 				return
@@ -642,6 +647,16 @@ func (a *Server) api() http.Handler {
 		}
 		switch kind {
 		case "projects":
+			if v.Pipeline != nil {
+				if err := v.Pipeline.Validate(); err != nil {
+					fail(w, 400, err.Error())
+					return
+				}
+			}
+			if v.BuildType == "custom" && v.Pipeline == nil {
+				fail(w, 400, "custom requires a pipeline")
+				return
+			}
 			v.Parent = v.WorkspaceID
 			if v.RootDir == "" {
 				v.RootDir = "."

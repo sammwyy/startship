@@ -1,6 +1,39 @@
 export interface Scoped {
   permissions?: string[];
 }
+export interface Pipeline {
+  build: { image?: string; commands?: string[]; dockerfile?: string };
+  test: {
+    image?: string;
+    commands?: string[];
+    expect_exit_code: number;
+    expect_output?: string;
+  };
+  deploy: {
+    image?: string;
+    artifact?: string;
+    static?: boolean;
+    command?: string;
+    port?: number;
+    health_path?: string;
+    expect_status?: number;
+  };
+}
+export interface PipelineTemplate {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  pipeline: Pipeline;
+}
+export interface DetectedPipeline {
+  root_dir: string;
+  build_type: string;
+  port: number;
+  template: string;
+  pipeline: Pipeline;
+}
 export interface Workspace extends Scoped {
   id: string;
   name: string;
@@ -14,6 +47,7 @@ export interface Project extends Workspace {
   webhook_secret?: string;
   root_dir?: string;
   build_type?: string;
+  pipeline?: Pipeline;
   port?: number;
   test_command?: string;
   auto_deploy?: boolean;

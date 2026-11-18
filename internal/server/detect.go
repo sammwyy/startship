@@ -1,9 +1,11 @@
 package server
 
 import (
-	"github.com/sammwyy/startship/internal/detect"
+	"github.com/sammwyy/startship/internal/pipeline"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 func (a *Server) detectAPI(w http.ResponseWriter, r *http.Request, x *access) {
@@ -32,5 +34,26 @@ func (a *Server) detectAPI(w http.ResponseWriter, r *http.Request, x *access) {
 		fail(w, 400, "clone failed")
 		return
 	}
-	reply(w, 200, detect.Candidates(dir))
+	candidates := []pipelineCandidate{}
+	roots := []string{"."}
+	entries, _ := os.ReadDir(dir)
+	for _, entry := range entries {
+		if entry.IsDir() && !strings.HasPrefix(entry.Name(), ".") {
+			roots = append(roots, entry.Name())
+		}
+	}
+	for _, relative := range roots {
+		root := filepath.Join(dir, relative)
+		kind := pipeline.DetectTemplate(root)
+		if kind == "" {
+			continue
+		}
+		c, err := resolvedCandidate(root, relative, kind, Record{})
+		if err != nil {
+			fail(w, 400, err.Error())
+			return
+		}
+		candidates = append(candidates, c)
+	}
+	reply(w, 200, candidates)
 }

@@ -397,6 +397,38 @@ fn main() {
     else:
         raise RuntimeError("grouped release did not survive restart")
     print("grouped artifact redeploy skips clone/build/tests, uses shared current env and survives daemon restart: OK")
+    # Custom pipeline test expectations and HTTP health checking use project releases.
+    custom_pipeline = {
+        "build": {"image": "python:3.13-slim", "commands": []},
+        "test": {"commands": ["echo pipeline-output"], "expect_exit_code": 0, "expect_output": "missing-output"},
+        "deploy": {"command": "python app.py", "port": 8080, "health_path": "/health", "expect_status": 200},
+    }
+    custom = request("projects", {"workspace_id": ws["id"], "name": "Custom pipeline", "git_url": repo.as_uri(),
+                                  "build_type": "custom", "pipeline": custom_pipeline})
+    project_ids.append(custom["id"])
+    def pipeline_release(expected):
+        queued = request("projects/" + custom["id"] + "/deploy", {})
+        for _ in range(240):
+            release = request("releases/" + queued["id"])
+            if release["status"] in ("running", "failed"):
+                assert release["status"] == expected, release.get("log")
+                return release
+            time.sleep(0.5)
+        raise TimeoutError("custom pipeline release did not complete")
+    failed_pipeline = pipeline_release("failed")
+    assert 'test expected output containing "missing-output"' in failed_pipeline["log"], failed_pipeline["log"]
+    custom_pipeline["test"]["expect_output"] = "pipeline-output"
+    request("projects/" + custom["id"], {"pipeline": custom_pipeline}, "PATCH")
+    successful_pipeline = pipeline_release("running")
+    custom_containers = request("containers?project_id=" + custom["id"])
+    app_ids.extend(c["id"] for c in custom_containers)
+    revision = request("deployments/" + successful_pipeline["container_releases"][0])
+    assert revision["pipeline"]["deploy"]["health_path"] == "/health"
+    runtime_logs = subprocess.check_output(["docker", "logs", revision["container"]], text=True, stderr=subprocess.STDOUT)
+    assert 'GET /health HTTP/1.1' in runtime_logs, runtime_logs
+    ip = revision["ip"]
+    assert subprocess.check_output(["curl", "-fsS", "http://" + ip + ":8080/health"], text=True)
+    print("custom pipeline expected output fails then passes, HTTP health path succeeds: OK")
     print("E2E PASS")
 finally:
     if process and process.poll() is None:

@@ -8,6 +8,7 @@ export const projectSections = [
   ["traffic", "Traffic", "activity"],
   ["domains", "Domains", "globe"],
   ["source", "Source", "branch"],
+  ["pipeline", "Pipeline", "pipeline"],
   ["environment", "Environment", "lock"],
 ] as const;
 export const busyRelease = (release?: Release) =>

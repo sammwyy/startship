@@ -19,6 +19,7 @@ describe("project configuration", () => {
       "traffic",
       "domains",
       "source",
+      "pipeline",
       "environment",
     ]);
   });

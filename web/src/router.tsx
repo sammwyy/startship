@@ -216,6 +216,13 @@ export const router = createHashRouter([
                 }),
               },
               {
+                path: "pipeline",
+                lazy: async () => ({
+                  Component: (await import("./views/project/PipelineView"))
+                    .PipelineView,
+                }),
+              },
+              {
                 path: "settings",
                 element: <Navigate to="../overview" replace />,
               },

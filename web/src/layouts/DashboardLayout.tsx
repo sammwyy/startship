@@ -330,7 +330,7 @@ export function DashboardLayout() {
         <div className="dashboard-body">
           <main className="main">
             <div
-              className={`content${/\/(source|environment)$/.test(location.pathname) || /^\/system(?:\/|$)/.test(location.pathname) || /^\/workspace\/[^/]+\/settings$/.test(location.pathname) ? " content-compact" : ""}`}
+              className={`content${/\/(source|environment|pipeline)$/.test(location.pathname) || /^\/system(?:\/|$)/.test(location.pathname) || /^\/workspace\/[^/]+\/settings$/.test(location.pathname) ? " content-compact" : ""}`}
             >
               <Outlet />
             </div>

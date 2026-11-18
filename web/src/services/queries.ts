@@ -12,6 +12,7 @@ import type {
   Workspace,
   UpdateInfo,
   SystemVersion,
+  PipelineTemplate,
 } from "./types";
 
 function resource<T>(path: string) {
@@ -21,6 +22,7 @@ function resource<T>(path: string) {
   });
 }
 export const queries = {
+  pipelineTemplates: () => resource<PipelineTemplate[]>("pipeline/templates"),
   updates: () => ({
     ...resource<UpdateInfo>("system/update"),
     retry: false,
