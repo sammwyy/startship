@@ -298,6 +298,9 @@ const usage = `startship [--json] COMMAND
   firewall lists rm WS LIST
   firewall lists entry add WS LIST VALUE [--for DUR]
   firewall lists entry rm WS LIST VALUE
+  network status | network list
+  network block VALUE [--for DUR] [--router-only] [--note TEXT]
+  network unblock ID|VALUE       IP, CIDR or ISO-2 country; platform permission
   firewall ban WS IP [--for DUR] | firewall unban WS IP
   firewall events WS [--follow]   live snapshots over HTTP(S) or Unix socket
                                  --json --follow prints new events as NDJSON
@@ -351,6 +354,9 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "firewall" {
 		return c.runFirewall(a)
+	}
+	if cmd == "network" {
+		return c.runNetwork(a)
 	}
 	if cmd == "catalog" {
 		return c.runCatalog(a)

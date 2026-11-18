@@ -80,7 +80,7 @@ func parseFirewallArgs(args []string, allowed string) (accessArgs, error) {
 		if key == "" || !strings.Contains(" "+allowed+" ", " "+key+" ") {
 			return a, fmt.Errorf("unknown firewall option --%s", key)
 		}
-		if key == "any" || key == "follow" {
+		if key == "any" || key == "follow" || key == "router-only" {
 			if has {
 				return a, fmt.Errorf("--%s does not take a value", key)
 			}

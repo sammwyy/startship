@@ -1,10 +1,10 @@
-# Workspace firewall / WAF
+# Firewall / WAF
 
 Each workspace has one L7 policy, applied to its projects' public routes. The
 dashboard domain and ACME HTTP challenges bypass it so an incorrect rule cannot
 lock you out of the control panel. New policies are **off**. Network/L4 rules
-and a dashboard rule editor are separate features, not implemented by this
-workspace API.
+are host-wide and use the separate system API described below. A dashboard
+rule editor is not implemented yet.
 
 ## Policy and rules
 
@@ -296,6 +296,79 @@ With `--json`, each new event is one NDJSON line. Ctrl-C ends the stream.
 The live API includes only the latest 100 events per snapshot, so more than 100
 new events between snapshots can leave gaps; the CLI does not promise a durable
 event log or automatically reconnect after an interrupted connection.
+
+## Network firewall (L4)
+
+Network rules drop packets on the host, including traffic to the dashboard when
+using the default `all` scope. **Keep Unix-socket/root access when changing rules:**
+workspace allow lists and trusted-proxy settings cannot override a kernel DROP.
+Behind a proxy, L4 sees the proxy's source address, not forwarded HTTP headers.
+
+Enable with `network_firewall = true` in the daemon TOML, environment
+`STARTSHIP_NETWORK_FIREWALL=1`, or `--network-firewall`. Boolean environment
+values accept Go's `strconv.ParseBool` forms, including 1/0 and true/false;
+flags override environment, which overrides TOML. Default is false.
+Install `ipset`, `iptables` and `ip6tables`; the daemon needs CAP_NET_ADMIN and
+CAP_NET_RAW (or root) and kernel support for ipset hash:net and xt_set. Install
+with `sudo STARTSHIP_NETWORK_FIREWALL=1 sh install.sh` to opt in: the installer
+checks binaries, writes the TOML/environment setting and adds these capabilities
+to both systemd capability sets. Without that flag the default install is unchanged.
+For an existing installation, set the configuration and capabilities together.
+
+Only platform `network.firewall` holders (Platform Admin by default) may use:
+
+- `GET /api/system/network-firewall` → `{enabled, available, rules, error?}`.
+  `available` means all three binaries exist and a dry `ipset list -n` succeeds;
+  `error` also reports reconciliation/storage errors (for example IPv6 or kernel
+  module failures). Disabled mode returns `rules: []`, retaining saved rules.
+- `POST /api/system/network-firewall/rules` → the created rule. Body:
+  `{kind: "ip"|"cidr"|"country", value, ports?: "all"|"router", note?,
+  ttl_seconds?: number, expires_at?: RFC3339}`. Use either TTL or absolute expiry;
+  zero/omitted TTL is permanent. TTL range is 0..31536000 seconds. IDs are generated
+  by the daemon; addresses/networks and country case are normalized.
+- `DELETE /api/system/network-firewall/rules/:id` → `{ok: true}` (404 if absent).
+
+Stored/returned `NetworkRule` is `{id, kind, value, ports, expires_at?, note}`.
+Mutations while disabled return 409:
+`network firewall is disabled in the daemon config (network_firewall = true)`.
+All mutations/expiry are audited as `network.rule.create`, `.delete`, `.expire`
+at platform scope. SQLite stores `network_rules(id PRIMARY KEY, body JSON)`.
+Storage/audit failures do not publish new kernel rules; reconciliation/commit
+failure attempts to restore the previous kernel state and reports any failure.
+
+```sh
+startship network status
+startship network list
+startship network block 192.0.2.1 --for 1h --note "Temporary block"
+startship network block 203.0.113.0/24 --router-only --for 7d
+startship network block US --router-only
+startship network unblock RULE_ID
+startship network unblock 203.0.113.0/24
+```
+
+`--json` is supported. Unblock accepts an exact ID or normalized IP/CIDR/country
+value; a value removes all matching rules, including both port scopes.
+`router` restricts drops to TCP destination ports configured in **all** HTTP/HTTPS
+listener entries; `all` affects every protocol/port. Country rules require
+`geoip_database`, expanding MMDB country networks (not trusted HTTP country headers).
+IPv4 and IPv6 use separate `hash:net` sets with timeout support:
+`startship-all-v4`, `startship-all-v6`, `startship-router-v4`, `startship-router-v6`.
+The daemon builds all staging sets with `ipset restore`, then swaps each into
+place. Each set swap is atomic; the four swaps are not a single transaction.
+`STARTSHIP-NET` is jumped from the top of INPUT and DOCKER-USER when present,
+for both iptables and ip6tables. Other chains/rules/sets are left untouched.
+This covers incoming traffic and Docker's forwarding path, not arbitrary host
+forwarding paths or host-originated output.
+
+Startup and successful mutations reconcile saved rules. A minute-based maintenance
+pass removes expired storage entries, refreshes long kernel timeouts and repairs
+jumps (including a newly created Docker chain). Kernel timeouts enforce TTLs
+between passes; expired entries are also purged lazily on GET. Overlapping identical
+networks retain the longest TTL, with permanent rules taking precedence.
+On shutdown kernel rules remain protective. To disable and remove chains/sets,
+restart with `network_firewall = false` (and clear the overriding environment flag),
+retaining privileges until teardown has succeeded. Saved rules are retained for
+re-enabling. Status reports errors; do not assume protection if `error` is present.
 
 ## Implementer contract: daemon and router
 

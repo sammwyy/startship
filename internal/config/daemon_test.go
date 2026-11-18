@@ -20,6 +20,41 @@ func cleanEnvironment(t *testing.T) {
 	}
 	t.Setenv("STARTSHIP_CONFIG", "")
 }
+
+func TestNetworkFirewallBool(t *testing.T) {
+	cleanEnvironment(t)
+	t.Setenv("STARTSHIP_CONFIG", configFile(t, "network_firewall = true\n"))
+	d, err := Load(nil, io.Discard)
+	if err != nil || !d.NetworkFirewall {
+		t.Fatal(d, err)
+	}
+	t.Setenv("STARTSHIP_NETWORK_FIREWALL", "0")
+	d, err = Load(nil, io.Discard)
+	if err != nil || d.NetworkFirewall {
+		t.Fatal(d, err)
+	}
+	t.Setenv("STARTSHIP_NETWORK_FIREWALL", "1")
+	d, err = Load([]string{"--network-firewall=false"}, io.Discard)
+	if err != nil || d.NetworkFirewall {
+		t.Fatal(d, err)
+	}
+	if err = d.Export(); err != nil {
+		t.Fatal(err)
+	}
+	if os.Getenv("STARTSHIP_NETWORK_FIREWALL") != "false" {
+		t.Fatal("export")
+	}
+	t.Setenv("STARTSHIP_NETWORK_FIREWALL", "invalid")
+	if _, err = Load(nil, io.Discard); err == nil || !strings.Contains(err.Error(), "STARTSHIP_NETWORK_FIREWALL") {
+		t.Fatal(err)
+	}
+	t.Setenv("STARTSHIP_NETWORK_FIREWALL", "")
+	t.Setenv("STARTSHIP_CONFIG", configFile(t, "network_firewall = false\n"))
+	d, err = Load([]string{"--network-firewall"}, io.Discard)
+	if err != nil || !d.NetworkFirewall {
+		t.Fatal(d, err)
+	}
+}
 func configFile(t *testing.T, text string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "startship.toml")

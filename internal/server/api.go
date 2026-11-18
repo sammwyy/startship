@@ -37,6 +37,7 @@ type Server struct {
 	router               *router.Router
 	routerOptions        router.Options
 	firewall             firewallRuntime
+	network              networkRuntime
 	traffic              trafficMetrics
 	// https preserves the legacy dashboard HTTP redirect when autocert is enabled.
 	dashboardDomain     string
@@ -413,7 +414,7 @@ func (a *Server) api() http.Handler {
 			reply(w, 200, pipeline.Templates())
 			return
 		}
-		if a.firewallAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) {
+		if a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) {
 			return
 		}
 		if p[1] == "detect" && r.Method == "POST" {

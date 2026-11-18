@@ -17,6 +17,11 @@ fi
 [ "$(uname -s)" = Linux ] || die 'only Linux is supported'
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die 'supported architectures: amd64, arm64' ;; esac
 for tool in curl sha256sum tar docker git useradd usermod getent; do command -v "$tool" >/dev/null 2>&1 || die "install $tool first"; done
+caps=CAP_NET_BIND_SERVICE
+if [ "${STARTSHIP_NETWORK_FIREWALL:-0}" = 1 ]; then
+    for tool in ipset iptables ip6tables; do command -v "$tool" >/dev/null 2>&1 || die "install $tool first"; done
+    caps="$caps CAP_NET_ADMIN CAP_NET_RAW"
+fi
 getent group docker >/dev/null || die 'Docker group missing; install Docker Engine first'
 base=${STARTSHIP_DOWNLOAD_URL:-}
 if [ -z "$base" ]; then
@@ -59,9 +64,16 @@ if [ ! -f /etc/startship/startship.toml ]; then
     printf '%s\n' '# Startship daemon settings; flags > environment > this file > defaults.' '# Existing /etc/startship/startshipd.env values override these settings.' '# Remove corresponding *_ADDR entries from that env file to use file listeners.' '# dashboard_listen = ["127.0.0.1:8080"]' '# dashboard_listen = ["tailscale0:8080", "127.0.0.1:8080"]' '# http_listen = [":80"]' '# https_listen = [":443"]' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' > /etc/startship/startship.toml
     chmod 0644 /etc/startship/startship.toml
 fi
+if [ "${STARTSHIP_NETWORK_FIREWALL:-0}" = 1 ]; then
+    sed -i '/^STARTSHIP_NETWORK_FIREWALL=/d' /etc/startship/startshipd.env
+    printf '%s\n' 'STARTSHIP_NETWORK_FIREWALL=1' >> /etc/startship/startshipd.env
+    sed -i '/^[[:space:]]*network_firewall[[:space:]]*=/d' /etc/startship/startship.toml
+    printf '%s\n' 'network_firewall = true' >> /etc/startship/startship.toml
+fi
 install -d -m 0755 /etc/systemd/system
 printf '%s\n' '[Unit]' 'Description=Startship deployment daemon' 'After=network-online.target docker.service' 'Wants=network-online.target' 'Requires=docker.service' '' '[Service]' 'Type=simple' 'User=startship' 'Group=startship' 'RuntimeDirectory=startship' 'RuntimeDirectoryMode=0750' 'SupplementaryGroups=docker' 'EnvironmentFile=/etc/startship/startshipd.env' 'WorkingDirectory=/var/lib/startship' 'Environment=STARTSHIP_UPDATE_REQUEST=/var/lib/startship/update/request.json' 'Environment=STARTSHIP_UPDATE_STATUS=/var/lib/startship/update/status.json' 'ExecStart=/usr/local/bin/startshipd' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startshipd.service
 # The daemon cannot replace root-owned binaries; it queues a request that this root-only updater applies.
+sed -i "s/^AmbientCapabilities=.*/AmbientCapabilities=$caps/; s/^CapabilityBoundingSet=.*/CapabilityBoundingSet=$caps/" /etc/systemd/system/startshipd.service
 printf '%s\n' '[Unit]' 'Description=Startship update request watcher' '' '[Path]' 'PathExists=/var/lib/startship/update/request.json' 'Unit=startship-update.service' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startship-update.path
 printf '%s\n' '[Unit]' 'Description=Install the Startship release requested from the dashboard or CLI' 'After=network-online.target' 'Wants=network-online.target' '' '[Service]' 'Type=oneshot' 'Environment=STARTSHIP_UPDATE_REQUEST=/var/lib/startship/update/request.json' 'Environment=STARTSHIP_UPDATE_STATUS=/var/lib/startship/update/status.json' 'ExecStart=/usr/local/bin/startship update apply-request' > /etc/systemd/system/startship-update.service
 # The data directory may be overridden on first install.

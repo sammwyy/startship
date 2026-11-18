@@ -103,6 +103,8 @@ func Run(settings config.Daemon) {
 	a.reconcileServices()
 	metricsContext, stopMetrics := context.WithCancel(context.Background())
 	defer stopMetrics()
+	a.initNetwork(settings)
+	go a.watchNetwork(metricsContext)
 	go a.sampleTrafficResources(metricsContext)
 	go a.watchUpdates(metricsContext)
 	go a.watchCertificates(metricsContext)
