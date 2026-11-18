@@ -11,6 +11,12 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.certificate-picker-trigger:focus,
+.certificate-picker-trigger[aria-expanded="true"] {
+  outline: none;
+  border-color: var(--success);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
 .certificate-picker-trigger small,
 .certificate-picker-menu small {
   display: block;
