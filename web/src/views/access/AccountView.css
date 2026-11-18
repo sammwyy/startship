@@ -271,6 +271,14 @@
   }
 }
 @media (max-width: 520px) {
+  .account-tabs {
+    grid-template-columns: repeat(5, auto);
+    gap: 2px;
+  }
+  .account-tabs a {
+    padding-inline: 6px;
+    font-size: 13px;
+  }
   .account-tabs .icon {
     display: none;
   }
