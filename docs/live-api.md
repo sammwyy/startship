@@ -45,6 +45,7 @@ Mutations stay on the REST API; their effects arrive over the socket.
 ## Services and volumes
 - Topics `services` and `volumes` take `workspace_id` and require workspace visibility.
 - Snapshots are `{services: Service[]}` and `{volumes: Volume[]}`, matching the workspace REST list routes. Every mutation/status change sends a replacement `snapshot`; access is rechecked.
+- Topic `backups` takes `workspace_id` and requires workspace visibility. Snapshots are `{backups: Backup[], volume: Volume | null}`, matching `GET /api/workspaces/:id/backups`; each backup start, finish, failure, restore or deletion sends a replacement `snapshot`.
 - Service config password fields and lifecycle errors are omitted without workspace `services.manage`. Project connection password and URL values are masked without that permission.
 - Attachment and project-volume mutations also notify the `project` topic. Subscribe to the workspace topics for Connections/Volumes views. Connection environment and volume mounts apply on the next deploy (redeploy to apply).
 - Volume sizes are refreshed on list/subscribe at most every 30 seconds, without a background polling timer.

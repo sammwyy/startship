@@ -31,6 +31,8 @@ export interface Service {
   config: Record<string, string>;
   external_port: number;
   volume_id: string;
+  backup?: BackupPolicy;
+  next_backup?: string;
   attachments: { project_id: string; alias: string }[];
   status: string;
   last_error: string;
@@ -46,10 +48,40 @@ export interface Volume {
   project_id: string;
   mount_path: string;
   service_id: string;
+  purpose?: "backups";
   size_bytes: number;
   size_updated: string;
   created: string;
   created_by: string;
+}
+export interface BackupPolicy {
+  enabled: boolean;
+  frequency: "hourly" | "daily" | "weekly";
+  minute: number;
+  hour: number;
+  weekday: number;
+  keep: number;
+}
+export interface Backup {
+  id: string;
+  workspace_id: string;
+  service_id: string;
+  service_name: string;
+  engine: string;
+  version: string;
+  volume_id: string;
+  file: string;
+  size_bytes: number;
+  status: "running" | "completed" | "failed";
+  trigger: "scheduled" | "manual" | "pre-restore";
+  error?: string;
+  created: string;
+  finished: string;
+  created_by: string;
+}
+export interface Backups {
+  backups: Backup[];
+  volume: Volume | null;
 }
 export interface ProjectServices {
   attached: { service: Service; alias: string; env: Record<string, string> }[];

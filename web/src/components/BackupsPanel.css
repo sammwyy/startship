@@ -1,0 +1,222 @@
+.badge.completed {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.badge.restoring {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.backup-history {
+  padding: 22px 0 0;
+}
+.backup-history-head {
+  padding: 0 22px 16px;
+}
+.backup-history-head h2 {
+  display: flex;
+  align-items: center;
+}
+.backup-history .form-error {
+  margin: 0 22px 12px;
+}
+.backup-history .empty {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+}
+.backup-list,
+.backup-schedules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.backup-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 22px;
+  border-top: 1px solid var(--line);
+}
+.backup-row .engine-icon {
+  width: 32px;
+  height: 34px;
+  border-radius: 9px;
+}
+.backup-row .engine-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.backup-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.backup-main strong {
+  font-size: 11px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.backup-main a:hover {
+  color: var(--success);
+}
+.backup-main > span {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.backup-main > .danger {
+  color: var(--error);
+}
+.backup-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.backup-actions .icon-button {
+  width: 30px;
+  min-height: 30px;
+  padding: 6px;
+}
+.backup-actions .icon {
+  width: 14px;
+  height: 14px;
+}
+.backup-fields {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+.backup-fields:disabled {
+  opacity: 0.55;
+}
+.backup-frequency {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  background: var(--field);
+}
+.backup-frequency button {
+  border: 0;
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.backup-frequency button[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.backup-time {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 10px;
+}
+.backup-time .service-picker {
+  min-width: 0;
+}
+.backup-keep {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.backup-keep input {
+  margin: 0;
+}
+.backup-local {
+  line-height: 1.6;
+}
+.backup-schedule-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.backup-schedules li + li {
+  border-top: 1px solid var(--line);
+}
+.backup-schedules a {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 0;
+}
+.backup-schedules li:first-child a {
+  padding-top: 16px;
+}
+.backup-schedules li:last-child a {
+  padding-bottom: 0;
+}
+.backup-schedules .engine-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.backup-schedules .engine-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.backup-schedules a > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.backup-schedules strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+.backup-schedules a > span > span {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.backup-schedules a:hover strong {
+  color: var(--success);
+}
+.backup-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--line-strong);
+}
+.backup-dot.on {
+  background: var(--success);
+}
+@media (max-width: 800px) {
+  .backups-layout aside {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .backup-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    padding: 14px 16px;
+  }
+  .backup-row > .badge {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .backup-actions {
+    grid-column: 2 / -1;
+    justify-content: flex-start;
+  }
+  .backup-history-head {
+    padding: 0 16px 14px;
+  }
+  .backup-history .form-error {
+    margin: 0 16px 12px;
+  }
+}

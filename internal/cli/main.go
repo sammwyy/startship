@@ -280,6 +280,11 @@ const usage = `startship [--json] COMMAND
   volumes [list] WORKSPACE
   volumes create WORKSPACE NAME [--project P --mount /path]
   volumes attach ID PROJECT /path | volumes detach ID | volumes delete ID
+  backups [list] WORKSPACE [--service ID]
+  backups create SERVICE   copy the service volume into the workspace backups volume now
+  backups schedule SERVICE --every hourly|daily|weekly [--at HH:MM] [--minute M] [--weekday mon] [--keep N] | --off   times in UTC
+  backups restore ID [--service ID]   takes a safety backup, then replaces the service data
+  backups delete ID | backups download ID [--output FILE]
   domains list WORKSPACE
   domains add WORKSPACE DOMAIN [--subdomains]
   domains rm WORKSPACE DOMAIN     domain ID or name; delete/remove also accepted
@@ -366,6 +371,9 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "volumes" {
 		return c.runVolumes(a)
+	}
+	if cmd == "backups" {
+		return c.runBackups(a)
 	}
 	if cmd == "workspaces" && len(a) > 0 && a[0] == "domains" {
 		return c.runDomains(a[1:])

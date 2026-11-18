@@ -11,7 +11,7 @@ import type {
 } from "./types";
 
 export type LiveSubscription =
-  | { topic: "services" | "volumes"; workspace_id: string }
+  | { topic: "services" | "volumes" | "backups"; workspace_id: string }
   | { topic: "certificates"; workspace_id: string }
   | { topic: "firewall"; workspace_id: string }
   | { topic: "project"; project_id: string }
@@ -164,7 +164,9 @@ export function applyLiveMessage(
 ) {
   if (event.type === "error") return;
   if (
-    (spec.topic === "services" || spec.topic === "volumes") &&
+    (spec.topic === "services" ||
+      spec.topic === "volumes" ||
+      spec.topic === "backups") &&
     event.type === "snapshot"
   ) {
     const queryKey = [`workspaces/${spec.workspace_id}/${spec.topic}`];

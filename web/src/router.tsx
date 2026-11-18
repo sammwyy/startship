@@ -158,6 +158,14 @@ export const router = createHashRouter([
             }),
           },
           {
+            path: "workspace/:workspaceId/backups",
+            lazy: async () => ({
+              Component: (
+                await import("./views/workspace/WorkspaceBackupsView")
+              ).WorkspaceBackupsView,
+            }),
+          },
+          {
             path: "workspace/:workspaceId/certificates",
             lazy: async () => ({
               Component: (
