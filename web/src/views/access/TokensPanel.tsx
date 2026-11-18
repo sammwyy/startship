@@ -207,7 +207,6 @@ function NewToken({
   return (
     <AsyncForm
       className="token-form"
-      disabled={(!all && selected.length === 0) || (!api && !mcp)}
       onSubmit={async (data) => {
         const token = await request<Created>("me/tokens", {
           name: String(data.get("name") || ""),
@@ -363,7 +362,11 @@ function NewToken({
         <button type="button" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="primary">
+        <button
+          type="submit"
+          className="primary"
+          disabled={(!all && selected.length === 0) || (!api && !mcp)}
+        >
           Create token
         </button>
       </div>
