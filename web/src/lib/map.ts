@@ -5,19 +5,9 @@ export interface MapEdge {
   from: string;
   to: string;
   label?: string;
+  lane?: string;
 }
 export const mapKey = (kind: MapKind, id: string) => `${kind}:${id}`;
-
-export function orderMapRow<T extends { key: string }>(
-  nodes: T[],
-  edges: MapEdge[],
-) {
-  if (nodes.length <= 3) return nodes;
-  const rank = (node: T) =>
-    Number(edges.some((edge) => edge.from === node.key)) -
-    Number(edges.some((edge) => edge.to === node.key));
-  return [...nodes].sort((a, b) => rank(a) - rank(b));
-}
 
 export function buildWorkspaceMap(
   projects: Project[],
@@ -53,23 +43,22 @@ export function buildWorkspaceMap(
           .flatMap((s) => s.attachments.map((x) => x.project_id)),
       ]),
   );
-  const connections = [
+  const serviceSlots = [
     ...orderedServices.map((s) => ({
-      kind: "services" as const,
-      id: s.id,
+      key: mapKey("services", s.id),
+      lane: false,
       position: mean(s.attachments.map((a) => a.project_id)),
     })),
     ...orderedVolumes
-      .filter((v) => v.project_id)
+      .filter((v) => positions.has(v.project_id))
       .map((v) => ({
-        kind: "volumes" as const,
-        id: v.id,
+        key: `lane:${v.id}`,
+        lane: true,
         position: mean([v.project_id]),
       })),
   ]
     .sort((a, b) => a.position - b.position)
-    .map(({ kind, id }) => ({ kind, id }));
-  const storage = orderedVolumes.filter((v) => !v.project_id);
+    .map(({ key, lane }) => ({ key, lane }));
   const edges: MapEdge[] = [];
   for (const service of orderedServices) {
     for (const attachment of service.attachments) {
@@ -80,7 +69,7 @@ export function buildWorkspaceMap(
           label: attachment.alias,
         });
     }
-    if (storage.some((v) => v.id === service.volume_id))
+    if (orderedVolumes.some((v) => v.id === service.volume_id))
       edges.push({
         from: mapKey("services", service.id),
         to: mapKey("volumes", service.volume_id),
@@ -92,14 +81,14 @@ export function buildWorkspaceMap(
         from: mapKey("projects", volume.project_id),
         to: mapKey("volumes", volume.id),
         label: volume.mount_path,
+        lane: `lane:${volume.id}`,
       });
   }
   return {
     projects: [...projects],
     services: orderedServices,
     volumes: orderedVolumes,
-    connections,
-    storage,
+    serviceSlots,
     edges,
   };
 }
@@ -110,123 +99,70 @@ export interface MapBox {
   width: number;
   height: number;
 }
-export interface MapLabel {
-  x: number;
-  y: number;
-  width: number;
-  left: number;
-  right: number;
-  top?: number;
-  bottom?: number;
-  alternatives?: { x: number; y: number }[];
+export function mapNodeHeight(key: string, edges: MapEdge[]) {
+  const count = Math.max(
+    edges.filter((edge) => edge.from === key).length,
+    edges.filter((edge) => edge.to === key).length,
+  );
+  return Math.max(76, (count - 1) * 24 + 32);
 }
-function mapCurvePoint(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  vertical: boolean,
-  t: number,
-) {
-  const bend = (vertical ? to.y - from.y : to.x - from.x) / 2;
-  const a = {
-    x: from.x + (vertical ? 0 : bend),
-    y: from.y + (vertical ? bend : 0),
+
+export function routeMapEdges(edges: MapEdge[], boxes: Map<string, MapBox>) {
+  const center = (key: string) => {
+    const box = boxes.get(key);
+    return box ? box.y + box.height / 2 : 0;
   };
-  const b = {
-    x: to.x - (vertical ? 0 : bend),
-    y: to.y - (vertical ? bend : 0),
+  const port = (edge: MapEdge, source: boolean) => {
+    const key = source ? edge.from : edge.to;
+    const box = boxes.get(key)!;
+    const peers = edges
+      .filter((other) => (source ? other.from === key : other.to === key))
+      .sort(
+        (a, b) =>
+          center(source ? a.to : a.from) - center(source ? b.to : b.from),
+      );
+    return {
+      x: source ? box.x + box.width : box.x,
+      y:
+        box.y +
+        box.height / 2 +
+        (peers.indexOf(edge) - (peers.length - 1) / 2) * 24,
+    };
   };
-  const point = (t: number, axis: "x" | "y") =>
-    (1 - t) ** 3 * from[axis] +
-    3 * (1 - t) ** 2 * t * a[axis] +
-    3 * (1 - t) * t ** 2 * b[axis] +
-    t ** 3 * to[axis];
-  return { x: point(t, "x"), y: point(t, "y") };
-}
-export function mapLabelPositions(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  vertical: boolean,
-) {
-  return [0.5, 0.35, 0.65, 0.25, 0.75].map((t) =>
-    mapCurvePoint(from, to, vertical, t),
-  );
-}
-export function sampleMapCurve(
-  from: { x: number; y: number },
-  to: { x: number; y: number },
-  vertical: boolean,
-) {
-  const steps = Math.max(
-    1,
-    Math.ceil((Math.abs(to.x - from.x) + Math.abs(to.y - from.y)) / 2),
-  );
-  return Array.from({ length: steps + 1 }, (_, i) =>
-    mapCurvePoint(from, to, vertical, i / steps),
-  );
-}
-export function placeMapLabels(
-  labels: (MapLabel | null)[],
-  cards: MapBox[],
-  height: number,
-  verticalWidth?: number,
-  curves: { x: number; y: number }[][] = [],
-) {
-  const placed: MapBox[] = [];
-  const overlaps = (a: MapBox, b: MapBox) =>
-    a.x < b.x + b.width + 4 &&
-    a.x + a.width + 4 > b.x &&
-    a.y < b.y + b.height + 4 &&
-    a.y + a.height + 4 > b.y;
-  return labels.map((label, index) => {
-    if (!label) return null;
-    const vertical = verticalWidth !== undefined;
-    if (
-      vertical
-        ? label.top === undefined ||
-          label.bottom === undefined ||
-          label.bottom - label.top < 32 ||
-          verticalWidth < label.width + 12
-        : label.right - label.left < label.width + 12
-    )
-      return null;
-    for (const offset of [0, -6, 6]) {
-      for (const candidate of [label, ...(label.alternatives || [])]) {
-        const x = candidate.x + (vertical ? offset : 0);
-        const y = candidate.y + (vertical ? 0 : offset);
-        const box = {
-          x: x - label.width / 2,
-          y: y - 10,
-          width: label.width,
-          height: 20,
-        };
-        if (
-          box.y < 0 ||
-          box.y + box.height > height ||
-          (vertical
-            ? box.x < 6 ||
-              box.x + box.width > verticalWidth - 6 ||
-              box.y < label.top! + 6 ||
-              box.y + box.height > label.bottom! - 6
-            : box.x < label.left + 6 || box.x + box.width > label.right - 6) ||
-          [...cards, ...placed].some((other) => overlaps(box, other)) ||
-          curves.some(
-            (points, other) =>
-              other !== index &&
-              points.some(
-                (point) =>
-                  point.x >= box.x - 2 &&
-                  point.x <= box.x + box.width + 2 &&
-                  point.y >= box.y - 2 &&
-                  point.y <= box.y + box.height + 2,
-              ),
-          )
-        )
-          continue;
-        placed.push(box);
-        return { x, y, width: label.width };
-      }
+  const curve = (
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+  ) => {
+    const bend = (to.x - from.x) / 2;
+    return `C${from.x + bend},${from.y} ${to.x - bend},${to.y} ${to.x},${to.y}`;
+  };
+  return edges.flatMap((edge) => {
+    if (!boxes.has(edge.from) || !boxes.has(edge.to)) return [];
+    const lane = edge.lane ? boxes.get(edge.lane) : undefined;
+    if (edge.lane && !lane) return [];
+    const source = port(edge, true),
+      target = port(edge, false);
+    const width = edge.label ? Math.min(edge.label.length, 18) * 6 + 16 : 0;
+    const lead = { x: source.x + (width ? width + 16 : 12), y: source.y };
+    let d = `M${source.x},${source.y} L${lead.x},${lead.y} `;
+    if (lane) {
+      const entry = { x: lane.x, y: lane.y + lane.height / 2 };
+      const exit = { x: lane.x + lane.width, y: entry.y };
+      d += `${curve(lead, entry)} L${exit.x},${exit.y} ${curve(exit, target)}`;
+    } else {
+      d += curve(lead, target);
     }
-    return null;
+    return [
+      {
+        ...edge,
+        source,
+        target,
+        d,
+        placement: edge.label
+          ? { x: source.x + 8 + width / 2, y: source.y, width }
+          : null,
+      },
+    ];
   });
 }
 

@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   buildWorkspaceMap,
   connectedMapNodes,
-  placeMapLabels,
-  orderMapRow,
-  mapLabelPositions,
-  sampleMapCurve,
+  mapNodeHeight,
+  routeMapEdges,
 } from "./map";
+import type { MapBox, MapEdge } from "./map";
 import type { Project, Service, Volume } from "../services/types";
 
 const projects = [{ id: "a" }, { id: "b" }, { id: "c" }] as Project[];
@@ -18,18 +17,18 @@ const service = (id: string, ids: string[], volume_id = "") =>
   }) as Service;
 const volume = (id: string, project_id = "") =>
   ({ id, project_id, mount_path: "/data" }) as Volume;
+
 describe("workspace map", () => {
   it("handles an empty workspace", () => {
     expect(buildWorkspaceMap([], [], [])).toEqual({
       projects: [],
       services: [],
       volumes: [],
-      connections: [],
-      storage: [],
+      serviceSlots: [],
       edges: [],
     });
   });
-  it("orders by connected project barycenters with unconnected resources last", () => {
+  it("orders resources and invisible mount lanes by project barycenters, leaving orphans last", () => {
     const services = [
       service("unused", []),
       service("late", ["c"], "late-v"),
@@ -54,6 +53,13 @@ describe("workspace map", () => {
       "late-v",
       "unused-v",
     ]);
+    expect(graph.serviceSlots).toEqual([
+      { key: "services:first", lane: false },
+      { key: "lane:first-v", lane: true },
+      { key: "services:middle", lane: false },
+      { key: "services:late", lane: false },
+      { key: "services:unused", lane: false },
+    ]);
     expect(graph.edges).toContainEqual({
       from: "projects:a",
       to: "services:first",
@@ -63,44 +69,24 @@ describe("workspace map", () => {
       from: "projects:a",
       to: "volumes:first-v",
       label: "/data",
+      lane: "lane:first-v",
     });
     expect(graph.edges).toContainEqual({
       from: "services:middle",
       to: "volumes:mid-v",
     });
-    expect(graph.connections).toEqual([
-      { kind: "services", id: "first" },
-      { kind: "volumes", id: "first-v" },
-      { kind: "services", id: "middle" },
-      { kind: "services", id: "late" },
-      { kind: "services", id: "unused" },
-    ]);
-    expect(graph.storage.map((v) => v.id)).toEqual([
-      "mid-v",
-      "late-v",
-      "unused-v",
-    ]);
-    const column = new Map<string, number>([
-      ...graph.projects.map((p) => [`projects:${p.id}`, 0] as const),
-      ...graph.connections.map((n) => [`${n.kind}:${n.id}`, 1] as const),
-      ...graph.storage.map((v) => [`volumes:${v.id}`, 2] as const),
-    ]);
-    for (const edge of graph.edges)
-      expect(column.get(edge.to)! - column.get(edge.from)!).toBe(1);
     expect(services[0].id).toBe("unused");
   });
-  it("keeps project mounts in connections even with a dangling project reference", () => {
+  it("keeps all volumes in the volume column and creates no lane for dangling mounts", () => {
     const graph = buildWorkspaceMap(
       projects,
       [service("s", ["a"], "v")],
       [volume("v", "missing")],
     );
-    expect(graph.connections).toContainEqual({ kind: "volumes", id: "v" });
-    expect(graph.storage).toEqual([]);
-    expect(graph.edges).not.toContainEqual({
-      from: "services:s",
-      to: "volumes:v",
-    });
+    expect(graph.serviceSlots).toEqual([{ key: "services:s", lane: false }]);
+    expect(graph.volumes.map((v) => v.id)).toEqual(["v"]);
+    expect(graph.edges).toContainEqual({ from: "services:s", to: "volumes:v" });
+    expect(graph.edges.some((edge) => edge.lane)).toBe(false);
   });
   it("ignores dangling references and keeps ties stable", () => {
     const graph = buildWorkspaceMap(
@@ -127,196 +113,90 @@ describe("workspace map", () => {
   });
 });
 
-describe("map label placement", () => {
-  const label = { x: 175, y: 80, width: 74, left: 100, right: 240 };
-  it("uses another curve point rather than displacing colliding labels", () => {
-    const placed = placeMapLabels(
-      [label, { ...label, alternatives: [{ x: 175, y: 56 }] }],
-      [],
-      200,
+describe("map ports and lanes", () => {
+  const box = (x: number, y: number, height = 80): MapBox => ({
+    x,
+    y,
+    width: 160,
+    height,
+  });
+  const boxes = new Map([
+    ["p", box(0, 0)],
+    ["q", box(0, 140)],
+    ["s", box(340, 100)],
+    ["t", box(340, 240)],
+    ["v", box(680, 0)],
+    ["lane", box(340, 0, 20)],
+  ]);
+  it("spreads outgoing ports by target y and incoming ports by source y, independently of edge order", () => {
+    const edges = [
+      { from: "p", to: "t", label: "cache" },
+      { from: "q", to: "s", label: "jobs" },
+      { from: "p", to: "s", label: "db" },
+    ];
+    const paths = routeMapEdges(edges, boxes);
+    expect(paths[0].source).toEqual({ x: 160, y: 52 });
+    expect(paths[2].source).toEqual({ x: 160, y: 28 });
+    expect(paths[1].target).toEqual({ x: 340, y: 152 });
+    expect(paths[2].target).toEqual({ x: 340, y: 128 });
+    for (const path of paths) {
+      expect(path.placement!.y).toBe(path.source.y);
+      expect(path.placement!.x - path.placement!.width / 2).toBe(
+        path.source.x + 8,
+      );
+      expect(path.d).toMatch(/^M[\d,]+ L[\d,]+ C/);
+    }
+  });
+  it("keeps mounted-volume paths horizontal across their invisible service slot", () => {
+    const [path] = routeMapEdges(
+      [{ from: "p", to: "v", label: "/app/uploads", lane: "lane" }],
+      boxes,
     );
-    expect(placed[0]).toEqual({ x: 175, y: 80, width: 74 });
-    expect(placed[1]).toEqual({ x: 175, y: 56, width: 74 });
+    expect(path.d).toContain("340,10 L500,10 C");
+    expect(path.d).toMatch(/680,40$/);
+    expect(path.lane).toBe("lane");
+    expect(path.placement).not.toBeNull();
   });
-  it("samples the preferred and fallback points on horizontal and vertical curves", () => {
-    const horizontal = mapLabelPositions(
-      { x: 0, y: 0 },
-      { x: 200, y: 100 },
-      false,
+  it("keeps long labels visible and bounded on the source lead, without clipping into cards", () => {
+    const [path] = routeMapEdges(
+      [{ from: "p", to: "s", label: "/a/very/long/mounted/volume/path" }],
+      boxes,
     );
-    expect(horizontal[0]).toEqual({ x: 100, y: 50 });
-    expect(horizontal[1].x).toBeCloseTo(76.825);
-    expect(horizontal[1].y).toBeCloseTo(28.175);
-    expect(horizontal[2].x).toBeCloseTo(123.175);
-    expect(horizontal[2].y).toBeCloseTo(71.825);
-    expect(horizontal[3]).toEqual({ x: 59.375, y: 15.625 });
-    expect(horizontal[4]).toEqual({ x: 140.625, y: 84.375 });
-    expect(mapLabelPositions({ x: 0, y: 0 }, { x: 100, y: 200 }, true)).toEqual(
-      horizontal.map(({ x, y }) => ({ x: y, y: x })),
+    expect(path.label).toBe("/a/very/long/mounted/volume/path");
+    expect(path.placement!.width).toBe(124);
+    expect(path.placement!.x + path.placement!.width / 2).toBeLessThan(340);
+    expect(
+      routeMapEdges([{ from: "p", to: "s" }], boxes)[0].placement,
+    ).toBeNull();
+  });
+  it("ignores missing anchors and missing lanes, and supports an empty graph", () => {
+    expect(routeMapEdges([], boxes)).toEqual([]);
+    expect(
+      routeMapEdges(
+        [
+          { from: "missing", to: "s" },
+          { from: "p", to: "s", lane: "missing" },
+        ],
+        boxes,
+      ),
+    ).toEqual([]);
+  });
+  it("grows cards to contain all ports and leaves breathing room around them", () => {
+    const edges: MapEdge[] = Array.from({ length: 8 }, (_, i) => ({
+      from: "p",
+      to: "s" + i,
+    }));
+    expect(mapNodeHeight("p", edges)).toBe(200);
+    expect(mapNodeHeight("unused", edges)).toBe(76);
+    expect(mapNodeHeight("s0", edges)).toBe(76);
+    const paths = routeMapEdges(
+      edges,
+      new Map([
+        ["p", box(0, 0, mapNodeHeight("p", edges))],
+        ...edges.map((edge, i) => [edge.to, box(340, i * 100)] as const),
+      ]),
     );
-  });
-  it("rejects pills intersecting another curve but allows their own curve", () => {
-    const own = sampleMapCurve({ x: 100, y: 80 }, { x: 240, y: 80 }, false);
-    const other = sampleMapCurve({ x: 175, y: 0 }, { x: 175, y: 200 }, true);
-    expect(placeMapLabels([label], [], 200, undefined, [own])).toEqual([
-      { x: 175, y: 80, width: 74 },
-    ]);
-    expect(placeMapLabels([label], [], 200, undefined, [own, other])).toEqual([
-      null,
-    ]);
-  });
-  it("tries a safe candidate on its own curve when another edge crosses the preferred pill", () => {
-    const positions = mapLabelPositions(
-      { x: 0, y: 50 },
-      { x: 400, y: 50 },
-      false,
-    );
-    const [preferred, ...alternatives] = positions;
-    const own = sampleMapCurve({ x: 0, y: 50 }, { x: 400, y: 50 }, false);
-    const other = sampleMapCurve({ x: 200, y: 0 }, { x: 200, y: 100 }, true);
-    expect(
-      placeMapLabels(
-        [{ ...label, ...preferred, left: 0, right: 400, alternatives }],
-        [],
-        200,
-        undefined,
-        [own, other],
-      ),
-    ).toEqual([{ ...alternatives[0], width: 74 }]);
-  });
-  it("samples full curves including their endpoints, also for a zero-length curve", () => {
-    const points = sampleMapCurve({ x: 0, y: 0 }, { x: 400, y: 100 }, false);
-    expect(points[0]).toEqual({ x: 0, y: 0 });
-    expect(points.at(-1)).toEqual({ x: 400, y: 100 });
-    expect(points.length).toBeGreaterThan(200);
-    expect(sampleMapCurve({ x: 1, y: 2 }, { x: 1, y: 2 }, true)).toEqual([
-      { x: 1, y: 2 },
-      { x: 1, y: 2 },
-    ]);
-  });
-  it("retries alternate curve points after the preferred desktop region is exhausted", () => {
-    const retry = { ...label, y: 120, alternatives: [{ x: 175, y: 360 }] };
-    const cards = [{ x: 100, y: 0, width: 140, height: 240 }];
-    expect(placeMapLabels([retry], cards, 500)).toEqual([
-      { x: 175, y: 360, width: 74 },
-    ]);
-    expect(
-      placeMapLabels([retry], [{ ...cards[0], height: 500 }], 500),
-    ).toEqual([null]);
-  });
-  it("retries alternate points within the mobile row gap after horizontal nudges fail", () => {
-    const retry = {
-      ...label,
-      x: 150,
-      y: 240,
-      top: 200,
-      bottom: 400,
-      alternatives: [{ x: 150, y: 320 }],
-    };
-    expect(
-      placeMapLabels(
-        [retry],
-        [{ x: 0, y: 220, width: 390, height: 40 }],
-        500,
-        390,
-      ),
-    ).toEqual([{ x: 150, y: 320, width: 74 }]);
-  });
-  it("hides labels rather than moving their centers away from the curve to fit the gutter", () => {
-    const [placed] = placeMapLabels(
-      [{ ...label, x: 235 }],
-      [{ x: 140, y: 70, width: 80, height: 20 }],
-      200,
-    );
-    expect(placed).toBeNull();
-  });
-  it("hides labels with insufficient space or no collision-free position", () => {
-    expect(
-      placeMapLabels(
-        [null, { ...label, right: 150 }, label],
-        [{ x: 100, y: 0, width: 140, height: 200 }],
-        200,
-      ),
-    ).toEqual([null, null, null]);
-    expect(placeMapLabels([label], [], 10)).toEqual([null]);
-    expect(placeMapLabels([], [], 200)).toEqual([]);
-  });
-  it("uses an alternative curve point for colliding vertical-layout labels", () => {
-    const vertical = { ...label, x: 150, y: 240, top: 200, bottom: 264 };
-    expect(
-      placeMapLabels(
-        [vertical, { ...vertical, alternatives: [{ x: 70, y: 240 }] }],
-        [],
-        500,
-        390,
-      ),
-    ).toEqual([
-      { x: 150, y: 240, width: 74 },
-      { x: 70, y: 240, width: 74 },
-    ]);
-  });
-  it("keeps vertical labels in the board and hides labels in blocked or undersized gaps", () => {
-    const vertical = { ...label, x: 380, y: 260, top: 200, bottom: 264 };
-    expect(placeMapLabels([vertical], [], 500, 390)).toEqual([null]);
-    expect(
-      placeMapLabels(
-        [vertical],
-        [{ x: 0, y: 200, width: 390, height: 64 }],
-        500,
-        390,
-      ),
-    ).toEqual([null]);
-    expect(
-      placeMapLabels([{ ...vertical, bottom: 220 }], [], 500, 390),
-    ).toEqual([null]);
-    expect(placeMapLabels([vertical], [], 500, 60)).toEqual([null]);
-  });
-  it("never nudges a label more than six pixels off its own curve", () => {
-    const cards = [{ x: 100, y: 60, width: 140, height: 40 }];
-    expect(placeMapLabels([label], cards, 300)).toEqual([null]);
-    const vertical = { ...label, x: 150, y: 240, top: 200, bottom: 264 };
-    expect(
-      placeMapLabels(
-        [vertical],
-        [{ x: 140, y: 200, width: 20, height: 64 }],
-        500,
-        390,
-      ),
-    ).toEqual([null]);
-    expect(
-      placeMapLabels([label], [{ x: 100, y: 91, width: 140, height: 10 }], 300),
-    ).toEqual([{ x: 175, y: 74, width: 74 }]);
-  });
-});
-
-describe("wrapping map rows", () => {
-  const nodes = ["out", "both", "idle", "in"].map((key) => ({ key }));
-  const edges = [
-    { from: "previous", to: "in" },
-    { from: "previous", to: "both" },
-    { from: "both", to: "next" },
-    { from: "out", to: "next" },
-  ];
-  it("keeps incoming nodes first and outgoing nodes last when wrapping", () => {
-    expect(orderMapRow(nodes, edges).map((node) => node.key)).toEqual([
-      "in",
-      "both",
-      "idle",
-      "out",
-    ]);
-    expect(nodes.map((node) => node.key)).toEqual([
-      "out",
-      "both",
-      "idle",
-      "in",
-    ]);
-  });
-  it("preserves a single line, empty rows and rows without connections", () => {
-    expect(orderMapRow(nodes.slice(0, 3), edges)).toEqual(nodes.slice(0, 3));
-    expect(orderMapRow([], edges)).toEqual([]);
-    expect(orderMapRow(nodes, [])).toEqual(nodes);
-    expect(
-      orderMapRow(nodes, [{ from: "missing", to: "also-missing" }]),
-    ).toEqual(nodes);
+    expect(paths[0].source.y).toBe(16);
+    expect(paths.at(-1)!.source.y).toBe(184);
   });
 });

@@ -23,11 +23,13 @@
 }
 .map-board {
   --map-vertical: 0;
+  --map-edge-live: var(--accent);
+  --map-edge-idle: #7c858b;
   position: relative;
   isolation: isolate;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(168px, 18cqw, 192px);
+  gap: clamp(156px, 17cqw, 184px);
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -36,7 +38,8 @@
 .map-column {
   min-width: 0;
 }
-.map-column h2 {
+.map-column h2,
+.map-tree-orphans h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -156,20 +159,38 @@
 }
 .map-edges path {
   fill: none;
-  stroke: var(--line-strong);
-  stroke-width: 1.5;
+  stroke: var(--map-edge-idle);
+  stroke-width: 2;
 }
 .map-edges .is-live path {
-  stroke: var(--accent);
+  stroke: var(--map-edge-live);
   stroke-dasharray: 5 6;
   animation: map-flow 1.6s linear infinite;
+}
+.map-lane {
+  height: 20px;
+}
+:root[data-theme="light"] .map-board {
+  --map-edge-live: #3f6212;
+  --map-edge-idle: #9ca3af;
+}
+.map-edges circle {
+  fill: var(--map-edge-idle);
+  stroke: var(--panel);
+  stroke-width: 1;
+}
+.map-edges .is-live circle {
+  fill: var(--map-edge-live);
+}
+.map-edge-label {
+  pointer-events: auto;
 }
 .map-edge-label rect {
   fill: var(--panel);
   stroke: var(--line);
 }
 .map-edge-label text {
-  fill: var(--muted);
+  fill: var(--text);
   font-size: 9px;
 }
 .map-node.is-dimmed,
@@ -214,87 +235,89 @@
 @container (max-width: 720px) {
   .map-board {
     --map-vertical: 1;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 64px;
-    padding: 16px 12px;
+    display: block;
+    padding: 12px;
     border-radius: 12px;
   }
-  .map-column h2 {
-    font-size: 11px;
-    margin-bottom: 14px;
+  .map-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
   }
-  .map-node {
-    min-height: 76px;
-    padding: 10px 8px;
-    gap: 7px;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    border-radius: 8px;
+  .map-tree ul {
+    list-style: none;
+    padding: 0 0 0 14px;
+    margin: 8px 0 0 12px;
+    border-left: 1px solid var(--map-edge-idle);
   }
-  .map-node-copy strong {
+  .map-tree li {
+    position: relative;
+    margin-top: 8px;
+  }
+  .map-tree li:first-child {
+    margin-top: 0;
+  }
+  .map-tree li::before {
+    content: "";
+    position: absolute;
+    top: 29px;
+    left: -14px;
+    width: 14px;
+    border-top: 1px solid var(--map-edge-idle);
+  }
+  .map-tree .map-node {
+    min-height: 58px;
+    padding: 10px;
+    gap: 9px;
+    border-radius: 9px;
+  }
+  .map-tree-project > .map-node {
+    background: var(--accent-soft);
+  }
+  .map-tree .map-node-copy strong {
     font-size: 11px;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
     white-space: normal;
     overflow-wrap: normal;
-    word-break: normal;
-    overflow: hidden;
   }
-  .map-node-copy {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    width: 100%;
+  .map-tree .map-node-copy small {
+    font-size: 10px;
   }
-  .map-name-part {
-    display: inline-block;
-    max-width: 100%;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    vertical-align: bottom;
+  .map-tree-alias {
+    color: var(--muted);
+    font-weight: 400;
   }
-  .map-node > .map-dot {
-    grid-column: 2;
-    grid-row: 1;
-    margin: 0;
+  .map-tree-empty {
+    margin: 10px 0 0 15px;
+    color: var(--muted);
+    font-size: 10px;
   }
-  .map-node-copy small {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  .map-tree-orphans h2 {
+    margin-bottom: 12px;
+    color: var(--muted);
   }
-  .map-node-list {
-    display: grid;
-    grid-template-columns: repeat(var(--map-card-columns), minmax(0, 1fr));
-    gap: 8px;
+  .map-tree-orphans > ul {
+    border: 0;
+    margin-left: 0;
+    padding-left: 0;
+  }
+  .map-tree-orphans > ul > li::before {
+    display: none;
   }
   .workspace-map .map-legend > .map-hint {
     display: none;
   }
   .map-node-icon,
   .map-node .engine-icon {
-    width: 20px;
-    height: 22px;
-    flex-basis: 20px;
+    width: 22px;
+    height: 24px;
+    flex-basis: 22px;
     border: 0;
     background: none;
   }
   .map-node-icon svg,
   .map-node .engine-icon svg {
-    width: 14px;
-    height: 14px;
-  }
-  .map-dot {
-    margin-top: 6px;
-    width: 5px;
-    height: 5px;
-    flex-basis: 5px;
-  }
-  .map-legend .map-dot,
-  .map-live .map-dot {
-    margin-top: 0;
+    width: 15px;
+    height: 15px;
   }
   .map-meta {
     font-size: 10px;
@@ -302,9 +325,6 @@
   }
   .map-legend {
     gap: 12px;
-    font-size: 10px;
-  }
-  .map-column-empty {
     font-size: 10px;
   }
 }

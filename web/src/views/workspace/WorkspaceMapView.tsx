@@ -1,5 +1,4 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useDashboard } from "../../layouts/DashboardLayout";
@@ -15,10 +14,8 @@ import {
   buildWorkspaceMap,
   connectedMapNodes,
   mapKey,
-  placeMapLabels,
-  orderMapRow,
-  mapLabelPositions,
-  sampleMapCurve,
+  mapNodeHeight,
+  routeMapEdges,
 } from "../../lib/map";
 import { Heading } from "../../components/Heading";
 import { Empty, ErrorMessage, Loading } from "../../components/ui";
@@ -35,13 +32,7 @@ type Node = {
   to: string;
   engine?: string;
 };
-type Curve = {
-  from: string;
-  to: string;
-  label?: string;
-  d: string;
-  placement: { x: number; y: number; width: number } | null;
-};
+type Curve = ReturnType<typeof routeMapEdges>[number];
 const tone = (status: string) =>
   ["running", "success", "active"].includes(status)
     ? "running"
@@ -134,29 +125,12 @@ export function WorkspaceMapView() {
     });
     return {
       projects: projectNodes,
-      connections: graph.connections.map((resource) =>
-        [...serviceNodes, ...volumeNodes].find(
-          (node) => node.key === mapKey(resource.kind, resource.id),
-        )!,
-      ),
-      storage: graph.storage.map((volume) =>
-        volumeNodes.find((node) => node.key === mapKey("volumes", volume.id))!,
-      ),
+      services: serviceNodes,
+      volumes: volumeNodes,
     };
   }, [graph, containers.data, releases.data, id]);
   const root = useRef<HTMLDivElement>(null);
   const [verticalLayout, setVerticalLayout] = useState(false);
-  const visibleColumns = useMemo(
-    () =>
-      verticalLayout
-        ? {
-            projects: orderMapRow(columns.projects, graph.edges),
-            connections: orderMapRow(columns.connections, graph.edges),
-            storage: orderMapRow(columns.storage, graph.edges),
-          }
-        : columns,
-    [verticalLayout, columns, graph.edges],
-  );
   const [curves, setCurves] = useState<Curve[]>([]);
   const [hovered, setHovered] = useState<string | null>(null),
     [focused, setFocused] = useState<string | null>(null);
@@ -188,76 +162,27 @@ export function WorkspaceMapView() {
         getComputedStyle(element).getPropertyValue("--map-vertical").trim() ===
         "1";
       setVerticalLayout(vertical);
-      const anchors = new Map(
+      if (vertical) {
+        setCurves([]);
+        return;
+      }
+      const boxes = new Map(
         Array.from(element.querySelectorAll<HTMLElement>("[data-map-key]")).map(
-          (node) => [node.dataset.mapKey!, node.getBoundingClientRect()],
+          (node) => {
+            const rect = node.getBoundingClientRect();
+            return [
+              node.dataset.mapKey!,
+              {
+                x: rect.left - bounds.left,
+                y: rect.top - bounds.top,
+                width: rect.width,
+                height: rect.height,
+              },
+            ] as const;
+          },
         ),
       );
-      const measured = graph.edges.flatMap((edge) => {
-        const a = anchors.get(edge.from),
-          b = anchors.get(edge.to);
-        if (!a || !b) return [];
-        const x1 = (vertical ? a.left + a.width / 2 : a.right) - bounds.left,
-          x2 = (vertical ? b.left + b.width / 2 : b.left) - bounds.left,
-          y1 = (vertical ? a.bottom : a.top + a.height / 2) - bounds.top,
-          y2 = (vertical ? b.top : b.top + b.height / 2) - bounds.top;
-        const bend = (vertical ? y2 - y1 : x2 - x1) * 0.5;
-        const groupBounds = (key: string) =>
-          Array.from(element.querySelectorAll<HTMLElement>("[data-map-key]"))
-            .find((node) => node.dataset.mapKey === key)
-            ?.closest(".map-column")
-            ?.getBoundingClientRect();
-        const sourceGroup = groupBounds(edge.from),
-          targetGroup = groupBounds(edge.to);
-        const [preferred, ...alternatives] = mapLabelPositions(
-          { x: x1, y: y1 },
-          { x: x2, y: y2 },
-          vertical,
-        );
-        return [
-          {
-            ...edge,
-            samples: sampleMapCurve(
-              { x: x1, y: y1 },
-              { x: x2, y: y2 },
-              vertical,
-            ),
-            d: vertical
-              ? `M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2}`
-              : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
-            labelBox: edge.label
-              ? {
-                  ...preferred,
-                  alternatives,
-                  width: Math.min(edge.label.length, 19) * 7 + 18,
-                  left: x1,
-                  right: x2,
-                  top: sourceGroup ? sourceGroup.bottom - bounds.top : y1,
-                  bottom: targetGroup ? targetGroup.top - bounds.top : y2,
-                }
-              : null,
-          },
-        ];
-      });
-      const cards = [...anchors.values()].map((rect) => ({
-        x: rect.left - bounds.left,
-        y: rect.top - bounds.top,
-        width: rect.width,
-        height: rect.height,
-      }));
-      const placements = placeMapLabels(
-        measured.map((edge) => edge.labelBox),
-        cards,
-        bounds.height,
-        vertical ? bounds.width : undefined,
-        measured.map((edge) => edge.samples),
-      );
-      setCurves(
-        measured.map((edge, index) => ({
-          ...edge,
-          placement: placements[index],
-        })),
-      );
+      setCurves(routeMapEdges(graph.edges, boxes));
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -266,7 +191,7 @@ export function WorkspaceMapView() {
       .querySelectorAll("[data-map-key]")
       .forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [graph, visibleColumns]);
+  }, [graph, columns, verticalLayout]);
   const error =
     projects.error ||
     containers.error ||
@@ -279,6 +204,79 @@ export function WorkspaceMapView() {
   const pending = [projects, containers, releases, services, volumes].some(
     (q) => q.isPending,
   );
+  const nodeByKey = new Map(nodes.map((node) => [node.key, node]));
+  const card = (node: Node, alias?: string) => (
+    <Link
+      key={node.key}
+      data-map-key={verticalLayout ? undefined : node.key}
+      to={node.to}
+      style={
+        verticalLayout
+          ? undefined
+          : { minHeight: mapNodeHeight(node.key, graph.edges) }
+      }
+      className={`map-node ${!verticalLayout && connected && !connected.has(node.key) ? "is-dimmed" : ""} ${!verticalLayout && connected?.has(node.key) ? "is-connected" : ""}`}
+      onMouseEnter={() => setHovered(node.key)}
+      onMouseLeave={() => setHovered(null)}
+      onFocus={() => setFocused(node.key)}
+      onBlur={() => setFocused(null)}
+      title={`${alias ? alias + " → " : ""}${node.name} · ${node.detail} · ${node.status}${connectionLabels.get(node.key) || ""}`}
+      aria-label={`${alias ? alias + " → " : ""}${node.name} ${node.detail} ${node.status}${connectionLabels.get(node.key) || ""}`}
+    >
+      {node.engine ? (
+        <EngineIcon engine={node.engine} />
+      ) : (
+        <span className="map-node-icon">
+          <Icon
+            name={node.key.startsWith("projects:") ? "grid" : "hard-drive"}
+          />
+        </span>
+      )}
+      <span className="map-node-copy">
+        <strong>
+          {alias && <span className="map-tree-alias">{alias} → </span>}
+          {node.name}
+        </strong>
+        <small>{node.detail}</small>
+      </span>
+      <i className={`map-dot ${tone(node.status)}`} aria-label={node.status} />
+    </Link>
+  );
+  const children = (key: string) =>
+    graph.edges.filter((edge) => edge.from === key);
+  const branch = (key: string, alias?: string) => {
+    const node = nodeByKey.get(key);
+    if (!node) return null;
+    return (
+      <li key={key}>
+        {card(node, alias)}
+        {children(key).length > 0 && (
+          <ul>
+            {children(key).map((edge) => {
+              const child = nodeByKey.get(edge.to);
+              return child ? (
+                <li key={edge.to}>{card(child, edge.label)}</li>
+              ) : null;
+            })}
+          </ul>
+        )}
+      </li>
+    );
+  };
+  const shown = new Set<string>();
+  for (const project of columns.projects) {
+    for (const edge of children(project.key)) {
+      shown.add(edge.to);
+      for (const child of children(edge.to)) shown.add(child.to);
+    }
+  }
+  const orphanServices = columns.services.filter(
+    (node) => !shown.has(node.key),
+  );
+  for (const service of orphanServices) {
+    for (const edge of children(service.key)) shown.add(edge.to);
+  }
+  const orphanVolumes = columns.volumes.filter((node) => !shown.has(node.key));
   return (
     <div className="workspace-map">
       <Heading
@@ -316,117 +314,117 @@ export function WorkspaceMapView() {
             </span>
           </div>
           <div className="map-board" ref={root}>
-            <svg className="map-edges" aria-hidden="true">
-              <g>
-                {curves.map((edge, i) => {
-                  const live = [edge.from, edge.to].every(
-                    (key) =>
-                      tone(nodes.find((n) => n.key === key)?.status || "") ===
-                      "running",
-                  );
-                  const dim = connected && !connected.has(edge.from);
-                  return (
-                    <g
-                      key={i}
-                      className={`${live ? "is-live" : ""} ${dim ? "is-dimmed" : ""}`}
-                    >
-                      <path d={edge.d} />
-                      {edge.label && edge.placement && (
-                        <g
-                          className="map-edge-label"
-                          transform={`translate(${edge.placement.x},${edge.placement.y})`}
-                        >
-                          <rect
-                            x={-edge.placement.width / 2}
-                            y="-10"
-                            width={edge.placement.width}
-                            height="20"
-                            rx="10"
-                          />
-                          <text textAnchor="middle" dominantBaseline="central">
-                            {edge.label.length > 19
-                              ? `${edge.label.slice(0, 18)}…`
-                              : edge.label}
-                          </text>
-                        </g>
-                      )}
-                    </g>
-                  );
-                })}
-              </g>
-            </svg>
-            {(["projects", "connections", "storage"] as const).map((kind) => (
-              <section className="map-column" key={kind} aria-label={kind}>
-                <h2>
-                  {kind}
-                  <span>{columns[kind].length}</span>
-                </h2>
-                <div
-                  className="map-node-list"
-                  style={
-                    {
-                      "--map-card-columns": Math.max(
-                        1,
-                        Math.min(columns[kind].length, 3),
-                      ),
-                    } as CSSProperties
-                  }
-                >
-                  {visibleColumns[kind].map((node) => (
-                    <Link
-                      key={node.key}
-                      data-map-key={node.key}
-                      to={node.to}
-                      className={`map-node ${connected && !connected.has(node.key) ? "is-dimmed" : ""} ${connected?.has(node.key) ? "is-connected" : ""}`}
-                      onMouseEnter={() => setHovered(node.key)}
-                      onMouseLeave={() => setHovered(null)}
-                      onFocus={() => setFocused(node.key)}
-                      onBlur={() => setFocused(null)}
-                      title={`${node.name} · ${node.detail} · ${node.status}${connectionLabels.get(node.key) || ""}`}
-                      aria-label={`${node.name} ${node.detail} ${node.status}${connectionLabels.get(node.key) || ""}`}
-                    >
-                      {node.engine ? (
-                        <EngineIcon engine={node.engine} />
-                      ) : (
-                        <span className="map-node-icon">
-                          <Icon
-                            name={
-                              node.key.startsWith("projects:")
-                                ? "grid"
-                                : "hard-drive"
-                            }
-                          />
-                        </span>
-                      )}
-                      <span className="map-node-copy">
-                        <strong>
-                          {verticalLayout
-                            ? node.name
-                                .split(/(?<=-)|\s+/)
-                                .map((part, index) => (
-                                  <span key={index}>
-                                    <span className="map-name-part">
-                                      {part}
-                                    </span>
-                                    {part.endsWith("-") ? null : " "}
-                                  </span>
-                                ))
-                            : node.name}
-                        </strong>
-                        <small>{node.detail}</small>
+            {verticalLayout ? (
+              <div className="map-tree">
+                {columns.projects.map((project) => (
+                  <section
+                    key={project.key}
+                    aria-label={project.name}
+                    className="map-tree-project"
+                  >
+                    {card(project)}
+                    {children(project.key).length ? (
+                      <ul>
+                        {children(project.key).map((edge) =>
+                          branch(edge.to, edge.label),
+                        )}
+                      </ul>
+                    ) : (
+                      <p className="map-tree-empty">No connections yet</p>
+                    )}
+                  </section>
+                ))}
+                {(orphanServices.length > 0 || orphanVolumes.length > 0) && (
+                  <section
+                    aria-label="Not connected"
+                    className="map-tree-orphans"
+                  >
+                    <h2>
+                      Not connected{" "}
+                      <span>
+                        {orphanServices.length + orphanVolumes.length}
                       </span>
-                      <i
-                        className={`map-dot ${tone(node.status)}`}
-                        aria-label={node.status}
-                      />
-                    </Link>
-                  ))}
-                  {!columns[kind].length && (
-                    <p className="map-column-empty">No {kind} yet</p>
-                  )}
-                </div>
-              </section>
-            ))}
+                    </h2>
+                    <ul>
+                      {orphanServices.map((node) => branch(node.key))}
+                      {orphanVolumes.map((node) => branch(node.key))}
+                    </ul>
+                  </section>
+                )}
+              </div>
+            ) : (
+              <>
+                <svg className="map-edges" aria-hidden="true">
+                  {curves.map((edge, i) => {
+                    const live = [edge.from, edge.to].every(
+                      (key) =>
+                        tone(nodeByKey.get(key)?.status || "") === "running",
+                    );
+                    const dim = connected && !connected.has(edge.from);
+                    return (
+                      <g
+                        key={i}
+                        className={`${live ? "is-live" : ""} ${dim ? "is-dimmed" : ""}`}
+                      >
+                        <path d={edge.d} />
+                        <circle cx={edge.source.x} cy={edge.source.y} r="2.5" />
+                        <circle cx={edge.target.x} cy={edge.target.y} r="2.5" />
+                        {edge.label && edge.placement && (
+                          <g
+                            className="map-edge-label"
+                            transform={`translate(${edge.placement.x},${edge.placement.y})`}
+                          >
+                            <title>{edge.label}</title>
+                            <rect
+                              x={-edge.placement.width / 2}
+                              y="-9"
+                              width={edge.placement.width}
+                              height="18"
+                              rx="9"
+                            />
+                            <text
+                              textAnchor="middle"
+                              dominantBaseline="central"
+                            >
+                              {edge.label.length > 18
+                                ? `${edge.label.slice(0, 17)}…`
+                                : edge.label}
+                            </text>
+                          </g>
+                        )}
+                      </g>
+                    );
+                  })}
+                </svg>
+                {(["projects", "services", "volumes"] as const).map((kind) => (
+                  <section className="map-column" key={kind} aria-label={kind}>
+                    <h2>
+                      {kind}
+                      <span>{columns[kind].length}</span>
+                    </h2>
+                    <div className="map-node-list">
+                      {kind === "services"
+                        ? graph.serviceSlots.map((slot) =>
+                            slot.lane ? (
+                              <div
+                                key={slot.key}
+                                data-map-key={slot.key}
+                                className="map-lane"
+                                aria-hidden="true"
+                              />
+                            ) : (
+                              card(nodeByKey.get(slot.key)!)
+                            ),
+                          )
+                        : columns[kind].map((node) => card(node))}
+                      {!columns[kind].length && (
+                        <p className="map-column-empty">No {kind} yet</p>
+                      )}
+                    </div>
+                  </section>
+                ))}
+              </>
+            )}
           </div>
           <div className="map-legend" aria-label="Status legend">
             {[
