@@ -19,6 +19,17 @@ import (
 
 type Target = routing.Target
 
+func certificateRouteURL(route Record) string {
+	host := strings.Trim(routing.NormalizeHost(route.Host), "[]")
+	_, port, _ := net.SplitHostPort(config.Env("STARTSHIP_HTTPS_ADDR", ":443"))
+	if port != "" && port != "443" {
+		host = net.JoinHostPort(host, port)
+	} else if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	return (&url.URL{Scheme: "https", Host: host, Path: route.PathPrefix}).String()
+}
+
 func routeURL(route Record) string {
 	scheme, addr, defaultPort := "http", config.Env("STARTSHIP_HTTP_ADDR", ":80"), "80"
 	if os.Getenv("STARTSHIP_ACME_EMAIL") != "" {
@@ -72,6 +83,12 @@ func (a *Server) certAllowed(host string) bool {
 	return false
 }
 func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if a.serveChallenge(w, r) {
+		return
+	}
+	if r.TLS != nil {
+		r.Header.Set("X-Forwarded-Proto", "https")
+	}
 	if a.dashboardDomain != "" && routing.NormalizeHost(r.Host) == routing.NormalizeHost(a.dashboardDomain) {
 		if a.https && r.TLS == nil {
 			http.Redirect(w, r, "https://"+routing.NormalizeHost(r.Host)+r.URL.RequestURI(), http.StatusPermanentRedirect)
@@ -89,6 +106,14 @@ func (a *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	a.routeMu.RUnlock()
 	if t == nil {
 		http.Error(w, "Startship: no route configured for this address.", 404)
+		return
+	}
+	if target.Route.ForceHTTPS && r.TLS == nil {
+		u, _ := url.Parse(certificateRouteURL(target.Route))
+		u.Path = r.URL.Path
+		u.RawPath = r.URL.RawPath
+		u.RawQuery = r.URL.RawQuery
+		http.Redirect(w, r, u.String(), http.StatusMovedPermanently)
 		return
 	}
 	started := time.Now()

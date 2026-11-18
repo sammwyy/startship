@@ -78,6 +78,7 @@ func Run() {
 	defer stopMetrics()
 	go a.sampleTrafficResources(metricsContext)
 	go a.watchUpdates(metricsContext)
+	go a.watchCertificates(metricsContext)
 	dash := &http.Server{Addr: config.Env("STARTSHIP_DASHBOARD_ADDR", ":8080"), Handler: a.api(), ReadHeaderTimeout: 10 * time.Second}
 	proxy := &http.Server{Addr: config.Env("STARTSHIP_HTTP_ADDR", ":80"), Handler: a, ReadHeaderTimeout: 10 * time.Second}
 	servers := []*http.Server{dash, proxy}
@@ -89,11 +90,18 @@ func Run() {
 			}
 			return errInvalid
 		}}
-		proxy.Handler = m.HTTPHandler(a)
-		https := &http.Server{Addr: config.Env("STARTSHIP_HTTPS_ADDR", ":443"), Handler: a, TLSConfig: m.TLSConfig(), ReadHeaderTimeout: 10 * time.Second}
-		https.TLSConfig.MinVersion = tls.VersionTLS12
-		servers = append(servers, https)
+		legacyHTTP := m.HTTPHandler(a)
+		proxy.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := a.challenges.Load(r.URL.Path); ok {
+				a.serveChallenge(w, r)
+				return
+			}
+			legacyHTTP.ServeHTTP(w, r)
+		})
+		a.legacyCertificate = m.GetCertificate
 	}
+	https := &http.Server{Addr: config.Env("STARTSHIP_HTTPS_ADDR", ":443"), Handler: a, TLSConfig: &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: a.tlsCertificate}, ReadHeaderTimeout: 10 * time.Second}
+	servers = append(servers, https)
 	if e := serve(servers); e != nil {
 		log.Fatal(e)
 	}
