@@ -2,9 +2,9 @@
 
 Each workspace has one L7 policy, applied to its projects' public routes. The
 dashboard domain and ACME HTTP challenges bypass it so an incorrect rule cannot
-lock you out of the control panel. New policies are **off**. Network/L4 rules,
-CLI commands and a dashboard rule editor are separate features, not implemented
-by this workspace API.
+lock you out of the control panel. New policies are **off**. Network/L4 rules
+and a dashboard rule editor are separate features, not implemented by this
+workspace API.
 
 ## Policy and rules
 
@@ -255,6 +255,47 @@ Policy/list changes push promptly (coalesced on the live hub's flush); telemetry
 events/observations push at most once per second and idle subscriptions do not
 poll configuration. Access is rechecked before snapshots and on the usual live
 session timer; revocation drops the subscription. See [live-api.md](live-api.md).
+
+## CLI
+
+Run `startship help` for the complete `firewall` command family. Workspace names
+and IDs are accepted, using the existing saved login or local-admin socket.
+`show`, `mode`, `managed`, `limits`, `rules`, `lists`, `ban`, `unban`, `events`,
+`apply` and `export` use the same workspace REST endpoints and permissions.
+`--json` works as for other commands; `export WS` always emits JSON suitable for
+`apply WS FILE.json`. Policy edits read the current policy then PUT the changed
+policy, preserving unrelated settings (concurrent edits are last-writer-wins).
+
+Examples:
+
+```sh
+startship firewall mode Team enforce
+startship firewall limits Team --rate 100/1m --rate-action ban --ban 15m --max-body 10MB
+startship firewall rules add Team --name "Protect login" --when 'method eq POST' --when 'path eq /login' --action rate_limit --rate 10/1m --ban 15m
+startship firewall lists add Team Office --kind allow
+startship firewall lists entry add Team LIST_ID 203.0.113.0/24 --for 7d
+startship firewall ban Team 192.0.2.1 --for 1h
+startship --json firewall events Team --follow
+```
+
+List creation takes a name and optional `--kind block|allow` (default block);
+the API generates the list ID. Subsequent list commands take that ID.
+Rule commands take rule IDs; `rules move WS RULE POS` uses **1-based** positions.
+`--when` repeats; `in` takes comma-separated values, `exists` can omit the value.
+`--any` selects OR instead of AND. Rule rates default to per-IP scope.
+Durations accept whole seconds via Go duration notation (`30s`, `15m`, `1h`)
+plus days (`7d`), up to 365 days; zero makes a ban permanent. Sizes accept integer
+bytes or decimal `KB`, `MB`, `GB` (512KB = 512000 bytes); zero removes a size or
+concurrency limit.
+
+`events --follow` subscribes to the live `firewall` topic, without REST polling.
+It works over HTTP(S) with the saved session cookie **and over Unix sockets**
+with the existing socket transport. Initial buffered events and subsequent new
+events print oldest-first; replacement snapshots do not reprint old events.
+With `--json`, each new event is one NDJSON line. Ctrl-C ends the stream.
+The live API includes only the latest 100 events per snapshot, so more than 100
+new events between snapshots can leave gaps; the CLI does not promise a durable
+event log or automatically reconnect after an interrupted connection.
 
 ## Implementer contract: daemon and router
 
