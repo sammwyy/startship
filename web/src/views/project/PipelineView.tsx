@@ -203,12 +203,19 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                           : d.root_dir}
                       </code>
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => t && apply(t, d.pipeline)}
-                    >
-                      Apply {t?.name || d.template}
-                    </button>
+                    {project.build_type === d.template ? (
+                      <div className="pipeline-in-use small muted">
+                        <Icon name="check" />
+                        In use
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => t && apply(t, d.pipeline)}
+                      >
+                        Apply {t?.name || d.template}
+                      </button>
+                    )}
                   </div>
                 );
               })}
