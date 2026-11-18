@@ -5,6 +5,9 @@ import {
   ArrowRight,
   ArrowUpRight,
   Box,
+  Database,
+  HardDrive,
+  Plug,
   ChevronLast,
   Code,
   Copy,
@@ -45,6 +48,9 @@ import {
 } from "lucide-react";
 
 const icons = {
+  database: Database,
+  "hard-drive": HardDrive,
+  plug: Plug,
   pipeline: Workflow,
   check: Check,
   activity: Activity,

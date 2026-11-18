@@ -261,6 +261,8 @@ export function DashboardLayout() {
               {navLink(url, "Projects", "grid", true)}
               {workspace && (
                 <>
+                  {navLink(`${url}/services`, "Services", "database")}
+                  {navLink(`${url}/volumes`, "Volumes", "hard-drive")}
                   {navLink(`${url}/domains`, "Domains", "globe")}
                   {navLink(
                     `${url}/certificates`,

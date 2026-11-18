@@ -7,9 +7,11 @@ import type {
   Release,
   SystemVersion,
   UpdateInfo,
+  Service,
 } from "./types";
 
 export type LiveSubscription =
+  | { topic: "services" | "volumes"; workspace_id: string }
   | { topic: "certificates"; workspace_id: string }
   | { topic: "project"; project_id: string }
   | { topic: "workspace"; workspace_id: string }
@@ -160,7 +162,26 @@ export function applyLiveMessage(
   event: LiveMessage,
 ) {
   if (event.type === "error") return;
-  if (spec.topic === "certificates" && event.type === "snapshot") {
+  if (
+    (spec.topic === "services" || spec.topic === "volumes") &&
+    event.type === "snapshot"
+  ) {
+    const queryKey = [`workspaces/${spec.workspace_id}/${spec.topic}`];
+    void client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData(queryKey, event.data);
+    if (spec.topic === "services") {
+      const services = (event.data as { services: Service[] }).services;
+      for (const service of services) {
+        const key = queries.service(service.id).queryKey;
+        void client.cancelQueries({ queryKey: key, exact: true });
+        client.setQueryData(key, service);
+      }
+      void client.invalidateQueries({
+        predicate: (query) =>
+          /^projects\/[^/]+\/services$/.test(String(query.queryKey[0])),
+      });
+    }
+  } else if (spec.topic === "certificates" && event.type === "snapshot") {
     const queryKey = [`workspaces/${spec.workspace_id}/certificates`];
     void client.cancelQueries({ queryKey, exact: true });
     client.setQueryData(queryKey, event.data);

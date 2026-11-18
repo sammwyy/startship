@@ -39,6 +39,7 @@ type Record struct {
 	AutoDeploy        bool               `json:"auto_deploy"`
 	WebhookSecret     string             `json:"webhook_secret,omitempty"`
 	Active            string             `json:"active_deployment,omitempty"`
+	ResourcesUpdated  *time.Time         `json:"resources_updated,omitempty"`
 	Host              string             `json:"host,omitempty"`
 	PathPrefix        string             `json:"path_prefix,omitempty"`
 	StripPrefix       bool               `json:"strip_prefix"`

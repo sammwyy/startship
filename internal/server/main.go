@@ -78,11 +78,13 @@ func Run(settings config.Daemon) {
 	}
 	defer s.DB.Close()
 	a := &Server{store: s, data: data, queues: make(map[string]chan string), dashboardDomain: os.Getenv("STARTSHIP_DASHBOARD_DOMAIN")}
+	a.reserveServicePorts(settings.DashboardListen, settings.HTTPListen, settings.HTTPSListen)
 	a.initLive()
 	if e = a.bootstrapAdmin(os.Getenv("STARTSHIP_ADMIN_USER"), os.Getenv("STARTSHIP_ADMIN_PASSWORD")); e != nil {
 		log.Fatal(e)
 	}
 	a.restore()
+	a.reconcileServices()
 	metricsContext, stopMetrics := context.WithCancel(context.Background())
 	defer stopMetrics()
 	go a.sampleTrafficResources(metricsContext)

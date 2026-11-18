@@ -186,6 +186,45 @@ members can list them. Cross-workspace overlapping claims are rejected. Project
 route hosts must be allowed by their workspace; Platform Admins bypass this host
 restriction. Use `routes add`/`routes update` to configure actual project routing.
 
+### Services and persistent volumes
+
+```sh
+startship catalog                         # engines, versions, ports; --json includes config fields
+startship services Team                   # shorthand for services list Team
+startship services create Team redis cache --version 7.4 --port 16380
+startship services create Team postgresql db --set user=app --set database=app
+startship services show SERVICE_ID --json
+startship services patch SERVICE_ID --version 7.2 --port 0
+startship services patch SERVICE_ID --set password=new-password
+startship services start SERVICE_ID        # also stop, restart
+startship services logs SERVICE_ID --tail 200
+startship services attach SERVICE_ID website cache_db
+startship services connections website    # attached + available services, connection env
+startship services detach SERVICE_ID website
+startship services delete SERVICE_ID      # keeps its data volume
+startship services delete OTHER_ID --delete-volume
+startship volumes list Team
+startship volumes create Team uploads --project website --mount /app/uploads
+startship volumes create Team data
+startship volumes attach VOLUME_ID website /app/data
+startship volumes detach VOLUME_ID
+startship volumes delete VOLUME_ID        # rejected while attached to a project/service
+```
+
+Workspace and project arguments accept names or IDs; service and volume targets
+use IDs. Every command supports `--json`, preserving its API response (including
+list wrappers and log objects). `services [list] WORKSPACE` and
+`volumes [list] WORKSPACE` accept the optional `list` action. Repeated
+`--set KEY=VALUE` options merge config fields; `--port 0` disables external access.
+Use `services create ... --volume VOLUME_ID` to reuse an unattached workspace
+volume instead of creating one. `--project` and `--mount` must be used together.
+Redeploy projects after changing service attachments or volume mounts.
+
+Service/volume mutations require workspace `services.manage`; project attachment
+changes also require `project.settings`. Credentials are only returned with
+`services.manage`. Passwords supplied as command arguments may appear in shell
+history and process listings.
+
 ## Run
 
 Requires [Docker Engine](https://docs.docker.com/engine/install/) with Compose and [Git](https://git-scm.com/downloads); your user must be able to access the Docker daemon. Ports 80, 443 and 8080 must be free on the host.
@@ -492,6 +531,12 @@ go vet ./... && go test ./...
 ```
 
 E2E requires Python 3, curl, Git and real Docker. It also covers a two-HTTP-container project release, shared config, container domain targets, grouped failure preservation, artifact redeploy, and restart recovery. Uses localhost ports 18080/18081, creates a local Dockerfile + Python + Rust + static monorepo, auto-detects and deploys all four through the API, tests route URLs, prefix proxying and restart recovery, and removes its containers, images, and data afterward. Docker network startship is retained.
+
+`STARTSHIP_E2E_SERVICES=1 ./scripts/e2e.sh` additionally exercises all 13 catalog engines with real clients and API-generated credentials, including generated connection URLs and Kafka host/project-network listeners. It pulls several large images and removes its test workspace, services, volumes, project and helper client image. Run just this catalog check against an existing daemon with `STARTSHIP_SERVICES_USER=admin STARTSHIP_SERVICES_PASSWORD=... python3 scripts/services_e2e.py` (`STARTSHIP_SERVICES_API` defaults to `http://127.0.0.1:18080/api/`).
+
+Object storage uses SeaweedFS (`chrislusf/seaweedfs:3.85`) with persistent data, generated S3 access/secret keys, and authenticated S3 access on port 8333. Connections inject `HOST`, `PORT`, `ACCESS_KEY`, `SECRET_KEY`, `URL` and `ENDPOINT` variables. The catalog sweep uses AWS CLI to create a bucket, put/list an object, reject anonymous access and verify data survives a restart.
+
+New Redis/Valkey services require a generated password. OpenSearch uses the built-in `admin` user, a strong generated password, HTTPS with the image's self-signed demo certificate, a 512 MiB heap and a 2 GiB default container limit (overridable with `STARTSHIP_SERVICE_MEMORY`). Configure trusted TLS before production use. Memcached, NATS and Kafka have no authentication configured by default; do not expose them on untrusted networks.
 
 ## Project layout
 

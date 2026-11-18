@@ -22,13 +22,18 @@ import (
 )
 
 type Server struct {
-	store   *Store
-	data    string
-	mu      sync.Mutex
-	queues  map[string]chan string
-	routeMu sync.RWMutex
-	targets []Target
-	traffic trafficMetrics
+	dockerService        func(...string) (string, error)
+	resourcesMu          sync.Mutex
+	volumeSizeMu         sync.Mutex
+	volumeSizeAt         time.Time
+	serviceReservedPorts map[int]bool
+	store                *Store
+	data                 string
+	mu                   sync.Mutex
+	queues               map[string]chan string
+	routeMu              sync.RWMutex
+	targets              []Target
+	traffic              trafficMetrics
 	// https preserves the legacy dashboard HTTP redirect when autocert is enabled.
 	dashboardDomain     string
 	https               bool
@@ -404,7 +409,7 @@ func (a *Server) api() http.Handler {
 			reply(w, 200, pipeline.Templates())
 			return
 		}
-		if a.certificatesAPI(w, r, p, uid, x) {
+		if a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) {
 			return
 		}
 		if p[1] == "detect" && r.Method == "POST" {
@@ -581,12 +586,17 @@ func (a *Server) api() http.Handler {
 					}
 				}
 			}
+			if old.Kind == "workspaces" && (len(listResources[Service](a, "services", old.ID)) > 0 || len(listResources[Volume](a, "volumes", old.ID)) > 0) {
+				fail(w, 409, "delete workspace services and volumes first")
+				return
+			}
 			a.store.Delete(old)
 			if old.Kind == "workspaces" || old.Kind == "projects" {
 				a.removeScopeAccess(strings.TrimSuffix(old.Kind, "s"), old.ID)
 				a.audit(uid, strings.TrimSuffix(old.Kind, "s")+".delete", old.Name, strings.TrimSuffix(old.Kind, "s"), old.ID, map[string]string{"id": old.ID})
 			}
 			if old.Kind == "projects" {
+				a.detachProjectServices(old.ID)
 				lock := projectBuildLock(old.ID)
 				lock.Lock()
 				removeProjectBuilders(old.ID, "", nil)

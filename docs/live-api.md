@@ -33,3 +33,10 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | `system_update` | none | signed in (same as GET) | = GET `system/update` | a new `snapshot` whenever it changes (update requested, status file, release check) | SystemView 2s/60s |
 
 Mutations stay on the REST API; their effects arrive over the socket.
+
+## Services and volumes
+- Topics `services` and `volumes` take `workspace_id` and require workspace visibility.
+- Snapshots are `{services: Service[]}` and `{volumes: Volume[]}`, matching the workspace REST list routes. Every mutation/status change sends a replacement `snapshot`; access is rechecked.
+- Service config password fields and lifecycle errors are omitted without workspace `services.manage`. Project connection password and URL values are masked without that permission.
+- Attachment and project-volume mutations also notify the `project` topic. Subscribe to the workspace topics for Connections/Volumes views. Connection environment and volume mounts apply on the next deploy (redeploy to apply).
+- Volume sizes are refreshed on list/subscribe at most every 30 seconds, without a background polling timer.

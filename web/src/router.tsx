@@ -121,6 +121,29 @@ export const router = createHashRouter([
             }),
           },
           {
+            path: "workspace/:workspaceId/services",
+            lazy: async () => ({
+              Component: (
+                await import("./views/workspace/WorkspaceServicesView")
+              ).WorkspaceServicesView,
+            }),
+          },
+          {
+            path: "workspace/:workspaceId/services/:serviceId",
+            lazy: async () => ({
+              Component: (await import("./views/workspace/ServiceDetailView"))
+                .ServiceDetailView,
+            }),
+          },
+          {
+            path: "workspace/:workspaceId/volumes",
+            lazy: async () => ({
+              Component: (
+                await import("./views/workspace/WorkspaceVolumesView")
+              ).WorkspaceVolumesView,
+            }),
+          },
+          {
             path: "workspace/:workspaceId/certificates",
             lazy: async () => ({
               Component: (
@@ -192,6 +215,21 @@ export const router = createHashRouter([
                 lazy: async () => ({
                   Component: (await import("./views/project/ContainersView"))
                     .ContainersView,
+                }),
+              },
+              {
+                path: "connections",
+                lazy: async () => ({
+                  Component: (await import("./views/project/ConnectionsView"))
+                    .ConnectionsView,
+                }),
+              },
+              {
+                path: "volumes",
+                lazy: async () => ({
+                  Component: (
+                    await import("./views/project/ProjectVolumesView")
+                  ).ProjectVolumesView,
                 }),
               },
               {

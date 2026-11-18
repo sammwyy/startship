@@ -300,7 +300,7 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 				return
 			}
 		}
-		args := appRunArgs(app, network, true)
+		args := a.projectRunArgs(app, network, true)
 		testImage := image
 		if engine && p.Test.Image != "" {
 			testImage = image + "-test"
@@ -419,7 +419,7 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 			command("", logger, "docker", "rm", "-f", container)
 		}
 	}()
-	args := append(appRunArgs(app, network, false), "--name", container)
+	args := append(a.projectRunArgs(app, network, false), "--name", container)
 	if externalEngine(app.Pipeline) && app.Pipeline.Deploy.Command != "" {
 		args = append(args, engineCommand(app.Pipeline, image, "exec "+app.Pipeline.Deploy.Command, app.Pipeline.Deploy.Image != "")...)
 	} else {
