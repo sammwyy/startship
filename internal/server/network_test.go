@@ -14,9 +14,11 @@ import (
 )
 
 type networkTestExecutor struct {
-	fail     bool
-	restores int
-	missing  bool
+	fail             bool
+	restores         int
+	missing          bool
+	calls            int
+	permissionDenied bool
 }
 
 func (f *networkTestExecutor) LookPath(s string) (string, error) {
@@ -26,6 +28,10 @@ func (f *networkTestExecutor) LookPath(s string) (string, error) {
 	return s, nil
 }
 func (f *networkTestExecutor) Run(input, name string, args ...string) ([]byte, error) {
+	f.calls++
+	if f.permissionDenied {
+		return nil, errors.New("ipset list -n: Operation not permitted")
+	}
 	if f.fail {
 		return nil, errors.New("kernel failure")
 	}
@@ -141,6 +147,22 @@ func TestNetworkAPI(t *testing.T) {
 	w = accountRequest(t, f.h, "GET", path, "", f.root, 200)
 	if !strings.Contains(w.Body.String(), "missing ipset") {
 		t.Fatal(w.Body)
+	}
+}
+
+func TestNetworkDisabledStatusDoesNotProbe(t *testing.T) {
+	f := newRBACFixture(t)
+	ex := &networkTestExecutor{permissionDenied: true}
+	f.a.network.manager = &netfw.Manager{Executor: ex}
+	f.a.network.err = errors.New("ipset teardown: Operation not permitted")
+	w := accountRequest(t, f.h, "GET", "system/network-firewall", "", f.root, 200)
+	if ex.calls != 0 || strings.Contains(w.Body.String(), `"error"`) || !strings.Contains(w.Body.String(), `"rules":[]`) {
+		t.Fatal("disabled status probed the kernel or exposed an error", ex.calls, w.Body)
+	}
+	f.a.network.enabled = true
+	w = accountRequest(t, f.h, "GET", "system/network-firewall", "", f.root, 200)
+	if ex.calls != 1 || !strings.Contains(w.Body.String(), "Missing CAP_NET_ADMIN") || strings.Contains(w.Body.String(), "Operation not permitted") {
+		t.Fatal("enabled status did not explain missing capabilities", ex.calls, w.Body)
 	}
 }
 

@@ -123,7 +123,17 @@ export function NetworkFirewallView() {
                       </span>
                     </div>
                   </div>
-                  <ErrorMessage error={data.error} />
+                  {data.enabled && (
+                    <ErrorMessage
+                      error={
+                        /operation not permitted|permission denied/i.test(
+                          data.error || "",
+                        )
+                          ? "Missing CAP_NET_ADMIN — see docs/firewall.md for required host capabilities."
+                          : data.error
+                      }
+                    />
+                  )}
                   {!data.enabled && (
                     <div className="fw-network-enable">
                       <h3>Enable on your daemon</h3>

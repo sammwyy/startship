@@ -462,12 +462,15 @@ describe("workspace firewall", () => {
       { value: "203.0.113.8", ttl_seconds: 900, note: "" },
     );
   });
-  it("defaults sizes to MB and saves a disabled rate as null", async () => {
+  it("defaults empty sizes to MB, keeps exact bytes and saves a disabled rate as null", async () => {
     mount("limits");
     expect(
-      screen.getByRole("button", { name: "Max URL unit" }),
+      screen.getByRole("button", { name: "Max body unit" }),
     ).toHaveTextContent("MB");
-    expect(screen.getByLabelText("Max URL")).toHaveValue(0.008192);
+    expect(
+      screen.getByRole("button", { name: "Max URL unit" }),
+    ).toHaveTextContent("B");
+    expect(screen.getByLabelText("Max URL")).toHaveValue(8192);
     await userEvent.click(screen.getByRole("button", { name: "Save limits" }));
     expect(request).toHaveBeenLastCalledWith(
       "workspaces/w/firewall",
@@ -477,6 +480,32 @@ describe("workspace firewall", () => {
       "PUT",
     );
   });
+  it.each([
+    [1000, 1, "KB"],
+    [10000000, 10, "MB"],
+    [1234, 1234, "B"],
+  ])(
+    "displays and saves %i bytes using the largest exact unit",
+    async (bytes, amount, unit) => {
+      const data = structuredClone(snapshot);
+      data.policy.limits.max_body_bytes = bytes as number;
+      mount("limits", data);
+      expect(screen.getByLabelText("Max body")).toHaveValue(amount);
+      expect(
+        screen.getByRole("button", { name: "Max body unit" }),
+      ).toHaveTextContent(unit as string);
+      await userEvent.click(
+        screen.getByRole("button", { name: "Save limits" }),
+      );
+      expect(request).toHaveBeenLastCalledWith(
+        "workspaces/w/firewall",
+        expect.objectContaining({
+          limits: expect.objectContaining({ max_body_bytes: bytes }),
+        }),
+        "PUT",
+      );
+    },
+  );
 });
 describe("network firewall", () => {
   function network() {
@@ -532,6 +561,35 @@ describe("network firewall", () => {
       "ipset reconciliation failed",
     );
     expect(screen.getByText("Router only")).toBeInTheDocument();
+  });
+  it("hides stale probe errors while disabled", async () => {
+    vi.mocked(request).mockResolvedValue({
+      enabled: false,
+      available: false,
+      rules: [],
+      error: "ipset list -n: Operation not permitted",
+    });
+    network();
+    await screen.findByText("Network firewall is disabled");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Operation not permitted/),
+    ).not.toBeInTheDocument();
+  });
+  it("explains missing host capabilities when enabled", async () => {
+    vi.mocked(request).mockResolvedValue({
+      enabled: true,
+      available: false,
+      rules: [],
+      error: "ipset list -n: Operation not permitted",
+    });
+    network();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Missing CAP_NET_ADMIN",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "Operation not permitted",
+    );
   });
   it("surfaces a network status request failure", async () => {
     vi.mocked(request).mockRejectedValue(new Error("Status unavailable"));

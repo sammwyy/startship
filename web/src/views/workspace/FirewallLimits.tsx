@@ -13,7 +13,13 @@ function Size({
   onChange: (value: number) => void;
 }) {
   const units = { B: 1, KB: 1000, MB: 1000000 };
-  const [unit, setUnit] = useState<keyof typeof units>("MB");
+  const [unit, setUnit] = useState<keyof typeof units>(() =>
+    value === 0 || value % units.MB === 0
+      ? "MB"
+      : value % units.KB === 0
+        ? "KB"
+        : "B",
+  );
   return (
     <label>
       {label}

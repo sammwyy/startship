@@ -200,6 +200,10 @@ func (a *Server) networkAPI(w http.ResponseWriter, r *http.Request, path []strin
 	defer n.mu.Unlock()
 	manager := a.networkManager()
 	if r.Method == "GET" && len(path) == 3 {
+		if !n.enabled {
+			reply(w, 200, map[string]any{"enabled": false, "available": false, "rules": []netfw.Rule{}})
+			return true
+		}
 		availableErr := manager.Available()
 		rules := []netfw.Rule{}
 		err := n.err
@@ -220,7 +224,11 @@ func (a *Server) networkAPI(w http.ResponseWriter, r *http.Request, path []strin
 			result["rules"] = []netfw.Rule{}
 		}
 		if err != nil {
-			result["error"] = err.Error()
+			message := err.Error()
+			if strings.Contains(strings.ToLower(message), "operation not permitted") || strings.Contains(strings.ToLower(message), "permission denied") {
+				message = "Missing CAP_NET_ADMIN — see docs/firewall.md for required host capabilities."
+			}
+			result["error"] = message
 		}
 		reply(w, 200, result)
 		return true
