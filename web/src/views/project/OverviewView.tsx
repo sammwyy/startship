@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useProject } from "../../layouts/ProjectLayout";
 import { ProjectHeading } from "../../components/ProjectHeading";
+import { ScopedActivityTabs } from "../../components/ScopedActivityTabs";
 import { ProjectSettingsForm } from "../../components/ProjectSettingsForm";
 import { Badge } from "../../components/ui";
 import { Icon } from "../../components/Icon";
@@ -11,6 +12,7 @@ export function OverviewView() {
   return (
     <>
       <ProjectHeading title={project.name} />
+      <ScopedActivityTabs scope="project" resource={project} />
       <div className="project-overview">
         <div className="overview-configuration">
           <ProjectSettingsForm />
