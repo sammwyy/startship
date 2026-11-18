@@ -21,7 +21,13 @@ export type LiveSubscription =
   | { topic: "release_log"; release_id: string }
   | { topic: "container_log"; container_id: string }
   | { topic: "traffic"; project_id: string; window: number }
-  | { topic: "account_sessions" | "account_activity" | "audit_activity" }
+  | {
+      topic:
+        | "account_sessions"
+        | "account_activity"
+        | "account_tokens"
+        | "audit_activity";
+    }
   | { topic: "workspace_activity"; workspace_id: string }
   | { topic: "project_activity"; project_id: string }
   | { topic: "system_update" }

@@ -67,8 +67,10 @@ func writeAudit(db auditDB, s sessionIdentity, uid, action, target, fallback str
 			return err
 		}
 	}
-	source := ""
+	source, tokenID, tokenName := "", "", ""
 	switch {
+	case s.token != nil:
+		source, tokenID, tokenName = "token", s.token.id, s.token.name
 	case s.sessionID != "":
 		source = "session"
 	case s.local:
@@ -80,8 +82,8 @@ func writeAudit(db auditDB, s sessionIdentity, uid, action, target, fallback str
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(`INSERT INTO audit_log(at,actor_id,actor,action,target,scope,scope_id,detail,workspace_id,session_id,source)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)`, nowStamp(), uid, name, action, target, scope.kind, scope.id, string(b), scope.workspace, s.sessionID, source)
+	_, err = db.Exec(`INSERT INTO audit_log(at,actor_id,actor,action,target,scope,scope_id,detail,workspace_id,session_id,source,token_id,token_name)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`, nowStamp(), uid, name, action, target, scope.kind, scope.id, string(b), scope.workspace, s.sessionID, source, tokenID, tokenName)
 	return err
 }
 
@@ -138,11 +140,13 @@ type activityEntry struct {
 	ScopeID   string          `json:"scope_id"`
 	SessionID string          `json:"session_id,omitempty"`
 	Source    string          `json:"source,omitempty"`
+	TokenID   string          `json:"token_id,omitempty"`
+	Token     string          `json:"token,omitempty"`
 	Detail    json.RawMessage `json:"detail,omitempty"`
 }
 
 func (a *Server) activity(scope, id string, platform bool) ([]activityEntry, error) {
-	query := "SELECT id,at,actor_id,actor,action,target,scope,scope_id,session_id,source,detail FROM audit_log"
+	query := "SELECT id,at,actor_id,actor,action,target,scope,scope_id,session_id,source,token_id,token_name,detail FROM audit_log"
 	var args []any
 	switch scope {
 	case scopeAccount:
@@ -168,11 +172,11 @@ func (a *Server) activity(scope, id string, platform bool) ([]activityEntry, err
 	for rows.Next() {
 		var v activityEntry
 		var detail string
-		if err := rows.Scan(&v.ID, &v.At, &v.ActorID, &v.Actor, &v.Action, &v.Target, &v.Scope, &v.ScopeID, &v.SessionID, &v.Source, &detail); err != nil {
+		if err := rows.Scan(&v.ID, &v.At, &v.ActorID, &v.Actor, &v.Action, &v.Target, &v.Scope, &v.ScopeID, &v.SessionID, &v.Source, &v.TokenID, &v.Token, &detail); err != nil {
 			return nil, err
 		}
 		if scope != scopeAccount {
-			v.SessionID = ""
+			v.SessionID, v.TokenID = "", ""
 		}
 		if platform && json.Valid([]byte(detail)) {
 			v.Detail = json.RawMessage(detail)
@@ -230,6 +234,8 @@ func (a *Server) activityLive(uid string, s *liveSub) (any, error) {
 	switch s.Topic {
 	case "account_sessions":
 		return a.accountSessions(uid)
+	case "account_tokens":
+		return a.accountTokens(uid)
 	case "account_activity":
 		return a.activity(scopeAccount, uid, false)
 	case "workspace_activity":
@@ -244,7 +250,7 @@ func (a *Server) activityLive(uid string, s *liveSub) (any, error) {
 
 func (s *liveSub) activityKey(uid string) string {
 	switch s.Topic {
-	case "account_sessions", "account_activity":
+	case "account_sessions", "account_activity", "account_tokens":
 		return s.Topic + ":" + uid
 	case "workspace_activity":
 		return s.Topic + ":" + s.WorkspaceID

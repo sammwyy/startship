@@ -50,6 +50,7 @@ Find the temporary administrator credentials in the logs. Open `http://localhost
 | Connect a repository, deploy, and add a domain | [First deployment](docs/getting-started.md) |
 | Configure listeners, storage, and certificates | [Daemon configuration](docs/configuration.md) |
 | Manage Startship from a terminal | [CLI guide](docs/cli.md) |
+| Connect AI assistants or automation with tokens | [Access tokens and MCP](docs/mcp.md) |
 | Customize build, test, or deploy stages | [Project pipelines](docs/pipelines.md) |
 | Configure WAF rules or the optional network firewall | [Firewall and WAF](docs/firewall.md) |
 | Integrate with dashboard live updates | [Live API](docs/live-api.md) |

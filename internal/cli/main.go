@@ -146,7 +146,9 @@ func (c *cli) doAPI(method, path string, body []byte) (*http.Response, error) {
 		}
 		r.Header.Set("User-Agent", "Startship-CLI/"+version.Version)
 		r.Header.Set("Content-Type", "application/json")
-		if c.Token != "" && path != "refresh" {
+		if strings.HasPrefix(c.Token, "sst_") {
+			r.Header.Set("Authorization", "Bearer "+c.Token)
+		} else if c.Token != "" && path != "refresh" {
 			r.AddCookie(&http.Cookie{Name: "startship_session", Value: c.Token})
 		}
 		if c.Refresh != "" && (path == "refresh" || path == "logout") {
@@ -303,6 +305,10 @@ const usage = `startship [--json] COMMAND
                                  prompts for current password
   account sessions | account revoke SESSION
   account activity [--follow]    your recent actions
+  account tokens                 personal access tokens for the API, CLI and MCP
+  account token create NAME [--workspaces W1,W2 | --all] [--admin]
+                    [--expires DAYS] [--no-api] [--no-mcp]
+  account token revoke TOKEN_ID
   activity workspace|project TARGET [--follow]
   workspaces list|get ID|create NAME|rename ID NAME|delete ID
   projects list [WORKSPACE] | projects get ID|create NAME WORKSPACE|delete ID
