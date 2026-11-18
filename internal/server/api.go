@@ -413,7 +413,7 @@ func (a *Server) api() http.Handler {
 			reply(w, 200, pipeline.Templates())
 			return
 		}
-		if a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) {
+		if a.firewallAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) {
 			return
 		}
 		if p[1] == "detect" && r.Method == "POST" {

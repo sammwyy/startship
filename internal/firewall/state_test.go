@@ -5,6 +5,28 @@ import (
 	"time"
 )
 
+func TestClearPersistedBansKeepsCounters(t *testing.T) {
+	s := NewState()
+	s.ban("192.0.2.1", "rule", "Rule", 0)
+	key := rateKey{rule: "rule", ip: "192.0.2.1"}
+	if s.over(key, 1, 60) || !s.Acquire("192.0.2.1", 1) {
+		t.Fatal("initial admission")
+	}
+	s.ClearBans()
+	if _, ok := s.banned("192.0.2.1"); ok {
+		t.Fatal("ban retained")
+	}
+	if !s.over(key, 1, 60) || s.Acquire("192.0.2.1", 1) {
+		t.Fatal("counters reset")
+	}
+	s.Release("192.0.2.1")
+	s.ClearBans()
+	if !s.Acquire("192.0.2.1", 1) {
+		t.Fatal("release")
+	}
+	s.Release("192.0.2.1")
+}
+
 func TestSlidingWindowAndIPScope(t *testing.T) {
 	now := time.Unix(1000, 0)
 	s := NewState()

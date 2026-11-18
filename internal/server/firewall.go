@@ -11,8 +11,6 @@ import (
 
 type firewallRuntime struct {
 	mu         sync.Mutex
-	policies   map[string]firewall.Policy
-	lists      map[string][]firewall.List
 	states     map[string]*firewall.State
 	workspaces map[string]*firewallMetrics
 }
@@ -65,7 +63,7 @@ func (m *firewallMetrics) minute(at time.Time) *firewallMinute {
 }
 func (a *Server) recordFirewallEvent(e firewall.Event) {
 	a.firewall.mu.Lock()
-	defer a.firewall.mu.Unlock()
+	defer func() { a.firewall.mu.Unlock(); a.live.publish(liveEvent{firewallWorkspace: e.WorkspaceID}) }()
 	m := a.firewall.workspace(e.WorkspaceID)
 	m.events[m.next] = e
 	m.next = (m.next + 1) % len(m.events)
@@ -85,7 +83,7 @@ func (a *Server) recordFirewallEvent(e firewall.Event) {
 }
 func (a *Server) observeFirewall(workspace string, req *firewall.Request, d firewall.Decision) {
 	a.firewall.mu.Lock()
-	defer a.firewall.mu.Unlock()
+	defer func() { a.firewall.mu.Unlock(); a.live.publish(liveEvent{firewallWorkspace: workspace}) }()
 	b := a.firewall.workspace(workspace).minute(time.Now().UTC())
 	b.Total++
 	if d.StatusCode >= 400 && !d.Monitored {
@@ -94,44 +92,26 @@ func (a *Server) observeFirewall(workspace string, req *firewall.Request, d fire
 	b.ByAction[string(d.Action)]++
 }
 func (a *Server) recordFirewallBan(b router.Ban) error {
-	a.firewall.mu.Lock()
-	defer a.firewall.mu.Unlock()
-	if a.firewall.lists == nil {
-		a.firewall.lists = map[string][]firewall.List{}
+	a.routerRefresh.Lock()
+	defer a.routerRefresh.Unlock()
+	_, lists, err := a.loadFirewall(b.WorkspaceID)
+	if err != nil {
+		return err
 	}
-	lists := a.firewall.lists[b.WorkspaceID]
-	i := 0
-	for i < len(lists) && lists[i].ID != "banned" {
-		i++
+	list := findFirewallList(lists, "banned")
+	entry := firewall.Entry{Value: b.IP, ExpiresAt: firewallExpiry(b.Seconds), Note: b.RuleName, CreatedBy: "firewall"}
+	upsertFirewallEntry(list, entry)
+	if err = a.saveFirewallList(b.WorkspaceID, "", "firewall.ban.create", *list); err != nil {
+		return err
 	}
-	if i == len(lists) {
-		lists = append(lists, firewall.List{ID: "banned", Name: "Banned", Kind: "block"})
+	if err = a.refreshLocked(); err != nil {
+		return err
 	}
-	var expires *time.Time
-	if b.Seconds > 0 {
-		t := time.Now().UTC().Add(time.Duration(b.Seconds) * time.Second)
-		expires = &t
-	}
-	entry := firewall.Entry{Value: b.IP, ExpiresAt: expires, Note: b.RuleName, CreatedBy: "firewall"}
-	found := false
-	live := lists[i].Entries[:0]
-	now := time.Now()
-	for _, e := range lists[i].Entries {
-		if e.ExpiresAt != nil && !now.Before(*e.ExpiresAt) {
-			continue
-		}
-		if e.Value == b.IP {
-			e = entry
-			found = true
-		}
-		live = append(live, e)
-	}
-	if !found {
-		live = append(live, entry)
-	}
-	lists[i].Entries = live
-	a.firewall.lists[b.WorkspaceID] = lists
+	a.firewallChanged(b.WorkspaceID)
 	return nil
+}
+func (a *Server) firewallChanged(workspace string) {
+	a.live.publish(liveEvent{firewallWorkspace: workspace, firewallConfig: true})
 }
 func topFirewall(counts map[string]int64) []firewallTop {
 	out := make([]firewallTop, 0, len(counts))

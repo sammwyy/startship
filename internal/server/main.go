@@ -88,7 +88,9 @@ func Run(settings config.Daemon) {
 		log.Fatal(e)
 	}
 	defer geo.Close()
-	a.routerOptions.GeoIP = geo
+	if settings.GeoIPDatabase != "" {
+		a.routerOptions.GeoIP = geo
+	}
 	if len(settings.HTTPSListen) > 0 {
 		_, a.routerOptions.HTTPSPort, _ = net.SplitHostPort(settings.HTTPSListen[0])
 	}

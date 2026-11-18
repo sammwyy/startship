@@ -85,7 +85,9 @@ func TestFirewallRefreshAndBanHook(t *testing.T) {
 	p := firewall.DefaultPolicy()
 	p.Mode = "enforce"
 	p.Limits.Rate = &firewall.WorkspaceRate{Requests: 1, WindowSeconds: 60, Action: firewall.Ban, BanSeconds: 30}
-	a.firewall.policies = map[string]firewall.Policy{"ws": p}
+	if err := a.saveFirewallPolicy("ws", "", "firewall.policy.update", "ws", p); err != nil {
+		t.Fatal(err)
+	}
 	a.refresh()
 	if a.firewall.states["ws"] != state {
 		t.Fatal("state replaced")
@@ -100,7 +102,10 @@ func TestFirewallRefreshAndBanHook(t *testing.T) {
 	if w := call("/"); w.Code != 429 {
 		t.Fatal("rate state reset", w.Code)
 	}
-	lists := a.firewall.lists["ws"]
+	_, lists, err := a.firewallConfig("ws")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(lists) != 1 || lists[0].ID != "banned" || len(lists[0].Entries) != 1 || lists[0].Entries[0].ExpiresAt == nil {
 		t.Fatal(lists)
 	}
@@ -115,7 +120,11 @@ func TestFirewallRefreshAndBanHook(t *testing.T) {
 	if err := a.recordFirewallBan(router.Ban{WorkspaceID: "ws", IP: "203.0.113.1", Seconds: 0}); err != nil {
 		t.Fatal(err)
 	}
-	entry := a.firewall.lists["ws"][0].Entries[1]
+	_, lists, err = a.firewallConfig("ws")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := lists[0].Entries[1]
 	if entry.ExpiresAt != nil {
 		t.Fatal("permanent TTL")
 	}

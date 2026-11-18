@@ -13,12 +13,14 @@ import (
 )
 
 type liveEvent struct {
-	record       Record
-	deleted      bool
-	id, text     string
-	subscription *liveSub
-	active       string
-	end          int
+	firewallWorkspace string
+	firewallConfig    bool
+	record            Record
+	deleted           bool
+	id, text          string
+	subscription      *liveSub
+	active            string
+	end               int
 }
 type liveHub struct {
 	mu      sync.Mutex
@@ -42,6 +44,13 @@ func (h *liveHub) publish(e liveEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
+		if e.firewallWorkspace != "" {
+			key := "firewall:" + e.firewallWorkspace
+			merged := e
+			merged.firewallConfig = merged.firewallConfig || c.pending[key].firewallConfig
+			c.pending[key] = merged
+			continue
+		}
 		if e.record.ID != "" {
 			c.pending[e.record.ID] = e
 			continue
@@ -55,25 +64,28 @@ func (h *liveHub) publish(e liveEvent) {
 }
 
 type liveSub struct {
-	Type        string `json:"type"`
-	ID          string `json:"id"`
-	Topic       string `json:"topic"`
-	ProjectID   string `json:"project_id"`
-	WorkspaceID string `json:"workspace_id"`
-	ReleaseID   string `json:"release_id"`
-	ContainerID string `json:"container_id"`
-	Window      int    `json:"window"`
-	last        map[string]json.RawMessage
-	kinds       map[string]string
-	update      string
-	active      string
-	cancel      context.CancelFunc
-	next        time.Time
-	logEnd      int
+	Type          string `json:"type"`
+	ID            string `json:"id"`
+	Topic         string `json:"topic"`
+	ProjectID     string `json:"project_id"`
+	WorkspaceID   string `json:"workspace_id"`
+	ReleaseID     string `json:"release_id"`
+	ContainerID   string `json:"container_id"`
+	Window        int    `json:"window"`
+	last          map[string]json.RawMessage
+	kinds         map[string]string
+	update        string
+	active        string
+	cancel        context.CancelFunc
+	next          time.Time
+	logEnd        int
+	firewallDirty bool
 }
 
 func (s *liveSub) relevant(r Record) bool {
 	switch s.Topic {
+	case "firewall":
+		return r.ID == s.WorkspaceID
 	case "project":
 		return r.ID == s.ProjectID || r.ProjectID == s.ProjectID
 	case "workspace":
@@ -121,8 +133,11 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 				return x, Record{}, "invalid subscription"
 			}
 		}
-	case "workspace", "certificates", "services", "volumes":
+	case "workspace", "certificates", "services", "volumes", "firewall":
 		id, kind = s.WorkspaceID, "workspaces"
+		if s.Topic == "firewall" {
+			perm = "firewall.view"
+		}
 		if s.Topic == "certificates" {
 			perm = "workspace.domains"
 		}
@@ -166,6 +181,16 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return out
 	}
 	switch s.Topic {
+	case "firewall":
+		policy, lists, err := a.firewallConfig(r.ID)
+		if err != nil {
+			return nil, nil, r, "firewall storage unavailable"
+		}
+		events, stats := a.firewallData(r.ID, time.Now())
+		if len(events) > 100 {
+			events = events[:100]
+		}
+		return map[string]any{"policy": policy, "lists": lists, "events": events, "stats": stats, "can_manage": x.can(r, "firewall.manage")}, nil, r, ""
 	case "services":
 		return map[string]any{"services": a.publicServices(s.WorkspaceID, x)}, nil, r, ""
 	case "volumes":
@@ -382,6 +407,9 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				return
 			}
 			delay := 5 * time.Second
+			if s.Topic == "firewall" {
+				delay = time.Second
+			}
 			if s.Topic == "system_update" {
 				delay = 2 * time.Second
 			}
@@ -439,7 +467,15 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				}
 			}
 			for _, s := range subs {
+				if s.Topic == "firewall" {
+					e, has := pending["firewall:"+s.WorkspaceID]
+					s.firewallDirty = s.firewallDirty || has
+					if has && e.firewallConfig {
+						s.next = time.Time{}
+					}
+				}
 				periodic := s.Topic == "system_update" && now.After(s.next) || s.Topic == "traffic" && now.After(s.next)
+				periodic = periodic || s.Topic == "firewall" && s.firewallDirty && !now.Before(s.next)
 				relevant := false
 				for _, e := range pending {
 					if s.relevant(e.record) {
@@ -458,7 +494,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 					drop(s, why)
 					continue
 				}
-				if periodic || s.Topic == "certificates" || s.Topic == "services" || s.Topic == "volumes" {
+				if periodic || s.Topic == "certificates" || s.Topic == "services" || s.Topic == "volumes" || s.Topic == "firewall" {
 					b, _ := json.Marshal(data)
 					if s.Topic == "traffic" || string(b) != s.update {
 						m := s.message("snapshot")
@@ -469,10 +505,17 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 						s.update = string(b)
 					}
 					delay := 5 * time.Second
+					if s.Topic == "firewall" {
+						delay = time.Second
+						s.firewallDirty = false
+					}
 					if s.Topic == "system_update" {
 						delay = 2 * time.Second
 					}
 					s.next = now.Add(delay)
+					if s.Topic == "firewall" {
+						s.next = time.Now().Add(delay)
+					}
 					continue
 				}
 				if s.Topic == "container_log" {

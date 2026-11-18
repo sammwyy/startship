@@ -26,6 +26,10 @@ type State struct {
 }
 
 func NewState() *State { return &State{now: time.Now} }
+
+// ClearBans is used after publishing an authoritative persisted banned list.
+// Rate windows and in-flight concurrency are retained.
+func (s *State) ClearBans() { s.mu.Lock(); defer s.mu.Unlock(); s.bans = nil }
 func (s *State) clock() time.Time {
 	if s.now != nil {
 		return s.now()

@@ -71,6 +71,11 @@ func (a *Server) publicRouter() *router.Router {
 func (a *Server) refresh() {
 	a.routerRefresh.Lock()
 	defer a.routerRefresh.Unlock()
+	if err := a.refreshLocked(); err != nil {
+		log.Printf("firewall: refresh: %v", err)
+	}
+}
+func (a *Server) refreshLocked() error {
 	targets := []Target{}
 	routeWorkspace := map[string]string{}
 	for _, r := range a.store.List("routes", "") {
@@ -102,31 +107,36 @@ func (a *Server) refresh() {
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].Route.ID < targets[j].Route.ID })
 	policies := map[string]*firewall.Engine{}
-	a.firewall.mu.Lock()
 	for _, ws := range routeWorkspace {
 		if _, ok := policies[ws]; ok {
 			continue
 		}
+		p, lists, err := a.loadFirewall(ws)
+		if err != nil {
+			return err
+		}
+		a.firewall.mu.Lock()
 		if a.firewall.states == nil {
 			a.firewall.states = map[string]*firewall.State{}
 		}
 		if a.firewall.states[ws] == nil {
 			a.firewall.states[ws] = firewall.NewState()
 		}
-		p, ok := a.firewall.policies[ws]
-		if !ok {
-			p = firewall.DefaultPolicy()
-		}
-		engine, err := firewall.Compile(p, a.firewall.lists[ws], a.firewall.states[ws])
+		state := a.firewall.states[ws]
+		a.firewall.mu.Unlock()
+		engine, err := firewall.Compile(p, lists, state)
 		if err != nil {
-			log.Printf("firewall %s: compile policy: %v", ws, err)
-			a.firewall.mu.Unlock()
-			return
+			return err
 		}
 		policies[ws] = engine
 	}
-	a.firewall.mu.Unlock()
 	a.publicRouter().Update(router.Snapshot{Targets: targets, RouteWorkspace: routeWorkspace, Policies: policies})
+	a.firewall.mu.Lock()
+	for ws := range policies {
+		a.firewall.states[ws].ClearBans()
+	}
+	a.firewall.mu.Unlock()
+	return nil
 }
 func (a *Server) certAllowed(host string) bool {
 	host = routing.NormalizeHost(host)
