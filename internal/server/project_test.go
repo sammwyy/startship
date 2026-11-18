@@ -51,48 +51,16 @@ func TestProjectContainerDetection(t *testing.T) {
 	}
 }
 
-func TestProjectConfigMigration(t *testing.T) {
-	a := testServer(t)
-	for _, r := range []Record{
-		{ID: "p", Kind: "projects", Owner: "owner"},
-		{ID: "a", Kind: "apps", Owner: "owner", ProjectID: "p", RootDir: "frontend", Env: map[string]string{"MODE": "web"}, AutoDeploy: true, Active: "old-a"},
-		{ID: "b", Kind: "apps", Owner: "owner", ProjectID: "p", RootDir: "backend", Env: map[string]string{"MODE": "api"}, Active: "old-b"},
-	} {
-		if err := a.store.Save(r); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := migrateProjectConfig(a.store); err != nil {
-		t.Fatal(err)
-	}
-	p, _ := a.store.Get("p")
-	before, _ := a.store.Get("a")
-	if !p.ConfigConflict || !p.AutoDeploy || p.ConfigVersion != 1 || p.RootDir != "." || before.Active != "old-a" {
-		t.Fatal(p, before)
-	}
-	if _, err := a.enqueueProject(p, Record{}); err == nil {
-		t.Fatal("conflicting configuration must require confirmation")
-	}
-	a.store.Update("p", func(r *Record) { r.Env = map[string]string{"CHOSEN": "yes"}; r.ConfigConflict = false })
-	if err := migrateProjectConfig(a.store); err != nil {
-		t.Fatal(err)
-	}
-	p, _ = a.store.Get("p")
-	if p.Env["CHOSEN"] != "yes" || p.ConfigConflict {
-		t.Fatal("migration overwrote an explicit choice")
-	}
-}
-
-func TestPipelineCandidateCompatibility(t *testing.T) {
+func TestPipelineCandidateDefaults(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"scripts":{"start":"node app.js"}}`), 0600)
 	for _, strategy := range []string{"auto", "node"} {
-		candidates, err := projectCandidates(dir, Record{RootDir: ".", BuildType: strategy, TestCommand: "echo legacy", Port: 9000})
+		candidates, err := projectCandidates(dir, Record{RootDir: ".", BuildType: strategy, TestCommand: "echo ok", Port: 9000})
 		if err != nil || len(candidates) != 1 {
 			t.Fatal(candidates, err)
 		}
 		p := candidates[0].Pipeline
-		if p.Deploy.Port != 9000 || len(p.Test.Commands) != 1 || p.Test.Commands[0] != "echo legacy" {
+		if p.Deploy.Port != 9000 || len(p.Test.Commands) != 1 || p.Test.Commands[0] != "echo ok" {
 			t.Fatal(p)
 		}
 	}
@@ -256,7 +224,7 @@ func TestProjectDeploymentSwitchesContainersTogether(t *testing.T) {
 func TestProjectDeploymentAPI(t *testing.T) {
 	a := testServer(t)
 	uid, _ := a.createUser("project-owner", "password123")
-	p := Record{ID: "project", Kind: "projects", Owner: uid, WorkspaceID: a.store.List("workspaces", uid)[0].ID, Name: "Project", GitURL: "file:///repo", GitToken: "private-token", Branch: "main", Env: map[string]string{"MODE": "snapshot"}, ConfigVersion: 1}
+	p := Record{ID: "project", Kind: "projects", Owner: uid, WorkspaceID: a.store.List("workspaces", uid)[0].ID, Name: "Project", GitURL: "file:///repo", GitToken: "private-token", Branch: "main", Env: map[string]string{"MODE": "snapshot"}}
 	a.store.Save(p)
 	a.queues["project:"+p.ID] = make(chan string, 10)
 	a.store.Save(Record{ID: "container", Kind: "apps", Owner: uid, ProjectID: p.ID, ReleaseID: "release", Name: "web"})
@@ -325,8 +293,5 @@ func TestProjectDeploymentAPI(t *testing.T) {
 	}
 	request("GET", "releases?project_id=project&logs=false", "", 200)
 	request("POST", "projects/project/redeploy", "{}", 404)
-	a.store.Update(p.ID, func(r *Record) { r.ConfigConflict = true })
-	request("POST", "projects/project/deploy", "{}", 409)
-	request("PATCH", "projects/project", `{"config_confirmed":true}`, 200)
 	request("POST", "projects/project/deploy", "{}", 202)
 }

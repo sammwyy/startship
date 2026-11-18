@@ -65,13 +65,7 @@ export function DeploymentsView() {
             </button>
             <button
               className="primary"
-              disabled={
-                busy ||
-                !project.git_url ||
-                !!project.config_conflict ||
-                !!project.source_conflict ||
-                !can("deploy", project)
-              }
+              disabled={busy || !project.git_url || !can("deploy", project)}
               onClick={() => ui.run(() => deploy())}
             >
               <Icon name="plus" />

@@ -271,19 +271,6 @@ func TestUserAdministration(t *testing.T) {
 	accountRequest(t, f.h, "DELETE", "users/"+created["id"], "", f.alice, 200)
 }
 
-func TestAccessMigrationForExistingInstalls(t *testing.T) {
-	a := testServer(t)
-	a.store.DB.Exec("DELETE FROM settings WHERE key='access_migrated'")
-	a.store.DB.Exec("INSERT INTO users(id,username,password) VALUES('u1','old','x'),('u2','other','x')")
-	a.store.Save(Record{ID: "w1", Kind: "workspaces", Owner: "u2", Name: "Legacy"})
-	if err := migrateAccess(a.store); err != nil {
-		t.Fatal(err)
-	}
-	if !a.access("u1").admin || !a.access("u2").at("w1", "")["members.manage"] || a.access("u2").admin {
-		t.Fatal("migration should make the first user Platform Admin and owners workspace administrators")
-	}
-}
-
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)

@@ -77,7 +77,7 @@ func TestNetworkAPI(t *testing.T) {
 	if err != nil || len(rules) != 2 {
 		t.Fatal(rules, err)
 	}
-	// A second connection sees durable rules through the migration path.
+	// A second connection sees durable rules after reopening the store.
 	var seq int
 	var name, dbpath string
 	if err = f.a.store.DB.QueryRow("PRAGMA database_list").Scan(&seq, &name, &dbpath); err != nil {

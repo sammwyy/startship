@@ -7,7 +7,7 @@ Startship loads settings at startup. Precedence is **daemon flags → environmen
 | `dashboard_listen` | `STARTSHIP_DASHBOARD_ADDR` | `:8080` |
 | `http_listen` | `STARTSHIP_HTTP_ADDR` | `:80` |
 | `https_listen` | `STARTSHIP_HTTPS_ADDR` | `:443` |
-| `data_dir` | `STARTSHIP_DATA` | `./_data` (uses existing `./data` if present); the systemd installer uses `/var/lib/startship` |
+| `data_dir` | `STARTSHIP_DATA` | `./_data`; the systemd installer uses `/var/lib/startship` |
 | `dashboard_domain` | `STARTSHIP_DASHBOARD_DOMAIN` | Unset; dashboard not served on the application router |
 | `acme_email` | `STARTSHIP_ACME_EMAIL` | Unset |
 | `acme_directory` | `STARTSHIP_ACME_DIRECTORY` | Let's Encrypt production |

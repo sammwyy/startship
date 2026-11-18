@@ -105,64 +105,8 @@ func TestProjectSourceAPIAndWebhook(t *testing.T) {
 	if queued = deliver(project.ID, project.WebhookSecret, "release", 202); queued.ProjectID != project.ID || len(a.queues["project:"+project.ID]) != 2 {
 		t.Fatal("legacy app options must not split project deployments")
 	}
-	// Old signed webhook URLs also queue the complete project.
-	a.store.Update(apps[0].ID, func(app *Record) { app.WebhookSecret = "legacy-hook" })
-	deliver(apps[0].ID, "legacy-hook", "main", 200)
-	deliver(apps[0].ID, "legacy-hook", "release", 202)
-}
-
-func TestProjectSourceMigration(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "migration.db")
-	store, err := openStore(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, r := range []Record{
-		{ID: "shared", Kind: "projects", Owner: "owner"},
-		{ID: "front", Kind: "apps", Owner: "owner", ProjectID: "shared", GitURL: "https://example.com/repo", GitToken: "test-token", RootDir: "frontend", Active: "active-release", WebhookSecret: "old-hook"},
-		{ID: "back", Kind: "apps", Owner: "owner", ProjectID: "shared", GitURL: "https://example.com/repo", GitToken: "test-token", Branch: "main", RootDir: "backend"},
-		{ID: "conflict", Kind: "projects", Owner: "owner"},
-		{ID: "first", Kind: "apps", Owner: "owner", ProjectID: "conflict", GitURL: "file:///first", Branch: "main"},
-		{ID: "second", Kind: "apps", Owner: "owner", ProjectID: "conflict", GitURL: "file:///second", Branch: "main"},
-	} {
-		if err := store.Save(r); err != nil {
-			t.Fatal(err)
-		}
-	}
-	store.DB.Close()
-	store, err = openStore(path) // Exercise the actual startup migration.
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer store.DB.Close()
-	project, _ := store.Get("shared")
-	app, _ := store.Get("front")
-	if project.GitURL != "https://example.com/repo" || project.Branch != "main" || project.GitToken != "test-token" || project.WebhookSecret == "" {
-		t.Fatal("consistent legacy source was not promoted")
-	}
-	if app.GitURL != "" || app.Branch != "" || app.GitToken != "" || app.RootDir != "frontend" || app.Active != "active-release" || app.WebhookSecret != "old-hook" {
-		t.Fatal("migration changed app runtime/active state or retained an independent source")
-	}
-	conflict, _ := store.Get("conflict")
-	first, _ := store.Get("first")
-	if !conflict.SourceConflict || conflict.GitURL != "" || first.GitURL != "file:///first" {
-		t.Fatal("migration must not pick an arbitrary conflicting source")
-	}
-	a := &Server{store: store}
-	if _, err := a.projectSource(first); err == nil {
-		t.Fatal("conflicting legacy source must block builds")
-	}
-	store.Update("conflict", func(p *Record) { p.GitURL = "file:///chosen"; p.Branch = "release" })
-	if err := migrateProjectSources(store); err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range []string{"first", "second"} {
-		app, _ := store.Get(id)
-		source, err := a.projectSource(app)
-		if err != nil || source.GitURL != "file:///chosen" || source.Branch != "release" || app.GitURL != "" {
-			t.Fatal("explicit project source did not resolve every app")
-		}
-	}
+	a.store.Update(apps[0].ID, func(app *Record) { app.WebhookSecret = "container-hook" })
+	deliver(apps[0].ID, "container-hook", "release", 404)
 }
 
 func TestBuildAndDetectionUseProjectSource(t *testing.T) {

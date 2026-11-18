@@ -26,11 +26,6 @@ type networkRuntime struct {
 	err     error
 }
 
-func migrateNetwork(s *Store) error {
-	_, err := s.DB.Exec("CREATE TABLE IF NOT EXISTS network_rules(id TEXT PRIMARY KEY, body TEXT NOT NULL)")
-	return err
-}
-
 func (a *Server) networkRules() ([]netfw.Rule, error) {
 	rows, err := a.store.DB.Query("SELECT body FROM network_rules ORDER BY id")
 	if err != nil {

@@ -41,11 +41,6 @@ type Backup struct {
 
 const backupVolumePurpose = "backups"
 
-func migrateBackups(s *Store) error {
-	_, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS backups(id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,body TEXT NOT NULL)`)
-	return err
-}
-
 func validBackupPolicy(p BackupPolicy) error {
 	switch p.Frequency {
 	case "hourly", "daily", "weekly":

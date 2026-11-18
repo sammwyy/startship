@@ -51,10 +51,6 @@ type Volume struct {
 	CreatedBy   string    `json:"created_by"`
 }
 
-func migrateServices(s *Store) error {
-	_, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS services(id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS volumes(id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,body TEXT NOT NULL)`)
-	return err
-}
 func listResources[T any](a *Server, table, ws string) []T {
 	out := []T{}
 	rows, err := a.store.DB.Query("SELECT body FROM "+table+" WHERE (?='' OR workspace_id=?) ORDER BY id", ws, ws)

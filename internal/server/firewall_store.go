@@ -9,11 +9,6 @@ import (
 	"github.com/sammwyy/startship/internal/firewall"
 )
 
-func migrateFirewall(s *Store) error {
-	_, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS firewall_policies(workspace_id TEXT PRIMARY KEY, body TEXT NOT NULL, updated TEXT NOT NULL, updated_by TEXT NOT NULL);
- CREATE TABLE IF NOT EXISTS firewall_lists(id TEXT NOT NULL, workspace_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(workspace_id,id));`)
-	return err
-}
 func putFirewallList(tx *sql.Tx, workspace string, list firewall.List) error {
 	body, err := json.Marshal(list)
 	if err != nil {

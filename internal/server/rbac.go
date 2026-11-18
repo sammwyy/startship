@@ -117,45 +117,6 @@ var (
 
 func nowStamp() string { return time.Now().UTC().Format(time.RFC3339) }
 
-func migrateAccess(s *Store) error {
-	_, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS roles(id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT NOT NULL, icon TEXT NOT NULL, permissions TEXT NOT NULL, created TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS role_assignments(id TEXT PRIMARY KEY, user_id TEXT NOT NULL, role_id TEXT NOT NULL, scope TEXT NOT NULL, scope_id TEXT NOT NULL, created TEXT NOT NULL, created_by TEXT NOT NULL, UNIQUE(user_id, role_id, scope, scope_id));
-CREATE TABLE IF NOT EXISTS permission_overrides(scope TEXT NOT NULL, scope_id TEXT NOT NULL, subject_type TEXT NOT NULL, subject_id TEXT NOT NULL, allow TEXT NOT NULL, deny TEXT NOT NULL, updated TEXT NOT NULL, updated_by TEXT NOT NULL, PRIMARY KEY(scope, scope_id, subject_type, subject_id));
-CREATE TABLE IF NOT EXISTS audit_log(id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, actor_id TEXT NOT NULL, actor TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL, scope TEXT NOT NULL, scope_id TEXT NOT NULL, detail TEXT NOT NULL)`)
-	if err != nil {
-		return err
-	}
-	var done int
-	if err = s.DB.QueryRow("SELECT count(*) FROM settings WHERE key='access_migrated'").Scan(&done); err != nil || done > 0 {
-		return err
-	}
-	// Installs from before roles: the first user runs the platform and owners administer their workspaces.
-	workspaces := s.List("workspaces", "")
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var first string
-	if err = tx.QueryRow("SELECT id FROM users ORDER BY rowid LIMIT 1").Scan(&first); err != nil && err != sql.ErrNoRows {
-		return err
-	}
-	if first != "" {
-		if _, err = tx.Exec("INSERT OR IGNORE INTO role_assignments VALUES(?,?,?,?,?,?,?)", randomID(), first, platformAdminRole, scopePlatform, "", nowStamp(), "migration"); err != nil {
-			return err
-		}
-	}
-	for _, ws := range workspaces {
-		if _, err = tx.Exec("INSERT OR IGNORE INTO role_assignments SELECT ?,id,'administrator',?,?,?,'migration' FROM users WHERE id=?", randomID(), scopeWorkspace, ws.ID, nowStamp(), ws.Owner); err != nil {
-			return err
-		}
-	}
-	if _, err = tx.Exec("INSERT INTO settings VALUES('access_migrated',?)", nowStamp()); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 func (a *Server) roles() map[string]Role {
 	out := map[string]Role{}
 	for _, r := range a.roleList() {

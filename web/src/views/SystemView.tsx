@@ -5,7 +5,7 @@ import { reloadDashboard } from "../lib/dashboardReload";
 import { useLiveStatus } from "../providers/LiveProvider";
 import { useSession } from "../providers/SessionProvider";
 import { useUI } from "../providers/UIProvider";
-import { ApiError, request } from "../services/api";
+import { request } from "../services/api";
 import { queries } from "../services/queries";
 import type {
   SystemVersion,
@@ -112,17 +112,10 @@ export function SystemView() {
       },
     });
   }
-  const missingAPI =
-    status.error instanceof ApiError && status.error.status === 404;
   return (
     <>
       {!info ? (
-        missingAPI ? (
-          <p className="panel panel-pad">
-            Update checks are not supported by this daemon. Upgrade Startship on
-            the server to enable them.
-          </p>
-        ) : status.isPending ? (
+        status.isPending ? (
           <Loading />
         ) : (
           <ErrorMessage error={status.error} />

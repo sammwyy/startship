@@ -2,10 +2,8 @@ package server
 
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
 	"log"
-	"path/filepath"
 	"regexp"
 	"testing"
 )
@@ -81,34 +79,6 @@ func TestBootstrapEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	accountLogin(t, a.api(), "owner", "seeded-password")
-}
-
-func TestExistingUsersMigration(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "old.db")
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = db.Exec("CREATE TABLE users(id TEXT PRIMARY KEY,username TEXT UNIQUE NOT NULL,password TEXT NOT NULL); INSERT INTO users VALUES('old','owner','hash')")
-	if err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	for i := 0; i < 2; i++ {
-		s, err := openStore(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		a := &Server{store: s}
-		if !a.setupComplete() {
-			t.Fatal("existing installation not completed")
-		}
-		var pending bool
-		if err := s.DB.QueryRow("SELECT must_change_password FROM users WHERE id='old'").Scan(&pending); err != nil || pending {
-			t.Fatal("migration", err)
-		}
-		s.DB.Close()
-	}
 }
 
 func TestBootstrapKeepsInvitedUsers(t *testing.T) {

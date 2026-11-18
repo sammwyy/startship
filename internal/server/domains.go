@@ -22,19 +22,6 @@ type WorkspaceDomain struct {
 
 var domainPattern = regexp.MustCompile(`^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$`)
 
-func migrateDomains(s *Store) error {
-	_, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS workspace_domains(
-		id TEXT PRIMARY KEY,
-		workspace_id TEXT NOT NULL,
-		name TEXT NOT NULL UNIQUE,
-		apex INTEGER NOT NULL,
-		subdomains INTEGER NOT NULL,
-		created TEXT NOT NULL,
-		created_by TEXT NOT NULL
-	)`)
-	return err
-}
-
 func (d WorkspaceDomain) matches(host string) bool {
 	return d.Apex && host == d.Name || d.Subdomains && strings.HasSuffix(host, "."+d.Name)
 }

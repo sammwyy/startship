@@ -23,12 +23,8 @@ type Record struct {
 	ContainerID       string             `json:"container_id,omitempty"`
 	ReleaseID         string             `json:"release_id,omitempty"`
 	ContainerReleases []string           `json:"container_releases,omitempty"`
-	ConfigVersion     int                `json:"config_version,omitempty"`
-	ConfigConflict    bool               `json:"config_conflict,omitempty"`
-	ConfigConfirmed   bool               `json:"config_confirmed,omitempty"`
 	GitURL            string             `json:"git_url,omitempty"`
 	GitToken          string             `json:"git_token,omitempty"`
-	SourceConflict    bool               `json:"source_conflict,omitempty"`
 	Branch            string             `json:"branch,omitempty"`
 	RootDir           string             `json:"root_dir,omitempty"`
 	BuildType         string             `json:"build_type,omitempty"`
@@ -71,36 +67,17 @@ func RandomID() string {
 	}
 	return hex.EncodeToString(b)
 }
-func Open(path string, migrations ...func(*Store) error) (*Store, error) {
+func Open(path string) (*Store, error) {
 	db, e := sql.Open("sqlite", path)
 	if e != nil {
 		return nil, e
 	}
 	db.SetMaxOpenConns(1)
-	_, e = db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS records(id TEXT PRIMARY KEY, kind TEXT NOT NULL, owner TEXT NOT NULL, parent TEXT NOT NULL, body TEXT NOT NULL); CREATE TABLE IF NOT EXISTS users(id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password TEXT NOT NULL); CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, user_id TEXT NOT NULL, expires INTEGER NOT NULL);")
-	if e != nil {
+	if _, e = db.Exec("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;" + schema); e != nil {
 		db.Close()
 		return nil, e
 	}
-	s := &Store{DB: db}
-	var columns int
-	if e = db.QueryRow("SELECT count(*) FROM pragma_table_info('users') WHERE name='must_change_password'").Scan(&columns); e == nil && columns == 0 {
-		_, e = db.Exec("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
-	}
-	if e == nil {
-		_, e = db.Exec("CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL); INSERT OR IGNORE INTO settings SELECT 'setup_completed', strftime('%Y-%m-%dT%H:%M:%SZ','now') WHERE EXISTS(SELECT 1 FROM users) AND NOT EXISTS(SELECT 1 FROM users WHERE must_change_password=1)")
-	}
-	if e != nil {
-		db.Close()
-		return nil, e
-	}
-	for _, migrate := range migrations {
-		if e = migrate(s); e != nil {
-			db.Close()
-			return nil, e
-		}
-	}
-	return s, nil
+	return &Store{DB: db}, nil
 }
 func (s *Store) Save(r Record) error {
 	b, e := json.Marshal(r)

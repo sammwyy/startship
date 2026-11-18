@@ -35,10 +35,6 @@ type ACMESettings struct {
 	DirectoryURL string `json:"directory_url"`
 }
 
-func migrateCertificates(s *Store) error {
-	_, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS certificates(id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, body TEXT NOT NULL, private_key TEXT NOT NULL); CREATE TABLE IF NOT EXISTS acme_accounts(directory TEXT PRIMARY KEY, private_key TEXT NOT NULL)`)
-	return err
-}
 func (a *Server) certificates(ws string) []Certificate {
 	out := []Certificate{}
 	rows, err := a.store.DB.Query("SELECT body,private_key FROM certificates WHERE (?='' OR workspace_id=?) ORDER BY id", ws, ws)
