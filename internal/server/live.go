@@ -78,6 +78,8 @@ func (s *liveSub) relevant(r Record) bool {
 		return r.ID == s.ProjectID || r.ProjectID == s.ProjectID
 	case "workspace":
 		return r.ID == s.WorkspaceID || r.Kind == "projects" && r.WorkspaceID == s.WorkspaceID
+	case "certificates":
+		return r.Kind == "certificates" && r.WorkspaceID == s.WorkspaceID
 	case "release_log":
 		return r.ID == s.ReleaseID
 	case "container_log":
@@ -117,8 +119,11 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 				return x, Record{}, "invalid subscription"
 			}
 		}
-	case "workspace":
+	case "workspace", "certificates":
 		id, kind = s.WorkspaceID, "workspaces"
+		if s.Topic == "certificates" {
+			perm = "workspace.domains"
+		}
 	case "release_log":
 		id, perm = s.ReleaseID, "logs.view"
 	case "container_log":
@@ -159,6 +164,8 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return out
 	}
 	switch s.Topic {
+	case "certificates":
+		return map[string]any{"certificates": a.certificates(s.WorkspaceID)}, nil, r, ""
 	case "traffic":
 		return a.trafficData(r, s.Window), nil, r, ""
 	case "container_log":
@@ -444,7 +451,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 					drop(s, why)
 					continue
 				}
-				if periodic {
+				if periodic || s.Topic == "certificates" {
 					b, _ := json.Marshal(data)
 					if s.Topic == "traffic" || string(b) != s.update {
 						m := s.message("snapshot")

@@ -238,6 +238,8 @@ func (c *cli) print(v any) error {
 func field(m map[string]any, k string) string { s, _ := m[k].(string); return s }
 
 const usage = `startship [--json] COMMAND
+  config [--config PATH] path|show|get KEY|set KEY VALUE...|unset KEY
+                                 edit daemon TOML, not saved login settings
   users list|create USER|rename USER NAME|reset-password USER|delete USER
   roles list|get ROLE|create NAME|edit ROLE|delete ROLE
     --clone-of ROLE (create only) --name NAME (edit) --color HEX --icon ICON
@@ -285,6 +287,9 @@ If unavailable, uses http://localhost:8080. Use login URL for remote servers.
 `
 
 func (c *cli) run(args []string) error {
+	if len(args) > 0 && args[0] == "config" {
+		return c.runConfig(args[1:])
+	}
 	var a []string
 	wait, noCache := false, false
 	for _, s := range args {
@@ -305,6 +310,9 @@ func (c *cli) run(args []string) error {
 	}
 	cmd := a[0]
 	a = a[1:]
+	if cmd == "config" {
+		return c.runConfig(a)
+	}
 	if cmd == "update" {
 		return c.runUpdate(a)
 	}
@@ -649,6 +657,13 @@ func (c *cli) run(args []string) error {
 
 func Run() {
 	c := &cli{in: bufio.NewReader(os.Stdin), out: os.Stdout, client: &http.Client{Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	if len(os.Args) > 1 && os.Args[1] == "config" {
+		if err := c.runConfig(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "startship:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	// Services such as startship-update.service run without $HOME; only commands that save login state need it.
 	dir, err := os.UserConfigDir()
 	if err == nil {

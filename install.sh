@@ -47,6 +47,10 @@ if [ ! -f /etc/startship/startshipd.env ]; then
     printf 'STARTSHIP_DATA=%s\nSTARTSHIP_DASHBOARD_ADDR=:8080\nSTARTSHIP_HTTP_ADDR=:80\nSTARTSHIP_HTTPS_ADDR=:443\n' "$data" > /etc/startship/startshipd.env
     chmod 0600 /etc/startship/startshipd.env
 fi
+if [ ! -f /etc/startship/startship.toml ]; then
+    printf '%s\n' '# Startship daemon settings; flags > environment > this file > defaults.' '# Existing /etc/startship/startshipd.env values override these settings.' '# Remove corresponding *_ADDR entries from that env file to use file listeners.' '# dashboard_listen = ["127.0.0.1:8080"]' '# dashboard_listen = ["tailscale0:8080", "127.0.0.1:8080"]' '# http_listen = [":80"]' '# https_listen = [":443"]' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' > /etc/startship/startship.toml
+    chmod 0644 /etc/startship/startship.toml
+fi
 install -d -m 0755 /etc/systemd/system
 printf '%s\n' '[Unit]' 'Description=Startship deployment daemon' 'After=network-online.target docker.service' 'Wants=network-online.target' 'Requires=docker.service' '' '[Service]' 'Type=simple' 'User=startship' 'Group=startship' 'RuntimeDirectory=startship' 'RuntimeDirectoryMode=0750' 'SupplementaryGroups=docker' 'EnvironmentFile=/etc/startship/startshipd.env' 'WorkingDirectory=/var/lib/startship' 'Environment=STARTSHIP_UPDATE_REQUEST=/var/lib/startship/update/request.json' 'Environment=STARTSHIP_UPDATE_STATUS=/var/lib/startship/update/status.json' 'ExecStart=/usr/local/bin/startshipd' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startshipd.service
 # The daemon cannot replace root-owned binaries; it queues a request that this root-only updater applies.

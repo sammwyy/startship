@@ -1,12 +1,14 @@
 import { useState } from "react";
 import type {
   Container,
+  Certificate,
   DomainRoute,
   WorkspaceDomain,
 } from "../services/types";
 import { domainPatterns, HostPicker, pickedHost } from "./HostPicker";
 import { AsyncForm, Field } from "./ui";
 import { Icon } from "./Icon";
+import { certificateCovers, certificateUsable } from "../services/certificates";
 
 export interface RouteInput {
   host: string;
@@ -14,6 +16,8 @@ export interface RouteInput {
   path_prefix: string;
   port: number;
   strip_prefix: boolean;
+  certificate_id: string;
+  force_https: boolean;
 }
 
 export function RouteEditor({
@@ -21,6 +25,8 @@ export function RouteEditor({
   domains,
   route,
   admin,
+  certificates = [],
+  certificatesAvailable = true,
   onSave,
   onCancel,
 }: {
@@ -28,6 +34,8 @@ export function RouteEditor({
   domains: WorkspaceDomain[];
   route?: DomainRoute;
   admin?: boolean;
+  certificates?: Certificate[];
+  certificatesAvailable?: boolean;
   onSave: (data: RouteInput) => Promise<void>;
   onCancel: () => void;
 }) {
@@ -45,6 +53,18 @@ export function RouteEditor({
       "",
   );
   const [strip, setStrip] = useState(route?.strip_prefix || false);
+  const [certificateId, setCertificateId] = useState(
+    route?.certificate_id || "",
+  );
+  const [forceHTTPS, setForceHTTPS] = useState(route?.force_https || false);
+  const matching = certificates.filter((certificate) =>
+    certificateCovers(certificate, host),
+  );
+  const secure = matching.some(
+    (certificate) =>
+      (!certificateId || certificate.id === certificateId) &&
+      certificateUsable(certificate),
+  );
   const available = !!target && (!!domains.length || !!admin || !!route?.host);
   const previewPath = path.startsWith("/") ? path : `/${path}`;
   return (
@@ -82,6 +102,8 @@ export function RouteEditor({
             path_prefix: path.startsWith("/") ? path : `/${path}`,
             port: Number(port) === detectedPort ? 0 : Number(port),
             strip_prefix: strip,
+            certificate_id: certificateId,
+            force_https: forceHTTPS,
           });
         }}
       >
@@ -114,6 +136,54 @@ export function RouteEditor({
             />
             <p className="small muted">
               Use / for the whole site, or /api for a specific path.
+            </p>
+            <label>
+              Certificate
+              <select
+                name="certificate_id"
+                value={certificateId}
+                disabled={!certificatesAvailable}
+                onChange={(event) => setCertificateId(event.target.value)}
+              >
+                <option value="">Automatic — any matching certificate</option>
+                {certificateId &&
+                  !matching.some(
+                    (certificate) => certificate.id === certificateId,
+                  ) && (
+                    <option value={certificateId} disabled>
+                      Current certificate — unavailable or does not cover this
+                      host
+                    </option>
+                  )}
+                {matching.map((certificate) => (
+                  <option key={certificate.id} value={certificate.id}>
+                    {certificate.domains.join(", ")} ·{" "}
+                    {certificate.source === "acme"
+                      ? "Let’s Encrypt"
+                      : "Uploaded"}{" "}
+                    · {certificate.status} · {certificate.id.slice(0, 8)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!certificatesAvailable && (
+              <p className="small muted">
+                Certificate selection requires workspace.domains permission and
+                access to the certificate list. Existing binding is preserved.
+              </p>
+            )}
+            <label className="inline-check">
+              <input
+                type="checkbox"
+                name="force_https"
+                checked={forceHTTPS}
+                onChange={(event) => setForceHTTPS(event.target.checked)}
+              />
+              Force HTTPS
+            </label>
+            <p className="small muted">
+              Redirect HTTP to HTTPS. A usable certificate must be available;
+              ACME validation remains reachable over HTTP.
             </p>
           </div>
           <div className="route-editor-section">
@@ -177,7 +247,10 @@ export function RouteEditor({
         </div>
         <div className="route-preview" aria-live="polite">
           <span>
-            <Icon name="globe" />
+            <Icon name={secure ? "lock" : "globe"} />
+            <span className="muted">
+              {secure || forceHTTPS ? "https://" : "http://"}
+            </span>
             <strong>
               {host || "your-domain.com"}
               {previewPath}

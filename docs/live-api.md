@@ -26,6 +26,7 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 |---|---|---|---|---|---|
 | `project` | `project_id` | project visible | `{project, containers[], releases[] (no log), routes[]}` = GET `projects/:id`, `containers?project_id=`, `releases?project_id=&logs=false`, `routes?project_id=` | `upsert`/`delete` with kind project, container, release, route | ProjectLayout 2s queries, DashboardLayout project 2s |
 | `workspace` | `workspace_id` | workspace visible | `{projects[]}` = GET `projects?workspace_id=` | `upsert`/`delete` kind project | projects list refetch |
+| `certificates` | `workspace_id` | `workspace.domains` | `{certificates[]}` = GET `workspaces/:id/certificates` (no private keys) | a full `snapshot` on certificate create/status/renew/delete; access rechecked | workspace certificate list |
 | `release_log` | `release_id` (release or legacy deployment id) | `logs.view` | the record with `log`, = GET `releases/:id` | `log` chunks as the build writes them; `upsert` kind release on status/finished change | LogPanel release 2s |
 | `container_log` | `container_id` | `logs.view` | `{"log": "..."}` = GET `containers/:id/logs` (last 200 lines or the same "not deployed"/"static" text) | `log` chunks streamed from the running container; `log` with `reset:true` when the container's active deployment changes | LogPanel container 2s |
 | `traffic` | `project_id`, `window` 300/900/3600 | `traffic.view` | = GET `projects/:id/traffic?window=` | a new `snapshot` pushed every 5s | TrafficView 5s |

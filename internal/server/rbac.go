@@ -527,6 +527,9 @@ func (x *access) canUpdate(r Record, fields map[string]json.RawMessage) bool {
 // publicRecord hides what the caller may not read and reports what they may do.
 func (x *access) publicRecord(r Record) apiRecord {
 	out := publicRecord(r)
+	if r.Kind == "routes" && x.a.storedCertificate(r.Host) != nil {
+		out.URL = certificateRouteURL(r)
+	}
 	if r.Kind == "projects" {
 		if !x.can(r, "project.environment") {
 			out.Env = nil

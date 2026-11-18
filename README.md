@@ -294,9 +294,116 @@ POST /api/projects/<id>/redeploy   {"deployment_id": "<project-release-id>"}
 
 Redeploy requires a successful project release whose images/static directories still exist. Legacy individually deployed containers remain online during upgrade; the first project deployment establishes the grouped release history.
 
-## HTTPS
+## Daemon configuration and interface binding
 
-Startship gets Let's Encrypt certificates itself:
+`startshipd` reads `--config PATH`, else `STARTSHIP_CONFIG`, else
+`/etc/startship/startship.toml` when present. An explicitly selected missing or
+invalid file is an error. Precedence is **daemon flags > environment variables >
+TOML file > defaults**. An empty legacy environment variable still means unset.
+Configuration is loaded at startup; restart after edits. No `$HOME` is needed.
+
+```toml
+# Bind the control-panel port only to loopback or your VPN interface:
+dashboard_listen = ["127.0.0.1:8080", "tailscale0:8080"]
+# Public application router (all IPv4/IPv6 interfaces where supported):
+http_listen = [":80"]
+https_listen = [":443"]
+data_dir = "/var/lib/startship"
+# dashboard_domain = "deploy.example.com"
+# acme_email = "admin@example.com"
+# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"
+# socket_path = "/run/startship/startship.sock"
+```
+
+Listen entries accept IP/hostname `host:port`, `[IPv6]:port`, `:port` (all
+interfaces), or interface names such as `eth0:8080` and `tailscale0:8080`.
+Interfaces resolve to all their current addresses at startup; nonexistent names
+that cannot resolve as hostnames fail clearly. Addresses changing later require
+a restart. Every bound address is logged. Overlapping wildcard/specific bindings
+on the same port fail rather than silently weakening the restriction.
+
+| TOML key | Daemon flag | Existing environment variable | Default |
+|---|---|---|---|
+| `dashboard_listen` | `--dashboard-listen` | `STARTSHIP_DASHBOARD_ADDR` | `:8080` |
+| `http_listen` | `--http-listen` | `STARTSHIP_HTTP_ADDR` | `:80` |
+| `https_listen` | `--https-listen` | `STARTSHIP_HTTPS_ADDR` | `:443` |
+| `data_dir` | `--data-dir` | `STARTSHIP_DATA` | `./_data` (existing `./data` retained) |
+| `dashboard_domain` | `--dashboard-domain` | `STARTSHIP_DASHBOARD_DOMAIN` | empty |
+| `acme_email` | `--acme-email` | `STARTSHIP_ACME_EMAIL` | empty |
+| `acme_directory` | `--acme-directory` | `STARTSHIP_ACME_DIRECTORY` | Let's Encrypt production |
+| `socket_path` | `--socket-path` | `STARTSHIP_SOCKET` | `$RUNTIME_DIRECTORY/startship.sock`, else data dir |
+
+Listen environment variables accept comma-separated entries; flags also support
+repetition. Scalar flags replace their value. Public route URLs use the first
+configured listener's port. Run `startshipd --help` for all flags.
+
+```sh
+startshipd --config ./startship.toml --dashboard-listen 127.0.0.1:8080
+startshipd --dashboard-listen 127.0.0.1:8080 --dashboard-listen '[::1]:8080'
+startship config path
+startship config show                       # exact selected file, not env/flags
+startship config get dashboard_listen       # JSON value from that file
+sudo startship config set dashboard_listen 127.0.0.1:8080 tailscale0:8080
+sudo startship config unset dashboard_listen
+startship config --config ./startship.toml set http_listen :8081
+sudo systemctl restart startshipd
+```
+
+The installer creates a commented example file without overwriting existing
+files. **Installed `/etc/startship/startshipd.env` settings still take precedence:**
+remove its corresponding `STARTSHIP_*_ADDR` assignments before using listener
+settings from TOML. `startship config` validates edits and preserves other
+settings/comments, but never modifies the environment file or restarts services.
+
+Binding the panel port privately does not restrict `dashboard_domain`: configuring
+that hostname also exposes the panel through the public proxy listeners. Leave
+it unset for VPN/loopback-only access. With Docker Compose, host exposure is also
+controlled by `ports` mappings (e.g. `127.0.0.1:8080:8080`); a host interface such
+as `tailscale0` is normally not visible inside the container.
+
+## HTTPS certificates
+
+The router always listens on HTTP (`STARTSHIP_HTTP_ADDR`, default `:80`) and
+HTTPS (`STARTSHIP_HTTPS_ADDR`, default `:443`). HTTPS requires a matching stored
+certificate or the legacy automatic certificate configuration below; otherwise
+the TLS handshake fails. Both ports must be available even without ACME enabled.
+
+Workspace certificates (requires `workspace.domains` for reads and writes):
+
+- `GET /api/workspaces/:id/certificates` returns `{certificates: [...]}`.
+- `POST` there accepts `{source:"upload", cert_pem:"...", key_pem:"..."}` or
+  `{source:"acme", domains:["app.example.com"], auto_renew:true}`; returns a
+  certificate with HTTP 201. ACME issuance runs asynchronously.
+- `GET /api/workspaces/:id/certificates/:certificateId` returns its metadata
+  and public certificate chain; private keys are never returned.
+- `DELETE` there removes an unbound certificate (409 while issuing/bound).
+- `POST /api/workspaces/:id/certificates/:certificateId/renew` queues ACME
+  renewal (202; 409 if already issuing). Uploaded certificates cannot renew.
+- Platform Admin `GET`/`PUT /api/system/acme` reads/sets
+  `{email:"admin@example.com", directory_url:"https://.../directory"}` in the
+  database. Defaults come from `STARTSHIP_ACME_EMAIL` and
+  `STARTSHIP_ACME_DIRECTORY` (Let's Encrypt production by default).
+
+Certificate fields: `id`, `workspace_id`, `domains`, `source`, `cert_pem`,
+`issuer`, `not_before`, `not_after`, `status`, `last_error`, `auto_renew`,
+`created`, `updated`, `created_by`. Status is pending/issuing/active/failed/expired.
+Names must be permitted by workspace domain claims unless created by a Platform
+Admin. Uploads support single-label wildcard certificates; HTTP-01 does not.
+Certificate private keys and ACME account keys are stored in the private SQLite
+data directory: protect database files and backups.
+
+Routes accept `certificate_id` (same workspace, covering the hostname) and
+`force_https` (301 redirect, preserving path/query and the configured HTTPS
+port). SNI prefers an explicitly bound certificate, then any usable certificate
+covering the exact hostname or a single-label wildcard, then legacy autocert.
+SNI cannot distinguish paths: use one explicit certificate per hostname.
+Public route URLs use HTTPS when a usable stored certificate covers the host.
+Renewal runs at startup and hourly, starting 30 days before expiry; failed
+attempts retry on the next tick. Uploaded certificates are never auto-renewed.
+HTTP-01 challenges are served automatically before route matching/redirects;
+the public HTTP port must reach this node. Configure the account email first.
+
+Legacy automatic Let's Encrypt configuration remains available:
 
 1. Point DNS A records for the dashboard domain and every app host at the server; allow inbound 80 and 443.
 2. In `compose.yaml`, uncomment `STARTSHIP_ACME_EMAIL` and `STARTSHIP_DASHBOARD_DOMAIN`, then run `docker compose up -d`.

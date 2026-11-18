@@ -3,6 +3,7 @@ package server
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,12 +28,16 @@ type Server struct {
 	routeMu sync.RWMutex
 	targets []Target
 	traffic trafficMetrics
-	// dashboardDomain is served by the proxy listeners; https is set when ACME is enabled.
+	// https preserves the legacy dashboard HTTP redirect when autocert is enabled.
 	dashboardDomain     string
 	https               bool
 	updates             *updates
 	live                *liveHub
 	liveSessionInterval time.Duration
+	certMu              sync.Mutex
+	challenges          sync.Map
+	issuing             sync.Map
+	legacyCertificate   func(*tls.ClientHelloInfo) (*tls.Certificate, error)
 }
 
 // Response-only fields must not be persisted or accepted as app configuration.
@@ -394,6 +399,9 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		x := a.access(uid)
+		if a.certificatesAPI(w, r, p, uid, x) {
+			return
+		}
 		if p[1] == "detect" && r.Method == "POST" {
 			a.detectAPI(w, r, x)
 			return
@@ -690,6 +698,8 @@ func (a *Server) api() http.Handler {
 				return
 			}
 		case "routes":
+			a.certMu.Lock()
+			defer a.certMu.Unlock()
 			v.Parent = v.ProjectID
 			if v.Port < 0 || v.Port > 65535 {
 				fail(w, 400, "container port must be between 1 and 65535, or 0 for the detected port")
@@ -700,6 +710,13 @@ func (a *Server) api() http.Handler {
 			}
 			v.ContainerID = ""
 			v.Host = routing.NormalizeHost(v.Host)
+			if v.CertificateID != "" {
+				c, err := a.certificate(v.CertificateID)
+				if err != nil || c.WorkspaceID != projectWorkspace(x.project(v.ProjectID)) || !c.covers(v.Host) {
+					fail(w, 400, "certificate must belong to the workspace and cover the route host")
+					return
+				}
+			}
 			v.PathPrefix = routing.NormalizePrefix(v.PathPrefix)
 			app, e := a.store.Get(v.AppID)
 			if e != nil || app.Kind != "apps" || app.ProjectID != v.ProjectID || v.Host == "" || !strings.HasPrefix(v.PathPrefix, "/") {

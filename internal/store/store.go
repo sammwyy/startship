@@ -40,6 +40,8 @@ type Record struct {
 	Host              string            `json:"host,omitempty"`
 	PathPrefix        string            `json:"path_prefix,omitempty"`
 	StripPrefix       bool              `json:"strip_prefix"`
+	CertificateID     string            `json:"certificate_id,omitempty"`
+	ForceHTTPS        bool              `json:"force_https"`
 	Status            string            `json:"status,omitempty"`
 	Commit            string            `json:"commit,omitempty"`
 	Log               string            `json:"log,omitempty"`

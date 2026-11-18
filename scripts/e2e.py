@@ -24,6 +24,7 @@ process = None
 log = (work / "daemon.log").open("w")
 dashboard_port = os.getenv("STARTSHIP_E2E_DASHBOARD_PORT", "18080")
 proxy_port = os.getenv("STARTSHIP_E2E_HTTP_PORT", "18081")
+https_port = os.getenv("STARTSHIP_E2E_HTTPS_PORT", "18443")
 proxy_url = "http://127.0.0.1:" + proxy_port
 api = "http://127.0.0.1:" + dashboard_port + "/api/"
 client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
@@ -108,7 +109,7 @@ fn main() {
                  ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "fixture"]):
         subprocess.run(["git", "-C", str(repo)] + args, check=True, stdout=subprocess.DEVNULL)
     environment = dict(os.environ, STARTSHIP_DATA=str(work / "data"), STARTSHIP_DASHBOARD_ADDR="127.0.0.1:" + dashboard_port,
-                       STARTSHIP_HTTP_ADDR="127.0.0.1:" + proxy_port, STARTSHIP_ADMIN_USER="admin",
+                       STARTSHIP_HTTP_ADDR="127.0.0.1:" + proxy_port, STARTSHIP_HTTPS_ADDR="127.0.0.1:" + https_port, STARTSHIP_ADMIN_USER="admin",
                        STARTSHIP_ADMIN_PASSWORD="test-password", STARTSHIP_ACME_EMAIL="", STARTSHIP_DASHBOARD_DOMAIN="")
     process = subprocess.Popen([str(root / "startshipd")], env=environment, stdout=log, stderr=log)
     for _ in range(60):
