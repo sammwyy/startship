@@ -197,7 +197,11 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                     <TemplateIcon slug={t?.icon || "custom"} />
                     <span>
                       <strong>{t?.name || d.template}</strong>
-                      <code>{d.root_dir}</code>
+                      <code>
+                        {!d.root_dir || d.root_dir === "."
+                          ? "Repository root"
+                          : d.root_dir}
+                      </code>
                     </span>
                     <button
                       type="button"

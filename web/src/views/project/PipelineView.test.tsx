@@ -307,6 +307,26 @@ describe("project pipeline", () => {
       "pnpm install\npnpm run build",
     );
   });
+  it.each([
+    [".", "Repository root"],
+    ["", "Repository root"],
+    ["packages/web", "packages/web"],
+  ])("labels detected root %j as %j", async (root, label) => {
+    state.request.mockImplementation(async (path: string) =>
+      path === "pipeline/templates"
+        ? templates
+        : [
+            {
+              root_dir: root,
+              template: "vite",
+              pipeline: templates[0].pipeline,
+            },
+          ],
+    );
+    show();
+    fireEvent.click(await screen.findByRole("button", { name: "Detect" }));
+    expect(await screen.findByText(label)).toBeVisible();
+  });
   it("reports detection failures and respects read-only access", async () => {
     state.request.mockImplementation(async (path: string) => {
       if (path === "detect") throw new Error("Source unavailable");
