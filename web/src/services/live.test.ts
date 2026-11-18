@@ -285,4 +285,24 @@ describe("live query cache", () => {
     });
     client.clear();
   });
+  it("replaces the sidebar workspace list from workspaces snapshots", () => {
+    const client = new QueryClient();
+    client.setQueryData(queries.workspaces().queryKey, [
+      { id: "w1", name: "old" },
+    ]);
+    applyLiveMessage(
+      client,
+      { topic: "workspaces" },
+      {
+        id: "sub-1",
+        topic: "workspaces",
+        type: "snapshot",
+        data: [{ id: "w1", name: "renamed" }],
+      },
+    );
+    expect(client.getQueryData(queries.workspaces().queryKey)).toEqual([
+      { id: "w1", name: "renamed" },
+    ]);
+    client.clear();
+  });
 });
