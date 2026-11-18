@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useDashboard } from "../../layouts/DashboardLayout";
@@ -15,6 +16,7 @@ import {
   connectedMapNodes,
   mapKey,
   placeMapLabels,
+  orderMapRow,
 } from "../../lib/map";
 import { Heading } from "../../components/Heading";
 import { Empty, ErrorMessage, Loading } from "../../components/ui";
@@ -141,6 +143,18 @@ export function WorkspaceMapView() {
     };
   }, [graph, containers.data, releases.data, id]);
   const root = useRef<HTMLDivElement>(null);
+  const [verticalLayout, setVerticalLayout] = useState(false);
+  const visibleColumns = useMemo(
+    () =>
+      verticalLayout
+        ? {
+            projects: orderMapRow(columns.projects, graph.edges),
+            connections: orderMapRow(columns.connections, graph.edges),
+            storage: orderMapRow(columns.storage, graph.edges),
+          }
+        : columns,
+    [verticalLayout, columns, graph.edges],
+  );
   const [curves, setCurves] = useState<Curve[]>([]);
   const [hovered, setHovered] = useState<string | null>(null),
     [focused, setFocused] = useState<string | null>(null);
@@ -155,6 +169,7 @@ export function WorkspaceMapView() {
       const vertical =
         getComputedStyle(element).getPropertyValue("--map-vertical").trim() ===
         "1";
+      setVerticalLayout(vertical);
       const anchors = new Map(
         Array.from(element.querySelectorAll<HTMLElement>("[data-map-key]")).map(
           (node) => [node.dataset.mapKey!, node.getBoundingClientRect()],
@@ -232,7 +247,7 @@ export function WorkspaceMapView() {
       .querySelectorAll("[data-map-key]")
       .forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [graph, columns]);
+  }, [graph, visibleColumns]);
   const error =
     projects.error ||
     containers.error ||
@@ -327,8 +342,18 @@ export function WorkspaceMapView() {
                   {kind}
                   <span>{columns[kind].length}</span>
                 </h2>
-                <div className="map-node-list">
-                  {columns[kind].map((node) => (
+                <div
+                  className="map-node-list"
+                  style={
+                    {
+                      "--map-card-columns": Math.max(
+                        1,
+                        Math.min(columns[kind].length, 3),
+                      ),
+                    } as CSSProperties
+                  }
+                >
+                  {visibleColumns[kind].map((node) => (
                     <Link
                       key={node.key}
                       data-map-key={node.key}

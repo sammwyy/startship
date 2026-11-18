@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildWorkspaceMap, connectedMapNodes, placeMapLabels } from "./map";
+import {
+  buildWorkspaceMap,
+  connectedMapNodes,
+  placeMapLabels,
+  orderMapRow,
+} from "./map";
 import type { Project, Service, Volume } from "../services/types";
 
 const projects = [{ id: "a" }, { id: "b" }, { id: "c" }] as Project[];
@@ -170,5 +175,37 @@ describe("map label placement", () => {
       placeMapLabels([{ ...vertical, bottom: 220 }], [], 500, 390),
     ).toEqual([null]);
     expect(placeMapLabels([vertical], [], 500, 60)).toEqual([null]);
+  });
+});
+
+describe("wrapping map rows", () => {
+  const nodes = ["out", "both", "idle", "in"].map((key) => ({ key }));
+  const edges = [
+    { from: "previous", to: "in" },
+    { from: "previous", to: "both" },
+    { from: "both", to: "next" },
+    { from: "out", to: "next" },
+  ];
+  it("keeps incoming nodes first and outgoing nodes last when wrapping", () => {
+    expect(orderMapRow(nodes, edges).map((node) => node.key)).toEqual([
+      "in",
+      "both",
+      "idle",
+      "out",
+    ]);
+    expect(nodes.map((node) => node.key)).toEqual([
+      "out",
+      "both",
+      "idle",
+      "in",
+    ]);
+  });
+  it("preserves a single line, empty rows and rows without connections", () => {
+    expect(orderMapRow(nodes.slice(0, 3), edges)).toEqual(nodes.slice(0, 3));
+    expect(orderMapRow([], edges)).toEqual([]);
+    expect(orderMapRow(nodes, [])).toEqual(nodes);
+    expect(
+      orderMapRow(nodes, [{ from: "missing", to: "also-missing" }]),
+    ).toEqual(nodes);
   });
 });

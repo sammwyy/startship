@@ -8,6 +8,17 @@ export interface MapEdge {
 }
 export const mapKey = (kind: MapKind, id: string) => `${kind}:${id}`;
 
+export function orderMapRow<T extends { key: string }>(
+  nodes: T[],
+  edges: MapEdge[],
+) {
+  if (nodes.length <= 3) return nodes;
+  const rank = (node: T) =>
+    Number(edges.some((edge) => edge.from === node.key)) -
+    Number(edges.some((edge) => edge.to === node.key));
+  return [...nodes].sort((a, b) => rank(a) - rank(b));
+}
+
 export function buildWorkspaceMap(
   projects: Project[],
   services: Service[],

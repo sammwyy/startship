@@ -144,6 +144,14 @@ describe("workspace map view", () => {
       connections.getByRole("link", { name: /Uploads/ }),
     ).toBeInTheDocument();
     expect(connections.getByText("/uploads · 2.0 KB")).toBeInTheDocument();
+    expect(
+      connections.getByRole("link", { name: /Uploads/ }).parentElement,
+    ).toHaveStyle("--map-card-columns: 3");
+    expect(
+      screen
+        .getByRole("region", { name: "projects" })
+        .querySelector(".map-node-list"),
+    ).toHaveStyle("--map-card-columns: 1");
     expect(connections.getByRole("link", { name: /Uploads/ })).toHaveAttribute(
       "title",
       expect.stringContaining("/uploads · 2.0 KB"),
