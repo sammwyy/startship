@@ -255,12 +255,22 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 	}
 	app.Pipeline, app.Port = p, p.Deploy.Port
 	a.store.Update(id, func(r *Record) { r.Pipeline = p; r.Port = app.Port })
-	fmt.Fprintf(logger, "==> 1/3 Build (%s)\n", p.Build.Image)
+	engine := externalEngine(p)
+	buildLabel := p.Build.Image
+	if engine {
+		buildLabel = p.Build.Engine
+	}
+	fmt.Fprintf(logger, "==> 1/3 Build (%s)\n", buildLabel)
 	image := "startship/" + app.ID + ":" + id
 	dockerPath := p.Build.Dockerfile
-	generated := dockerPath == ""
-	staticDirect := p.Deploy.Static && len(p.Build.Commands) == 0 && len(p.Test.Commands) == 0 && generated
-	if !staticDirect {
+	generated := !engine && dockerPath == ""
+	staticDirect := !engine && p.Deploy.Static && len(p.Build.Commands) == 0 && len(p.Test.Commands) == 0 && generated
+	if engine {
+		if e = buildEngine(root, logger, app.ProjectID, image, p, d.NoCache); e != nil {
+			return
+		}
+		a.store.Update(id, func(r *Record) { r.Image = image })
+	} else if !staticDirect {
 		if generated {
 			var content string
 			content, e = p.Dockerfile()
@@ -277,7 +287,7 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 		if generated {
 			target = "build"
 		}
-		if e = buildImage(root, logger, app.ProjectID, image, dockerPath, d.NoCache, target); e != nil {
+		if e = buildImage(root, logger, app.ProjectID, image, imageBuild{Dockerfile: dockerPath, NoCache: d.NoCache, Target: target}); e != nil {
 			return
 		}
 		a.store.Update(id, func(r *Record) { r.Image = image })
@@ -286,12 +296,25 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 	if len(p.Test.Commands) > 0 {
 		a.status(id, "testing")
 		if generated {
-			if e = buildImage(root, logger, app.ProjectID, image, dockerPath, false, "test"); e != nil {
+			if e = buildImage(root, logger, app.ProjectID, image, imageBuild{Dockerfile: dockerPath, Target: "test"}); e != nil {
 				return
 			}
 		}
 		args := appRunArgs(app, network, true)
-		args = append(args, image, "sh", "-c", "set -e\n"+strings.Join(p.Test.Commands, "\n"))
+		testImage := image
+		if engine && p.Test.Image != "" {
+			testImage = image + "-test"
+			defer command("", nil, "docker", "image", "rm", "-f", testImage)
+			if e = engineStageImage(root, logger, app.ProjectID, image, testImage, p.Test.Image, ".", p); e != nil {
+				return
+			}
+		}
+		testCommand := "set -e\n" + strings.Join(p.Test.Commands, "\n")
+		if engine {
+			args = append(args, engineCommand(p, testImage, testCommand, p.Test.Image != "")...)
+		} else {
+			args = append(args, image, "sh", "-c", testCommand)
+		}
 		var output strings.Builder
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 		c := exec.CommandContext(ctx, "docker", args...)
@@ -341,7 +364,11 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 				return
 			}
 			defer command("", nil, "docker", "rm", "-f", name)
-			if e = command("", logger, "docker", "cp", name+":/app/"+artifact+"/.", extract); e != nil {
+			appDir := "/app"
+			if engine {
+				appDir = engineAppDir(p)
+			}
+			if e = command("", logger, "docker", "cp", name+":"+filepath.Join(appDir, artifact)+"/.", extract); e != nil {
 				return
 			}
 			src = extract
@@ -355,9 +382,17 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 		return
 	}
 	if generated {
-		if e = buildImage(root, logger, app.ProjectID, image, dockerPath, false, "final"); e != nil {
+		if e = buildImage(root, logger, app.ProjectID, image, imageBuild{Dockerfile: dockerPath, Target: "final"}); e != nil {
 			return
 		}
+	}
+	if engine && p.Deploy.Image != "" {
+		final := image + "-runtime"
+		if e = engineStageImage(root, logger, app.ProjectID, image, final, p.Deploy.Image, p.Deploy.Artifact, p); e != nil {
+			return
+		}
+		image = final
+		a.store.Update(id, func(r *Record) { r.Image = image })
 	}
 	e = a.startRelease(app, id, image, network, logger)
 }
@@ -385,7 +420,11 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 		}
 	}()
 	args := append(appRunArgs(app, network, false), "--name", container)
-	args = append(args, image)
+	if externalEngine(app.Pipeline) && app.Pipeline.Deploy.Command != "" {
+		args = append(args, engineCommand(app.Pipeline, image, "exec "+app.Pipeline.Deploy.Command, app.Pipeline.Deploy.Image != "")...)
+	} else {
+		args = append(args, image)
+	}
 	if e = command("", logger, "docker", args...); e != nil {
 		return
 	}

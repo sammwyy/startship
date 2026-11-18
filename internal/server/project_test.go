@@ -96,13 +96,13 @@ func TestPipelineCandidateCompatibility(t *testing.T) {
 			t.Fatal(p)
 		}
 	}
-	overlay := &pipeline.Pipeline{Build: pipeline.Build{Image: "ignored"}, Test: pipeline.Test{Commands: []string{"echo overlay"}, ExpectOutput: "overlay"}, Deploy: pipeline.Deploy{Port: 9090, HealthPath: "/ready", ExpectStatus: 204, HealthTimeout: 90}}
+	overlay := &pipeline.Pipeline{Build: pipeline.Build{Engine: "nixpacks", Image: "ignored"}, Test: pipeline.Test{Commands: []string{"echo overlay"}, ExpectOutput: "overlay"}, Deploy: pipeline.Deploy{Port: 9090, HealthPath: "/ready", ExpectStatus: 204, HealthTimeout: 90}}
 	candidates, err := projectCandidates(dir, Record{RootDir: ".", BuildType: "auto", Pipeline: overlay})
 	if err != nil {
 		t.Fatal(err)
 	}
 	p := candidates[0].Pipeline
-	if p.Build.Image != "node:22-alpine" || p.Test.ExpectOutput != "overlay" || p.Deploy.Port != 9090 || p.Deploy.ExpectStatus != 204 || p.Deploy.HealthTimeout != 90 {
+	if p.Build.Engine != "nixpacks" || p.Build.Image != "node:22-alpine" || p.Test.ExpectOutput != "overlay" || p.Deploy.Port != 9090 || p.Deploy.ExpectStatus != 204 || p.Deploy.HealthTimeout != 90 {
 		t.Fatal(p)
 	}
 }
@@ -113,6 +113,50 @@ func commitProjectFixture(t *testing.T, repo string) {
 		out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput()
 		if err != nil {
 			t.Fatal(string(out), err)
+		}
+	}
+}
+
+func TestExternalEngineIgnoresDockerfilePort(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "source")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "ignored"), []byte("EXPOSE 9999\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, engine := range []string{"nixpacks", "buildpacks"} {
+		p := &pipeline.Pipeline{Build: pipeline.Build{Engine: engine, Dockerfile: "../ignored"}}
+		candidate, err := resolvedCandidate(dir, ".", "dockerfile", Record{BuildType: "dockerfile", Pipeline: p})
+		if err != nil || candidate.Port != 0 {
+			t.Fatal(candidate, err)
+		}
+	}
+}
+
+func TestAutoEngineUsesEngineRuntime(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module engine-test\n\ngo 1.26\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, engine := range []string{"nixpacks", "buildpacks"} {
+		p := &pipeline.Pipeline{Build: pipeline.Build{Engine: engine}, Test: pipeline.Test{Commands: []string{"echo test"}}}
+		candidates, err := projectCandidates(dir, Record{RootDir: ".", BuildType: "auto", Pipeline: p})
+		if err != nil || len(candidates) != 1 {
+			t.Fatal(candidates, err)
+		}
+		resolved := candidates[0].Pipeline
+		if resolved.Deploy.Image != "" || resolved.Deploy.Command != "" || resolved.Deploy.Artifact != "" || resolved.Deploy.Static || resolved.Deploy.Port != 8080 || len(resolved.Test.Commands) != 1 {
+			t.Fatal("engine runtime replaced by Docker template defaults", resolved)
+		}
+		p.Deploy = pipeline.Deploy{Image: "alpine:3.23", Artifact: "dist", Command: "custom --serve", Port: 9090, HealthPath: "/health", ExpectStatus: 204, HealthTimeout: 15}
+		candidates, err = projectCandidates(dir, Record{RootDir: ".", BuildType: "auto", Pipeline: p})
+		if err != nil || len(candidates) != 1 {
+			t.Fatal(candidates, err)
+		}
+		if candidates[0].Pipeline.Deploy != p.Deploy {
+			t.Fatal("lost project Deploy overrides", candidates[0].Pipeline)
 		}
 	}
 }
@@ -239,6 +283,7 @@ func TestProjectDeploymentAPI(t *testing.T) {
 		t.Fatal(string(templates), err)
 	}
 	request("PATCH", "projects/project", `{"build_type":"custom"}`, 400)
+	request("PATCH", "projects/project", `{"pipeline":{"build":{"engine":"unknown","image":"alpine:3.23"}}}`, 400)
 	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"bad image"}}}`, 400)
 	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"},"deploy":{"health_timeout":601}}}`, 400)
 	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"},"deploy":{"health_timeout":-1}}}`, 400)
@@ -253,7 +298,7 @@ func TestProjectDeploymentAPI(t *testing.T) {
 	if replaced.Pipeline == nil || replaced.Pipeline.Test.ExpectOutput != "" || replaced.Pipeline.Build.Image != "alpine:3.23" || replaced.Env["MODE"] != "snapshot" {
 		t.Fatal("pipeline was not replaced or omitted project fields changed", replaced)
 	}
-	request("PATCH", "projects/project", `{"build_type":"custom","pipeline":{"build":{"image":"alpine:3.23"},"test":{"commands":["echo ok"],"expect_exit_code":0},"deploy":{"port":8080,"health_path":"/health","health_timeout":90}}}`, 200)
+	request("PATCH", "projects/project", `{"build_type":"custom","pipeline":{"build":{"engine":"nixpacks","image":"alpine:3.23"},"test":{"commands":["echo ok"],"expect_exit_code":0},"deploy":{"port":8080,"health_path":"/health","health_timeout":90}}}`, 200)
 	body := request("POST", "projects/project/deploy", `{"no_cache":true}`, 202)
 	json.Unmarshal(body, &release)
 	if release.ProjectID != p.ID || release.AppID != "" || !release.NoCache || strings.Contains(string(body), "private-token") {
@@ -264,7 +309,7 @@ func TestProjectDeploymentAPI(t *testing.T) {
 	if snapshot.Env["MODE"] != "snapshot" {
 		t.Fatal("queued configuration changed")
 	}
-	if snapshot.Pipeline == nil || snapshot.Pipeline.Deploy.HealthPath != "/health" || snapshot.Pipeline.Deploy.HealthTimeout != 90 {
+	if snapshot.Pipeline == nil || snapshot.Pipeline.Build.Engine != "nixpacks" || snapshot.Pipeline.Deploy.HealthPath != "/health" || snapshot.Pipeline.Deploy.HealthTimeout != 90 {
 		t.Fatal(snapshot)
 	}
 	request("POST", "projects/foreign/deploy", "{}", 404)

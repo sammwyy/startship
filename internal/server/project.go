@@ -94,6 +94,13 @@ func resolvedCandidate(dir, root, kind string, p Record) (pipelineCandidate, err
 		}
 		if p.Pipeline != nil {
 			resolved.Test = p.Pipeline.Test
+			if externalEngine(p.Pipeline) {
+				port := resolved.Deploy.Port
+				resolved.Deploy = p.Pipeline.Deploy
+				if resolved.Deploy.Port == 0 {
+					resolved.Deploy.Port = port
+				}
+			}
 		} else if p.TestCommand != "" {
 			resolved.Test.Commands = []string{p.TestCommand}
 		}
@@ -103,6 +110,7 @@ func resolvedCandidate(dir, root, kind string, p Record) (pipelineCandidate, err
 	}
 	if p.Pipeline != nil {
 		resolved.Deploy.HealthTimeout = p.Pipeline.Deploy.HealthTimeout
+		resolved.Build.Engine = p.Pipeline.Build.Engine
 		if p.Pipeline.Deploy.Port != 0 {
 			resolved.Deploy.Port = p.Pipeline.Deploy.Port
 		}
@@ -111,7 +119,7 @@ func resolvedCandidate(dir, root, kind string, p Record) (pipelineCandidate, err
 			resolved.Deploy.ExpectStatus = p.Pipeline.Deploy.ExpectStatus
 		}
 	}
-	if kind == "dockerfile" && p.Port == 0 && (p.Pipeline == nil || p.Pipeline.Deploy.Port == 0) {
+	if !externalEngine(&resolved) && kind == "dockerfile" && p.Port == 0 && (p.Pipeline == nil || p.Pipeline.Deploy.Port == 0) {
 		b, _ := os.ReadFile(filepath.Join(dir, resolved.Build.Dockerfile))
 		if match := exposedPort.FindSubmatch(b); len(match) > 1 {
 			resolved.Deploy.Port, _ = strconv.Atoi(string(match[1]))

@@ -16,7 +16,7 @@ fi
 [ "$#" = 0 ] || die 'usage: install.sh [--uninstall]'
 [ "$(uname -s)" = Linux ] || die 'only Linux is supported'
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die 'supported architectures: amd64, arm64' ;; esac
-for tool in curl sha256sum docker git useradd usermod getent; do command -v "$tool" >/dev/null 2>&1 || die "install $tool first"; done
+for tool in curl sha256sum tar docker git useradd usermod getent; do command -v "$tool" >/dev/null 2>&1 || die "install $tool first"; done
 getent group docker >/dev/null || die 'Docker group missing; install Docker Engine first'
 base=${STARTSHIP_DOWNLOAD_URL:-}
 if [ -z "$base" ]; then
@@ -34,9 +34,17 @@ for bin in startship startshipd; do
     [ "${#expected}" = 64 ] || die "missing or invalid checksum for $asset"
     printf '%s  %s\n' "$expected" "$tmp/$asset" | sha256sum -c - || die "checksum mismatch for $asset"
 done
+case "$arch" in
+    amd64) nixarch=x86_64; nixsum=0f55de7874507b9cf7502113120bd96f2ab6979f78d10eaf2eb2ade9207b3af6 ;;
+    arm64) nixarch=aarch64; nixsum=912bd02dd2bb6f9c3a9ed965fe8a68b4aa318dc7a2546e2eca6f2806a894ba39 ;;
+esac
+curl --fail --location --silent --show-error "https://github.com/railwayapp/nixpacks/releases/download/v1.41.0/nixpacks-v1.41.0-$nixarch-unknown-linux-musl.tar.gz" -o "$tmp/nixpacks.tar.gz"
+printf '%s  %s\n' "$nixsum" "$tmp/nixpacks.tar.gz" | sha256sum -c - || die 'Nixpacks checksum mismatch'
+tar -xzf "$tmp/nixpacks.tar.gz" -C "$tmp" nixpacks
 if ! id startship >/dev/null 2>&1; then useradd --system --home-dir "$data" --shell /usr/sbin/nologin startship; fi
 usermod -a -G docker startship
 install -d -m 0755 /usr/local/bin /etc/startship
+install -m 0755 "$tmp/nixpacks" /usr/local/bin/nixpacks
 install -d -o startship -g startship -m 0700 "$data"
 install -d -o startship -g startship -m 0750 "$data/update"
 for bin in startship startshipd; do

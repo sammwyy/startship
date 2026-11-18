@@ -2,7 +2,12 @@ export interface Scoped {
   permissions?: string[];
 }
 export interface Pipeline {
-  build: { image?: string; commands?: string[]; dockerfile?: string };
+  build: {
+    engine?: "docker" | "nixpacks" | "buildpacks";
+    image?: string;
+    commands?: string[];
+    dockerfile?: string;
+  };
   test: {
     image?: string;
     commands?: string[];
