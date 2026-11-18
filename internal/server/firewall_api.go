@@ -112,7 +112,7 @@ func (a *Server) firewallAPI(w http.ResponseWriter, r *http.Request, path []stri
 			err = firewallError(400, err.Error())
 			break
 		}
-		err = a.saveFirewallPolicy(ws.ID, uid, "firewall.policy.update", ws.ID, policy)
+		err = a.saveFirewallPolicy(r.Context(), ws.ID, uid, "firewall.policy.update", ws.ID, policy)
 	case path[4] == "rules":
 		result, status, err = a.firewallRules(r, path[5:], ws.ID, uid, p)
 	case path[4] == "lists":
@@ -223,7 +223,7 @@ func (a *Server) firewallRules(r *http.Request, path []string, workspace, uid st
 	if err := firewall.Validate(p); err != nil {
 		return nil, 0, firewallError(400, err.Error())
 	}
-	return nil, 200, a.saveFirewallPolicy(workspace, uid, action, target, p)
+	return nil, 200, a.saveFirewallPolicy(r.Context(), workspace, uid, action, target, p)
 }
 
 func validateFirewallList(l firewall.List) error {
@@ -320,7 +320,7 @@ func (a *Server) firewallLists(r *http.Request, path []string, workspace, uid st
 		if err := validateFirewallList(l); err != nil {
 			return nil, 0, firewallError(400, err.Error())
 		}
-		return l, 200, a.saveFirewallList(workspace, uid, action, l)
+		return l, 200, a.saveFirewallList(r.Context(), workspace, uid, action, l)
 	}
 	if len(path) == 0 {
 		return nil, 0, firewallError(405, "method not allowed")
@@ -333,7 +333,7 @@ func (a *Server) firewallLists(r *http.Request, path []string, workspace, uid st
 		if l.ID == "banned" {
 			return nil, 0, firewallError(400, "the implicit banned list cannot be deleted")
 		}
-		return map[string]bool{"ok": true}, 200, a.deleteFirewallList(workspace, uid, l.ID)
+		return map[string]bool{"ok": true}, 200, a.deleteFirewallList(r.Context(), workspace, uid, l.ID)
 	}
 	if len(path) >= 2 && path[1] == "entries" {
 		action := ""
@@ -353,7 +353,7 @@ func (a *Server) firewallLists(r *http.Request, path []string, workspace, uid st
 		} else {
 			return nil, 0, firewallError(405, "method not allowed")
 		}
-		return *l, 200, a.saveFirewallList(workspace, uid, action, *l)
+		return *l, 200, a.saveFirewallList(r.Context(), workspace, uid, action, *l)
 	}
 	return nil, 0, firewallError(405, "method not allowed")
 }
@@ -378,5 +378,5 @@ func (a *Server) firewallBanAPI(r *http.Request, path []string, workspace, uid s
 	} else {
 		return nil, firewallError(405, "method not allowed")
 	}
-	return *l, a.saveFirewallList(workspace, uid, action, *l)
+	return *l, a.saveFirewallList(r.Context(), workspace, uid, action, *l)
 }

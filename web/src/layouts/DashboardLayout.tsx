@@ -29,7 +29,7 @@ const Context = createContext<DashboardContext>({ workspaces: [] });
 export const useDashboard = () => useContext(Context);
 
 export function DashboardLayout() {
-  const { user, can, logout, updateAccount } = useSession();
+  const { user, can, logout } = useSession();
   const ui = useUI(),
     client = useQueryClient(),
     navigate = useNavigate(),
@@ -88,63 +88,8 @@ export function DashboardLayout() {
       },
     });
   }
-  function accountSettings() {
-    ui.dialog({
-      title: "Account settings",
-      description: "Confirm your current password to save changes.",
-      submit: "Save account",
-      fields: (
-        <>
-          <Field
-            label="Username"
-            name="username"
-            defaultValue={user!.username}
-            required
-            maxLength={100}
-            autoComplete="username"
-          />
-          <div className="split">
-            <Field
-              label="New password (optional)"
-              name="new_password"
-              type="password"
-              minLength={8}
-              maxLength={72}
-              autoComplete="new-password"
-            />
-            <Field
-              label="Confirm new password"
-              name="confirm_password"
-              type="password"
-              autoComplete="new-password"
-            />
-          </div>
-          <Field
-            label="Current password"
-            name="current_password"
-            type="password"
-            required
-            autoComplete="current-password"
-          />
-          <p className="note">
-            Saving signs out your other sessions; this session stays signed in.
-          </p>
-        </>
-      ),
-      onSubmit: async (form) => {
-        const password = text(form, "new_password");
-        if (password !== text(form, "confirm_password"))
-          throw new Error("New passwords do not match");
-        await updateAccount({
-          username: text(form, "username"),
-          current_password: text(form, "current_password"),
-          ...(password ? { new_password: password } : {}),
-        });
-        ui.notify("Account updated");
-      },
-    });
-  }
   const url = workspace ? `/workspace/${workspace.id}` : "/workspaces";
+  const accountName = user?.display_name || user?.username || "Account";
   const navLink = (to: string, name: string, shape: string, end = false) => (
     <NavLink key={to} to={to} end={end} aria-label={name} title={name}>
       <Icon name={shape} />
@@ -251,6 +196,12 @@ export function DashboardLayout() {
                   </span>
                 </Link>
               </div>
+              {can("activity.view", project) &&
+                navLink(
+                  `/project/${project.id}/activity`,
+                  "Activity log",
+                  "history",
+                )}
               {projectSections.map(([section, label, icon]) =>
                 navLink(`/project/${project.id}/${section}`, label, icon),
               )}
@@ -274,6 +225,8 @@ export function DashboardLayout() {
                     "shield-check",
                   )}
                   {navLink(`${url}/members`, "Members", "users")}
+                  {can("activity.view", workspace) &&
+                    navLink(`${url}/activity`, "Activity log", "history")}
                   {navLink(`${url}/settings`, "Workspace settings", "settings")}
                 </>
               )}
@@ -293,8 +246,8 @@ export function DashboardLayout() {
           label={`Account: ${user!.username}`}
           trigger={
             <>
-              <span className="avatar">{user!.username[0]?.toUpperCase()}</span>
-              <span className="selector-name">{user!.username}</span>
+              <span className="avatar">{accountName[0]?.toUpperCase()}</span>
+              <span className="selector-name">{accountName}</span>
               <Icon name="chevron" />
             </>
           }
@@ -302,10 +255,10 @@ export function DashboardLayout() {
           <div className="menu-caption">
             Signed in as <strong>{user!.username}</strong>
           </div>
-          <button onClick={accountSettings}>
+          <Link to="/account">
             <Icon name="settings" />
             Account settings
-          </button>
+          </Link>
           <ThemeButton />
           <div className="menu-divider" />
           <button onClick={() => ui.run(logout)}>

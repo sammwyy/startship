@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queries } from "./queries";
+import { refreshAccess } from "./api";
 import type {
   Container,
   DomainRoute,
@@ -19,6 +20,9 @@ export type LiveSubscription =
   | { topic: "release_log"; release_id: string }
   | { topic: "container_log"; container_id: string }
   | { topic: "traffic"; project_id: string; window: number }
+  | { topic: "account_sessions" | "account_activity" | "audit_activity" }
+  | { topic: "workspace_activity"; workspace_id: string }
+  | { topic: "project_activity"; project_id: string }
   | { topic: "system_update" };
 export interface LiveMessage {
   type: "snapshot" | "upsert" | "delete" | "log" | "error";
@@ -40,6 +44,8 @@ export class LiveConnection {
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = true;
   private ready = false;
+  private renewing = false;
+  private generation = 0;
   private attempt = 0;
   private nextId = 0;
   private subscriptions = new Map<
@@ -53,7 +59,7 @@ export class LiveConnection {
   ) {}
   connect() {
     this.stopped = false;
-    if (this.socket || this.timer) return;
+    if (this.socket || this.timer || this.renewing) return;
     this.onStatus(this.attempt ? "reconnecting" : "connecting");
     const url = new URL("/api/live", window.location.href);
     url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -95,6 +101,7 @@ export class LiveConnection {
     socket.onclose = (event) => {
       if (this.socket !== socket) return;
       this.socket = undefined;
+      const wasReady = this.ready;
       this.ready = false;
       if (this.stopped) return;
       if (event.code === 4401) {
@@ -102,16 +109,45 @@ export class LiveConnection {
         window.dispatchEvent(new Event("session-expired"));
         return;
       }
-      this.onStatus("reconnecting");
-      const delay = Math.min(10000, 500 * 2 ** Math.min(this.attempt++, 5));
-      this.timer = setTimeout(() => {
-        this.timer = undefined;
-        this.connect();
-      }, delay);
+      if (event.code === 4408 || (!wasReady && event.code === 1006)) {
+        void this.renew();
+        return;
+      }
+      this.reconnect();
     };
+  }
+  private reconnect() {
+    this.onStatus("reconnecting");
+    const delay = Math.min(10000, 500 * 2 ** Math.min(this.attempt++, 5));
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.connect();
+    }, delay);
+  }
+  private async renew() {
+    const generation = this.generation;
+    this.renewing = true;
+    this.onStatus("reconnecting");
+    try {
+      const ok = await refreshAccess();
+      if (generation !== this.generation) return;
+      this.renewing = false;
+      if (!ok) {
+        this.disconnect();
+        window.dispatchEvent(new Event("session-expired"));
+        return;
+      }
+      this.reconnect();
+    } catch {
+      if (generation !== this.generation) return;
+      this.renewing = false;
+      this.reconnect();
+    }
   }
   disconnect() {
     this.stopped = true;
+    this.generation++;
+    this.renewing = false;
     this.ready = false;
     this.attempt = 0;
     clearTimeout(this.timer);

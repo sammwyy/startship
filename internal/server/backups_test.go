@@ -120,10 +120,26 @@ func TestBackupsAPI(t *testing.T) {
 		cur, _ := getResource[Service](f.a, "services", s.ID)
 		past := time.Now().Add(-time.Minute)
 		cur.BackupAt = &past
-		f.a.saveService(cur)
-		before := len(list())
+		if err := f.a.saveService(cur); err != nil {
+			t.Fatal(err)
+		}
+		before := map[string]bool{}
+		for _, backup := range list() {
+			before[backup.ID] = true
+		}
 		f.a.runDueBackups(time.Now())
-		waitFor(t, func() bool { return len(list()) > before || i >= 2 && len(list()) == before })
+		waitFor(t, func() bool {
+			backups := list()
+			if len(backups) != 2+min(i+1, 2) {
+				return false
+			}
+			for _, b := range backups {
+				if !before[b.ID] && b.Trigger == "scheduled" && b.Status == "completed" {
+					return true
+				}
+			}
+			return false
+		})
 	}
 	scheduled := 0
 	for _, x := range list() {

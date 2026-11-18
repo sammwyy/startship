@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -74,6 +75,53 @@ func TestInvalidCommands(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
+	}
+}
+
+func TestSessionRefreshAndScopedActivity(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/refresh":
+			cookie, err := r.Cookie("startship_refresh")
+			if err != nil || cookie.Value != "refresh" || r.Method != http.MethodPost {
+				t.Error("refresh request missing the saved refresh cookie")
+			}
+			http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: "renewed"})
+			w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		if _, err := r.Cookie("startship_refresh"); err == nil {
+			t.Error("refresh cookie sent on an ordinary request")
+		}
+		if token, err := r.Cookie("startship_session"); err != nil || token.Value != "renewed" {
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte(`{"error":"expired"}`))
+			return
+		}
+		switch r.URL.Path {
+		case "/api/projects":
+			w.Write([]byte(`[{"id":"p","name":"Site"}]`))
+		case "/api/projects/p/activity":
+			w.Write([]byte(`[{"action":"project.create","target":"Site"}]`))
+		default:
+			t.Error("unexpected endpoint", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+	var out bytes.Buffer
+	c := &cli{config: config{Server: server.URL, Token: "expired", Refresh: "refresh"}, client: server.Client(),
+		out: &out, path: filepath.Join(t.TempDir(), "config.json")}
+	if err := c.run([]string{"activity", "project", "Site"}); err != nil || !strings.Contains(out.String(), "project.create") {
+		t.Fatal(err, out.String())
+	}
+	saved, err := os.ReadFile(c.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var credentials config
+	if err := json.Unmarshal(saved, &credentials); err != nil || credentials.Token != "renewed" || credentials.Refresh != "refresh" {
+		t.Fatal("renewed access and refresh were not persisted", err)
 	}
 }
 

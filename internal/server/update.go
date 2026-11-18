@@ -195,6 +195,6 @@ func (a *Server) requestUpdate(w http.ResponseWriter, r *http.Request, u *update
 		fail(w, 500, "cannot queue update")
 		return
 	}
-	a.audit(uid, "system.update", v.Version, scopePlatform, "", map[string]string{"from": version.Version, "to": v.Version})
+	a.audit(r.Context(), uid, "system.update", v.Version, scopePlatform, "", map[string]string{"from": version.Version, "to": v.Version})
 	reply(w, 202, req)
 }

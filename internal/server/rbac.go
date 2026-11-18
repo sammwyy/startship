@@ -41,6 +41,7 @@ var permissionCatalog = []Permission{
 	{"members.manage", "Manage members", "Add members, assign roles and edit permission overrides.", "Workspace", scopeProject},
 	{"project.view", "View projects", "See projects, containers, releases and domains.", "Projects", scopeProject},
 	{"logs.view", "View logs", "Read build output and runtime logs.", "Projects", scopeProject},
+	{"activity.view", "View activity", "Read workspace-wide or project-specific action history at the granted scope.", "Workspace", scopeProject},
 	{"traffic.view", "View traffic", "See HTTP traffic, analytics and resource usage.", "Projects", scopeProject},
 	{"deploy", "Deploy", "Deploy new releases and redeploy earlier ones.", "Projects", scopeProject},
 	{"project.settings", "Edit settings", "Change build settings, root directory, port and tests.", "Projects", scopeProject},
@@ -106,7 +107,7 @@ var (
 	projectPermissions = []string{"project.view", "logs.view", "traffic.view", "deploy", "project.settings", "project.environment", "project.source", "domains.manage"}
 	builtinRoles       = []Role{
 		{ID: platformAdminRole, Name: "Platform Admin", Color: "#f5a524", Icon: "crown", Permissions: allPermissionKeys(), Fixed: true},
-		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"firewall.view", "firewall.manage", "services.manage", "workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
+		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"activity.view", "firewall.view", "firewall.manage", "services.manage", "workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
 		{ID: "contributor", Name: "Contributor", Color: "#3e63dd", Icon: "wrench", Permissions: append([]string{"firewall.view", "services.manage", "projects.create"}, projectPermissions...)},
 		{ID: "member", Name: "Member", Color: "#30a46c", Icon: "eye", Permissions: []string{"project.view", "logs.view", "traffic.view"}},
 		{ID: "guest", Name: "Guest", Color: "#8b8d98", Icon: "user", Permissions: []string{}},
@@ -262,15 +263,6 @@ func (a *Server) username(uid string) string {
 	var name string
 	a.store.DB.QueryRow("SELECT username FROM users WHERE id=?", uid).Scan(&name)
 	return name
-}
-
-func (a *Server) audit(actor, action, target, scope, scopeID string, detail any) {
-	b, _ := json.Marshal(detail)
-	name := a.username(actor)
-	if name == "" {
-		name = actor
-	}
-	a.store.DB.Exec("INSERT INTO audit_log(at,actor_id,actor,action,target,scope,scope_id,detail) VALUES(?,?,?,?,?,?,?,?)", nowStamp(), actor, name, action, target, scope, scopeID, string(b))
 }
 
 // access evaluates one user's permissions for the duration of a request.

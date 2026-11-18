@@ -9,6 +9,14 @@ import {
 } from "../services/api";
 import type { Scoped, User } from "../services/types";
 
+export interface AccountChanges {
+  current_password: string;
+  username?: string;
+  display_name?: string;
+  email?: string;
+  new_password?: string;
+}
+
 interface Session {
   user: User | null;
   loading: boolean;
@@ -17,11 +25,7 @@ interface Session {
   temporaryPassword: string;
   login: (username: string, password: string, setup?: boolean) => Promise<void>;
   logout: () => Promise<void>;
-  updateAccount: (changes: {
-    current_password: string;
-    username?: string;
-    new_password?: string;
-  }) => Promise<void>;
+  updateAccount: (changes: AccountChanges) => Promise<void>;
   can: (permission: string, scope?: Scoped) => boolean;
 }
 const Context = createContext<Session | null>(null);
@@ -70,23 +74,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await cacheSession(client, account);
   }
   async function logout() {
+    beginSessionChange();
     await request("logout", {});
     await cacheSession(client, null);
     setTemporaryPassword("");
   }
-  async function updateAccount(changes: {
-    current_password: string;
-    username?: string;
-    new_password?: string;
-  }) {
-    setCredentialRotation(true);
+  async function updateAccount(changes: AccountChanges) {
+    const rotatesCredentials =
+      !!changes.new_password ||
+      (changes.username !== undefined &&
+        changes.username.trim() !== user?.username);
+    if (rotatesCredentials) setCredentialRotation(true);
     try {
       await client.cancelQueries();
-      const account = await request<Pick<User, "id" | "username">>(
-        "me",
-        changes,
-        "PATCH",
-      );
+      const account = await request<
+        Pick<User, "id" | "username" | "display_name" | "email">
+      >("me", changes, "PATCH");
       client.setQueryData<User | null>(["me"], (current) =>
         current
           ? {
@@ -101,7 +104,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setTemporaryPassword("");
       await client.invalidateQueries({ queryKey: ["me"], exact: true });
     } finally {
-      setCredentialRotation(false);
+      if (rotatesCredentials) setCredentialRotation(false);
     }
   }
   return (

@@ -13,6 +13,7 @@ import (
 )
 
 type liveEvent struct {
+	changeKey         string
 	firewallWorkspace string
 	firewallConfig    bool
 	record            Record
@@ -44,6 +45,10 @@ func (h *liveHub) publish(e liveEvent) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for c := range h.clients {
+		if e.changeKey != "" {
+			c.pending[e.changeKey] = e
+			continue
+		}
 		if e.firewallWorkspace != "" {
 			key := "firewall:" + e.firewallWorkspace
 			merged := e
@@ -122,8 +127,11 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 	x := a.access(uid)
 	id, kind, perm := "", "", ""
 	switch s.Topic {
-	case "project", "traffic":
+	case "project", "traffic", "project_activity":
 		id, kind = s.ProjectID, "projects"
+		if s.Topic == "project_activity" {
+			perm = "activity.view"
+		}
 		if s.Topic == "traffic" {
 			perm = "traffic.view"
 			if s.Window == 0 {
@@ -133,8 +141,11 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 				return x, Record{}, "invalid subscription"
 			}
 		}
-	case "workspace", "certificates", "services", "volumes", "firewall", "backups":
+	case "workspace", "certificates", "services", "volumes", "firewall", "backups", "workspace_activity":
 		id, kind = s.WorkspaceID, "workspaces"
+		if s.Topic == "workspace_activity" {
+			perm = "activity.view"
+		}
 		if s.Topic == "firewall" {
 			perm = "firewall.view"
 		}
@@ -145,7 +156,12 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 		id, perm = s.ReleaseID, "logs.view"
 	case "container_log":
 		id, kind, perm = s.ContainerID, "apps", "logs.view"
-	case "system_update":
+	case "audit_activity":
+		if !x.platform("audit.view") {
+			return x, Record{}, "forbidden"
+		}
+		return x, Record{}, ""
+	case "system_update", "account_activity", "account_sessions":
 		return x, Record{}, ""
 	default:
 		return x, Record{}, "invalid subscription"
@@ -181,6 +197,12 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return out
 	}
 	switch s.Topic {
+	case "account_sessions", "account_activity", "workspace_activity", "project_activity", "audit_activity":
+		data, err := a.activityLive(uid, s)
+		if err != nil {
+			return nil, nil, r, "activity unavailable"
+		}
+		return data, nil, r, ""
 	case "firewall":
 		policy, lists, err := a.firewallConfig(r.ID)
 		if err != nil {
@@ -360,13 +382,23 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 	}
 	session := time.NewTicker(interval)
 	defer session.Stop()
+	identity := requestSession(r.Context())
+	var expires <-chan time.Time
+	if !identity.local {
+		timer := time.NewTimer(time.Until(time.Unix(identity.expires, 0)))
+		defer timer.Stop()
+		expires = timer.C
+	}
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-expires:
+			conn.Close(websocket.StatusCode(4408), "access token expired")
+			return
 		case <-session.C:
 			if a.user(r) != uid {
-				conn.Close(websocket.StatusCode(4401), "session expired")
+				conn.Close(websocket.StatusCode(a.liveSessionClose(identity)), "reauthentication required")
 				return
 			}
 			for _, s := range subs {
@@ -382,6 +414,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				}
 			}()
 		case req := <-input:
+			a.touchSession(identity)
 			if old := subs[req.ID]; old != nil {
 				if old.cancel != nil {
 					old.cancel()
@@ -455,6 +488,10 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 			pending := c.pending
 			c.pending = map[string]liveEvent{}
 			a.live.mu.Unlock()
+			if _, changed := pending["account_sessions:"+uid]; changed && a.user(r) != uid {
+				conn.Close(websocket.StatusCode(a.liveSessionClose(identity)), "reauthentication required")
+				return
+			}
 			for _, event := range pending {
 				if event.deleted {
 					for _, s := range subs {
@@ -479,7 +516,8 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				}
 				periodic := s.Topic == "system_update" && now.After(s.next) || s.Topic == "traffic" && now.After(s.next)
 				periodic = periodic || s.Topic == "firewall" && s.firewallDirty && !now.Before(s.next)
-				relevant := false
+				key := s.activityKey(uid)
+				_, relevant := pending[key]
 				for _, e := range pending {
 					if s.relevant(e.record) {
 						relevant = true
@@ -497,7 +535,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 					drop(s, why)
 					continue
 				}
-				if periodic || s.Topic == "certificates" || s.Topic == "services" || s.Topic == "volumes" || s.Topic == "firewall" || s.Topic == "backups" {
+				if key != "" || periodic || s.Topic == "certificates" || s.Topic == "services" || s.Topic == "volumes" || s.Topic == "firewall" || s.Topic == "backups" {
 					b, _ := json.Marshal(data)
 					if s.Topic == "traffic" || string(b) != s.update {
 						m := s.message("snapshot")

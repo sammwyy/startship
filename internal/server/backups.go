@@ -339,7 +339,7 @@ func (a *Server) backupsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 					a.runBackup(s, "manual", uid)
 				}
 			}()
-			a.audit(uid, "backup.create", s.ID, scopeWorkspace, s.WorkspaceID, nil)
+			a.audit(r.Context(), uid, "backup.create", s.ID, scopeWorkspace, s.WorkspaceID, nil)
 			reply(w, 202, map[string]bool{"ok": true})
 			return true
 		}
@@ -374,7 +374,7 @@ func (a *Server) backupsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 				fail(w, 500, "save failed")
 				return true
 			}
-			a.audit(uid, "backup.schedule", s.ID, scopeWorkspace, s.WorkspaceID, policy)
+			a.audit(r.Context(), uid, "backup.schedule", s.ID, scopeWorkspace, s.WorkspaceID, policy)
 			reply(w, 200, publicService(s, x))
 			return true
 		}
@@ -407,7 +407,7 @@ func (a *Server) backupsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 			fail(w, 500, err.Error())
 			return true
 		}
-		a.audit(uid, "backup.delete", b.ID, scopeWorkspace, b.WorkspaceID, nil)
+		a.audit(r.Context(), uid, "backup.delete", b.ID, scopeWorkspace, b.WorkspaceID, nil)
 		reply(w, 200, map[string]bool{"ok": true})
 	case len(p) == 4 && p[3] == "download" && r.Method == "GET":
 		if b.Status != "completed" {
@@ -419,7 +419,7 @@ func (a *Server) backupsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 		if b.SizeBytes > 0 {
 			w.Header().Set("Content-Length", strconv.FormatInt(b.SizeBytes, 10))
 		}
-		a.audit(uid, "backup.download", b.ID, scopeWorkspace, b.WorkspaceID, nil)
+		a.audit(r.Context(), uid, "backup.download", b.ID, scopeWorkspace, b.WorkspaceID, nil)
 		a.backupStream(r.Context(), w, "run", "--rm", "--label", "startship.managed=true", "-v", volumeName(b.VolumeID)+":/backups:ro", backupImage(), "cat", "/backups/"+b.File)
 	case len(p) == 4 && p[3] == "restore" && r.Method == "POST":
 		var input struct {
@@ -456,7 +456,7 @@ func (a *Server) backupsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 				a.restoreBackup(b, s, uid)
 			}
 		}()
-		a.audit(uid, "backup.restore", b.ID, scopeWorkspace, b.WorkspaceID, map[string]string{"service_id": s.ID})
+		a.audit(r.Context(), uid, "backup.restore", b.ID, scopeWorkspace, b.WorkspaceID, map[string]string{"service_id": s.ID})
 		reply(w, 202, map[string]bool{"ok": true})
 	default:
 		fail(w, 405, "method not allowed")

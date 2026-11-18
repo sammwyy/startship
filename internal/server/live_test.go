@@ -12,6 +12,19 @@ import (
 	"github.com/coder/websocket"
 )
 
+func liveTestSession(t *testing.T, a *Server, uid string) (sid, token string) {
+	t.Helper()
+	sid, token = randomID(), randomID()
+	expiry := time.Now().Add(accessTTL).Unix()
+	if _, err := a.store.DB.Exec("INSERT INTO sessions(id,user_id,expires,refresh_digest) VALUES(?,?,?,?)", sid, uid, expiry, digestToken(randomID())); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.store.DB.Exec("INSERT INTO session_access VALUES(?,?,?)", digestToken(token), sid, expiry); err != nil {
+		t.Fatal(err)
+	}
+	return sid, token
+}
+
 func TestLive(t *testing.T) {
 	a := testServer(t)
 	a.liveSessionInterval = 50 * time.Millisecond
@@ -19,10 +32,7 @@ func TestLive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sid := randomID()
-	if _, err = a.store.DB.Exec("INSERT INTO sessions VALUES(?,?,?)", sid, uid, time.Now().Add(time.Hour).Unix()); err != nil {
-		t.Fatal(err)
-	}
+	sid, token := liveTestSession(t, a, uid)
 	p := Record{ID: randomID(), Kind: "projects", Owner: uid, Name: "project"}
 	if err = a.store.Save(p); err != nil {
 		t.Fatal(err)
@@ -40,7 +50,7 @@ func TestLive(t *testing.T) {
 		}
 		t.Fatalf("unauthenticated: %v %v", r, e)
 	}
-	headers := http.Header{"Cookie": []string{"startship_session=" + sid}, "Origin": []string{"https://evil.test"}}
+	headers := http.Header{"Cookie": []string{"startship_session=" + token}, "Origin": []string{"https://evil.test"}}
 	if c, r, e := dial(headers); e == nil || r.StatusCode != 403 {
 		if c != nil {
 			c.CloseNow()
@@ -97,7 +107,7 @@ func TestLive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.Header.Set("Cookie", "startship_session="+sid)
+	req.Header.Set("Cookie", "startship_session="+token)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -171,13 +181,12 @@ func TestLiveForbidden(t *testing.T) {
 	uid, _ := a.createUser("other", "password123")
 	p := Record{ID: randomID(), Kind: "projects", Owner: owner}
 	a.store.Save(p)
-	sid := randomID()
-	a.store.DB.Exec("INSERT INTO sessions VALUES(?,?,?)", sid, uid, time.Now().Add(time.Hour).Unix())
+	_, token := liveTestSession(t, a, uid)
 	srv := httptest.NewServer(a.api())
 	defer srv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + sid}}})
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + token}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,15 +326,12 @@ func TestLiveIdleAccessRevoked(t *testing.T) {
 	if err = a.store.Save(p); err != nil {
 		t.Fatal(err)
 	}
-	sid := randomID()
-	if _, err = a.store.DB.Exec("INSERT INTO sessions VALUES(?,?,?)", sid, uid, time.Now().Add(time.Hour).Unix()); err != nil {
-		t.Fatal(err)
-	}
+	_, token := liveTestSession(t, a, uid)
 	srv := httptest.NewServer(a.api())
 	defer srv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + sid}}})
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + token}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,15 +382,12 @@ func TestLiveProjectActivation(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	sid := randomID()
-	if _, err := a.store.DB.Exec("INSERT INTO sessions VALUES(?,?,?)", sid, uid, time.Now().Add(time.Hour).Unix()); err != nil {
-		t.Fatal(err)
-	}
+	_, token := liveTestSession(t, a, uid)
 	srv := httptest.NewServer(a.api())
 	defer srv.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + sid}}})
+	c, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"startship_session=" + token}}})
 	if err != nil {
 		t.Fatal(err)
 	}

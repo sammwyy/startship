@@ -2,8 +2,8 @@
 
 ## Endpoint and auth
 - `GET /api/live`, WebSocket upgrade on the dashboard listener (`ws(s)://<dashboard host>/api/live`).
-- Auth: the existing `startship_session` cookie (the browser sends it). No session -> HTTP 401 before upgrade; account with a pending password change -> 403; `Origin` not equal to the dashboard host -> 403.
-- Session expired/revoked (logout, password change) -> server closes with code `4401`; client should go to login.
+- Auth: the five-minute access cookie, `startship_session`. Missing or expired access -> HTTP 401 before upgrade; account with a pending password change -> 403; mismatched `Origin` -> 403. The trusted Unix socket does not require cookies.
+- Access expired or replaced -> close code `4408`. Call `POST /api/refresh` with the HTTP-only `startship_refresh` cookie, reconnect with the new access cookie and resubscribe. If the session has expired or been revoked, the server closes with `4401` or rejects renewal with HTTP 401; sign in again.
 - Server sends WebSocket ping frames (browsers answer automatically). All payloads are JSON text frames.
 - After connect the server sends `{"type":"ready","user_id":"...","version":"...","commit":"..."}`. After a daemon restart/update the client reconnects (backoff 0.5s -> 10s) and re-sends its subscriptions; every subscribe starts with a full snapshot, so reconnects self-heal.
 
@@ -32,6 +32,11 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | `container_log` | `container_id` | `logs.view` | `{"log": "..."}` = GET `containers/:id/logs` (last 200 lines or the same "not deployed"/"static" text) | `log` chunks streamed from the running container; `log` with `reset:true` when the container's active deployment changes | LogPanel container 2s |
 | `traffic` | `project_id`, `window` 300/900/3600 | `traffic.view` | = GET `projects/:id/traffic?window=` | a new `snapshot` pushed every 5s | TrafficView 5s |
 | `system_update` | none | signed in (same as GET) | = GET `system/update` | a new `snapshot` whenever it changes (update requested, status file, release check) | SystemView 2s/60s |
+| `account_sessions` | none | signed in | = GET `me/sessions` | replacement snapshot when session data changes | account session list |
+| `account_activity` | none | signed in | = GET `me/activity` | replacement snapshot when the actor records an action | account activity |
+| `workspace_activity` | `workspace_id` | workspace visible + `activity.view` at workspace level | = GET `workspaces/:id/activity` | replacement snapshot when the workspace or one of its projects records an action | workspace activity |
+| `project_activity` | `project_id` | project visible + `activity.view` at project level | = GET `projects/:id/activity` | replacement snapshot when that project records an action | project activity |
+| `audit_activity` | none | platform `audit.view` | = GET `audit` | replacement snapshot when an action is recorded | platform audit |
 
 Mutations stay on the REST API; their effects arrive over the socket.
 

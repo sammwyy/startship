@@ -23,6 +23,22 @@ startship workspaces list
 
 Login prompts for the username and password. Session settings are stored in `$XDG_CONFIG_HOME/startship/config.json` (or `~/.config/startship/config.json`). `STARTSHIP_SERVER` and `STARTSHIP_TOKEN` override saved server and credentials. Without a saved or explicit server, the CLI uses the local socket if accessible and otherwise falls back to `http://localhost:8080`. Run `startship logout` to end a saved session.
 
+The CLI uses a saved refresh credential to renew its five-minute access credential. HTTP sessions last up to seven days unless revoked sooner. When upgrading from a version without refresh sessions, sign in again once.
+
+## Account and activity
+
+```sh
+startship account update --display-name "Jane Doe" --email jane@example.com
+startship passwd
+startship account sessions
+startship account revoke SESSION_ID
+startship account activity
+startship activity workspace Team --follow
+startship activity project website
+```
+
+Account activity includes the session that performed each action when known. Use `--follow` on any activity feed to receive new actions over the WebSocket, or add `--json` before the command for machine-readable output. Theme preference is local to the dashboard browser.
+
 ## Deploy a project
 
 Replace `Team` with your workspace and the example Git URL with your repository. These examples use an existing workspace and create a new project:

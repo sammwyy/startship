@@ -24,8 +24,9 @@ import (
 )
 
 type config struct {
-	Server string `json:"server"`
-	Token  string `json:"token"`
+	Server  string `json:"server"`
+	Token   string `json:"token"`
+	Refresh string `json:"refresh,omitempty"`
 }
 type cli struct {
 	config
@@ -106,23 +107,11 @@ func (c *cli) request(method, path string, body any) (result any, requestErr err
 			requestErr = fmt.Errorf("%w; run as root or join the startship group (usermod -aG startship $USER), or startship login", requestErr)
 		}
 	}()
-	server, client, err := c.transport()
-	if err != nil {
-		return nil, err
-	}
 	b, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
-	r, err := http.NewRequest(method, server+"/api/"+path, bytes.NewReader(b))
-	if err != nil {
-		return nil, err
-	}
-	r.Header.Set("Content-Type", "application/json")
-	if c.Token != "" {
-		r.AddCookie(&http.Cookie{Name: "startship_session", Value: c.Token})
-	}
-	resp, err := client.Do(r)
+	resp, err := c.doAPI(method, path, b)
 	if err != nil {
 		return nil, err
 	}
@@ -139,18 +128,72 @@ func (c *cli) request(method, path string, body any) (result any, requestErr err
 	if err != nil {
 		return nil, fmt.Errorf("invalid API response: %w", err)
 	}
-	for _, cookie := range resp.Cookies() {
-		if cookie.Name == "startship_session" {
-			c.Token = cookie.Value
-			if cookie.MaxAge < 0 {
-				c.Token = ""
-			}
-			if err := c.save(); err != nil {
-				return nil, err
-			}
-		}
+	if err := c.readCredentials(resp); err != nil {
+		return nil, err
 	}
 	return result, nil
+}
+
+func (c *cli) doAPI(method, path string, body []byte) (*http.Response, error) {
+	server, client, err := c.transport()
+	if err != nil {
+		return nil, err
+	}
+	send := func(method, path string, body []byte) (*http.Response, error) {
+		r, err := http.NewRequest(method, server+"/api/"+path, bytes.NewReader(body))
+		if err != nil {
+			return nil, err
+		}
+		r.Header.Set("User-Agent", "Startship-CLI/"+version.Version)
+		r.Header.Set("Content-Type", "application/json")
+		if c.Token != "" && path != "refresh" {
+			r.AddCookie(&http.Cookie{Name: "startship_session", Value: c.Token})
+		}
+		if c.Refresh != "" && (path == "refresh" || path == "logout") {
+			r.AddCookie(&http.Cookie{Name: "startship_refresh", Value: c.Refresh})
+		}
+		return client.Do(r)
+	}
+	resp, err := send(method, path, body)
+	if err != nil || resp.StatusCode != http.StatusUnauthorized || c.Refresh == "" || path == "login" || path == "logout" || path == "refresh" {
+		return resp, err
+	}
+	resp.Body.Close()
+	if err = c.renewAccess(); err != nil {
+		return nil, err
+	}
+	return send(method, path, body)
+}
+
+func (c *cli) renewAccess() error {
+	if c.Refresh == "" {
+		return errors.New("session expired; run startship login again")
+	}
+	_, err := c.request("POST", "refresh", nil)
+	if err != nil {
+		return fmt.Errorf("renew access (sign in again if the session was ended): %w", err)
+	}
+	return nil
+}
+
+func (c *cli) readCredentials(resp *http.Response) error {
+	changed := false
+	for _, cookie := range resp.Cookies() {
+		value := cookie.Value
+		if cookie.MaxAge < 0 {
+			value = ""
+		}
+		switch cookie.Name {
+		case "startship_session":
+			c.Token, changed = value, true
+		case "startship_refresh":
+			c.Refresh, changed = value, true
+		}
+	}
+	if changed {
+		return c.save()
+	}
+	return nil
 }
 
 func (c *cli) prompt(label string, secret bool) (string, error) {
@@ -256,7 +299,11 @@ const usage = `startship [--json] COMMAND
   audit [--workspace W]
   login [SERVER]                 prompt for username and password
   logout | whoami | passwd       session and account management
-  account update [USERNAME]      prompts for current password
+  account update [USERNAME] [--display-name NAME] [--email EMAIL]
+                                 prompts for current password
+  account sessions | account revoke SESSION
+  account activity [--follow]    your recent actions
+  activity workspace|project TARGET [--follow]
   workspaces list|get ID|create NAME|rename ID NAME|delete ID
   projects list [WORKSPACE] | projects get ID|create NAME WORKSPACE|delete ID
   projects update ID JSON        project settings (same fields as API)
@@ -378,6 +425,12 @@ func (c *cli) run(args []string) error {
 	if cmd == "workspaces" && len(a) > 0 && a[0] == "domains" {
 		return c.runDomains(a[1:])
 	}
+	if cmd == "account" {
+		return c.runAccount(a)
+	}
+	if cmd == "activity" {
+		return c.runActivity(a)
+	}
 	if handled, err := c.runAccess(cmd, a); handled {
 		return err
 	}
@@ -416,7 +469,7 @@ func (c *cli) run(args []string) error {
 		}
 		if len(a) == 1 {
 			c.Server = a[0]
-			c.Token = ""
+			c.Token, c.Refresh = "", ""
 		}
 		if c.Server == "" {
 			c.Server = "http://localhost:8080"
@@ -435,7 +488,7 @@ func (c *cli) run(args []string) error {
 			return e
 		}
 		if c.Server == "" {
-			c.Token = ""
+			c.Token, c.Refresh = "", ""
 			return c.save()
 		}
 		method, path = "POST", "logout"
@@ -444,31 +497,19 @@ func (c *cli) run(args []string) error {
 			return e
 		}
 		path = "me"
-	case "passwd", "account":
-		m := map[string]any{}
-		if cmd == "account" {
-			if len(a) < 1 || a[0] != "update" || len(a) > 2 {
-				return errors.New("use account update [USERNAME]")
-			}
-			if len(a) == 2 {
-				m["username"] = a[1]
-			}
-		} else if e := need(0); e != nil {
+	case "passwd":
+		if e := need(0); e != nil {
 			return e
 		}
 		p, e := c.prompt("Current password", true)
 		if e != nil {
 			return e
 		}
-		m["current_password"] = p
-		if cmd == "passwd" {
-			p, e = c.prompt("New password", true)
-			if e != nil {
-				return e
-			}
-			m["new_password"] = p
+		n, e := c.prompt("New password", true)
+		if e != nil {
+			return e
 		}
-		method, path, body = "PATCH", "me", m
+		method, path, body = "PATCH", "me", map[string]string{"current_password": p, "new_password": n}
 	case "deploy", "redeploy", "traffic", "logs":
 		if len(a) == 0 {
 			return errors.New("project or log target required")
@@ -735,11 +776,11 @@ func Run() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if s := os.Getenv("STARTSHIP_SERVER"); s != "" {
-		c.Server = s
+	if s := os.Getenv("STARTSHIP_SERVER"); s != "" && s != c.Server {
+		c.Server, c.Token, c.Refresh = s, "", ""
 	}
 	if s := os.Getenv("STARTSHIP_TOKEN"); s != "" {
-		c.Token = s
+		c.Token, c.Refresh = s, ""
 	}
 	if err = c.run(os.Args[1:]); err != nil {
 		fmt.Fprintln(os.Stderr, "startship:", err)

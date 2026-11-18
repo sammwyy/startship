@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"sort"
 	"sync"
 	"time"
@@ -101,7 +102,7 @@ func (a *Server) recordFirewallBan(b router.Ban) error {
 	list := findFirewallList(lists, "banned")
 	entry := firewall.Entry{Value: b.IP, ExpiresAt: firewallExpiry(b.Seconds), Note: b.RuleName, CreatedBy: "firewall"}
 	upsertFirewallEntry(list, entry)
-	if err = a.saveFirewallList(b.WorkspaceID, "", "firewall.ban.create", *list); err != nil {
+	if err = a.saveFirewallList(context.Background(), b.WorkspaceID, "", "firewall.ban.create", *list); err != nil {
 		return err
 	}
 	if err = a.refreshLocked(); err != nil {

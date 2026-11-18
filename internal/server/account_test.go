@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -31,6 +32,59 @@ func accountLogin(t *testing.T, h http.Handler, username, password string) *http
 	return accountRequest(t, h, "POST", "login", string(body), nil, 200).Result().Cookies()[0]
 }
 
+func TestAccountRefreshAndRevocation(t *testing.T) {
+	a := testServer(t)
+	if _, err := a.createUser("alice", "password123"); err != nil {
+		t.Fatal(err)
+	}
+	h := a.api()
+	signIn := func() []*http.Cookie {
+		return accountRequest(t, h, "POST", "login", `{"username":"alice","password":"password123"}`, nil, 200).Result().Cookies()
+	}
+	first, second := signIn(), signIn()
+	if len(first) != 2 || first[0].Name != accessCookie || !cookieTTL(first[0], accessTTL) || first[1].Name != refreshCookie ||
+		!cookieTTL(first[1], sessionTTL) || first[1].Path != "/api" || !first[1].HttpOnly || !first[1].Secure {
+		t.Fatal("unexpected login cookie attributes")
+	}
+	me := accountRequest(t, h, "GET", "me", "", first[0], 200)
+	var user struct {
+		SessionID string `json:"session_id"`
+	}
+	if err := json.Unmarshal(me.Body.Bytes(), &user); err != nil || user.SessionID == "" {
+		t.Fatal("missing current session", err)
+	}
+	var list []accountSession
+	w := accountRequest(t, h, "GET", "me/sessions", "", second[0], 200)
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil || len(list) != 2 {
+		t.Fatal("expected two sessions", err)
+	}
+	for _, s := range list {
+		if s.IP != "192.0.2.1" || s.LoggedAt.IsZero() || s.LastActivityAt.Before(s.LoggedAt) || s.ExpiresAt.Sub(s.LoggedAt) != sessionTTL {
+			t.Fatal("incorrect session metadata", s)
+		}
+	}
+	for _, c := range first {
+		if strings.Contains(w.Body.String(), c.Value) {
+			t.Fatal("session listing leaked a credential")
+		}
+	}
+	if _, err := a.store.DB.Exec("UPDATE session_access SET expires=? WHERE digest=?", time.Now().Add(-time.Second).Unix(), digestToken(first[0].Value)); err != nil {
+		t.Fatal(err)
+	}
+	accountRequest(t, h, "GET", "me", "", first[0], 401)
+	accountRequest(t, h, "GET", "me", "", first[1], 401)
+	renewed := accountRequest(t, h, "POST", "refresh", "", first[1], 200).Result().Cookies()[0]
+	if renewed.Name != accessCookie || renewed.Value == first[0].Value {
+		t.Fatal("did not issue a new access credential")
+	}
+	accountRequest(t, h, "GET", "me", "", renewed, 200)
+	accountRequest(t, h, "DELETE", "me/sessions/"+user.SessionID, "", second[0], 200)
+	accountRequest(t, h, "GET", "me", "", renewed, 401)
+	accountRequest(t, h, "POST", "refresh", "", first[1], 401)
+	accountRequest(t, h, "POST", "logout", "", second[1], 200)
+	accountRequest(t, h, "POST", "refresh", "", second[1], 401)
+}
+
 func TestAccountCredentialsAndSessions(t *testing.T) {
 	a := testServer(t)
 	uid, err := a.createUser("alice", "password123")
@@ -52,7 +106,7 @@ func TestAccountCredentialsAndSessions(t *testing.T) {
 		t.Fatal("wrong account response", err, profile)
 	}
 	rotated := w.Result().Cookies()[0]
-	if rotated.Value == current.Value || !rotated.HttpOnly || !rotated.Secure || rotated.SameSite != http.SameSiteLaxMode || rotated.Path != "/" || rotated.MaxAge != 604800 {
+	if rotated.Value == current.Value || !rotated.HttpOnly || !rotated.Secure || rotated.SameSite != http.SameSiteLaxMode || rotated.Path != "/" || !cookieTTL(rotated, accessTTL) {
 		t.Fatal("session not rotated with secure attributes")
 	}
 	accountRequest(t, h, "GET", "me", "", rotated, 200)
@@ -76,6 +130,11 @@ func TestAccountCredentialsAndSessions(t *testing.T) {
 	accountLogin(t, h, "alice", "replacement123")
 	accountRequest(t, h, "PATCH", "me", `{"current_password":"replacement123","new_password":"final-password"}`, rotated, 200)
 	accountLogin(t, h, "alice", "final-password")
+}
+
+func cookieTTL(cookie *http.Cookie, ttl time.Duration) bool {
+	seconds := int(ttl.Seconds())
+	return cookie.MaxAge == seconds || cookie.MaxAge == seconds-1
 }
 
 func TestAccountUpdateValidation(t *testing.T) {

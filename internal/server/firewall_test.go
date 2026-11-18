@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -85,7 +86,7 @@ func TestFirewallRefreshAndBanHook(t *testing.T) {
 	p := firewall.DefaultPolicy()
 	p.Mode = "enforce"
 	p.Limits.Rate = &firewall.WorkspaceRate{Requests: 1, WindowSeconds: 60, Action: firewall.Ban, BanSeconds: 30}
-	if err := a.saveFirewallPolicy("ws", "", "firewall.policy.update", "ws", p); err != nil {
+	if err := a.saveFirewallPolicy(context.Background(), "ws", "", "firewall.policy.update", "ws", p); err != nil {
 		t.Fatal(err)
 	}
 	a.refresh()

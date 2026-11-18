@@ -29,11 +29,12 @@ describe("API service", () => {
     let resolve!: (response: Response) => void;
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        () =>
-          new Promise<Response>((done) => {
-            resolve = done;
-          }),
+      vi.fn((path: string) =>
+        path === "/api/refresh"
+          ? Promise.resolve(response(401, {}))
+          : new Promise<Response>((done) => {
+              resolve = done;
+            }),
       ),
     );
     const expired = vi.fn();
@@ -57,6 +58,27 @@ describe("API service", () => {
     } finally {
       window.removeEventListener("session-expired", expired);
     }
+  });
+  it("coalesces access renewal and retries the original requests", async () => {
+    let renewed = false;
+    const fetch = vi.fn(async (path: string) => {
+      if (path === "/api/refresh") {
+        renewed = true;
+        return response(200, { ok: true });
+      }
+      return renewed ? response(200, { path }) : response(401, {});
+    });
+    vi.stubGlobal("fetch", fetch);
+    await expect(
+      Promise.all([request("me"), request("projects")]),
+    ).resolves.toEqual([{ path: "/api/me" }, { path: "/api/projects" }]);
+    expect(fetch.mock.calls.map(([path]) => path)).toEqual([
+      "/api/me",
+      "/api/projects",
+      "/api/refresh",
+      "/api/me",
+      "/api/projects",
+    ]);
   });
   it("passes cancellation through to fetch", async () => {
     const fetch = vi.fn().mockResolvedValue(response(200, []));

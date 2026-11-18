@@ -66,6 +66,27 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   );
 }
 export const useLiveStatus = () => useContext(Context).status;
+export function useLiveFeed<T>(spec: LiveSubscription | null) {
+  const { connection, status } = useContext(Context);
+  const key = JSON.stringify(spec);
+  const [state, setState] = useState<{
+    key: string;
+    data?: T;
+    error?: Error;
+  }>();
+  useEffect(() => {
+    if (!connection || key === "null") return;
+    return connection.subscribe(JSON.parse(key), (event) => {
+      if (event.type === "snapshot") setState({ key, data: event.data as T });
+      if (event.type === "error")
+        setState({
+          key,
+          error: new Error(event.error || "Live data unavailable"),
+        });
+    });
+  }, [connection, key]);
+  return { ...(state?.key === key ? state : undefined), status };
+}
 export function useLiveSubscription(spec: LiveSubscription | null) {
   const { connection } = useContext(Context);
   const [error, setError] = useState<Error | null>(null);

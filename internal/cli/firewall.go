@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
@@ -16,7 +15,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/sammwyy/startship/internal/firewall"
 )
 
@@ -468,62 +466,20 @@ func (c *cli) runFirewall(args []string) error {
 }
 
 func (c *cli) followFirewall(ctx context.Context, workspace string) error {
-	server, client, err := c.transport()
-	if err != nil {
-		return err
-	}
-	streamClient := *client
-	streamClient.Timeout = 0
-	headers := http.Header{}
-	if c.Token != "" {
-		headers.Set("Cookie", (&http.Cookie{Name: "startship_session", Value: c.Token}).String())
-	}
-	conn, resp, err := websocket.Dial(ctx, server+"/api/live", &websocket.DialOptions{HTTPClient: &streamClient, HTTPHeader: headers})
-	if err != nil {
-		if resp != nil {
-			return fmt.Errorf("firewall live: %s: %w", resp.Status, err)
-		}
-		return err
-	}
-	defer conn.CloseNow()
-	conn.SetReadLimit(64 << 20)
-	subscribe := map[string]string{"type": "subscribe", "id": "firewall", "topic": "firewall", "workspace_id": workspace}
-	b, _ := json.Marshal(subscribe)
-	if err = conn.Write(ctx, websocket.MessageText, b); err != nil {
-		return err
-	}
 	previous := map[string]int{}
-	for {
-		_, b, err := conn.Read(ctx)
-		if err != nil {
-			if errors.Is(ctx.Err(), context.Canceled) || websocket.CloseStatus(err) == websocket.StatusNormalClosure {
-				return nil
-			}
+	return c.followLive(ctx, map[string]string{"topic": "firewall", "workspace_id": workspace}, func(data json.RawMessage) error {
+		var snapshot struct {
+			Events []json.RawMessage `json:"events"`
+		}
+		if err := json.Unmarshal(data, &snapshot); err != nil {
 			return err
-		}
-		var message struct {
-			Type  string `json:"type"`
-			ID    string `json:"id"`
-			Error string `json:"error"`
-			Data  struct {
-				Events []json.RawMessage `json:"events"`
-			} `json:"data"`
-		}
-		if err = json.Unmarshal(b, &message); err != nil {
-			return fmt.Errorf("invalid firewall live message: %w", err)
-		}
-		if message.Type == "error" {
-			return fmt.Errorf("firewall subscription: %s", message.Error)
-		}
-		if message.Type != "snapshot" || message.ID != "firewall" {
-			continue
 		}
 		counts := map[string]int{}
 		rows := []any{}
-		for i := len(message.Data.Events) - 1; i >= 0; i-- {
-			raw := message.Data.Events[i]
+		for i := len(snapshot.Events) - 1; i >= 0; i-- {
+			raw := snapshot.Events[i]
 			var event map[string]any
-			if err = json.Unmarshal(raw, &event); err != nil {
+			if err := json.Unmarshal(raw, &event); err != nil {
 				return err
 			}
 			keyBytes, _ := json.Marshal(event)
@@ -533,7 +489,7 @@ func (c *cli) followFirewall(ctx context.Context, workspace string) error {
 				continue
 			}
 			if c.raw {
-				if err = json.NewEncoder(c.out).Encode(event); err != nil {
+				if err := json.NewEncoder(c.out).Encode(event); err != nil {
 					return err
 				}
 			} else {
@@ -541,10 +497,11 @@ func (c *cli) followFirewall(ctx context.Context, workspace string) error {
 			}
 		}
 		if !c.raw && len(rows) > 0 {
-			if err = c.printAccess(rows, "time", "ip", "country", "method", "path", "rule_id", "action", "status", "monitored"); err != nil {
+			if err := c.printAccess(rows, "time", "ip", "country", "method", "path", "rule_id", "action", "status", "monitored"); err != nil {
 				return err
 			}
 		}
 		previous = counts
-	}
+		return nil
+	})
 }
