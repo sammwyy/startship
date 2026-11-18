@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"log"
-	"net"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -63,6 +62,7 @@ type sessionIdentity struct {
 	userID, sessionID, digest string
 	expires                   int64
 	local                     bool
+	token                     *tokenScope
 }
 
 type sessionKey struct{}
@@ -82,6 +82,9 @@ func (a *Server) authenticate(r *http.Request) (s sessionIdentity) {
 		s.local = true
 		a.store.DB.QueryRow("SELECT a.user_id FROM role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_id=? AND a.scope=? ORDER BY a.created,a.rowid LIMIT 1", platformAdminRole, scopePlatform).Scan(&s.userID)
 		return s
+	}
+	if secret := bearerToken(r); secret != "" {
+		return a.authenticateToken(r, secret)
 	}
 	c, err := r.Cookie(accessCookie)
 	if err != nil || c.Value == "" {
@@ -144,11 +147,7 @@ func (a *Server) login(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 	expires := now + int64(sessionTTL/time.Second)
 	sid, refresh := randomID(), randomID()
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if net.ParseIP(ip) == nil {
-		ip = ""
-	}
-	// The peer address is trusted; user-controlled forwarding headers are not.
+	ip := peerIP(r)
 	res, err := tx.Exec(`INSERT INTO sessions(id,user_id,expires,refresh_digest,logged_at,last_activity_at,ip,user_agent)
 		SELECT ?,id,?,?,?,?,?,? FROM users WHERE id=? AND password=?`, sid, expires, digestToken(refresh), now, now, ip, trimMetadata(r.UserAgent(), 512), uid, hash)
 	if err != nil {

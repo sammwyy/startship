@@ -256,6 +256,11 @@ func (a *Server) api() http.Handler {
 		}
 		s := a.authenticate(r)
 		uid := s.userID
+		if p[1] == "mcp" && len(p) == 2 && s.token == nil {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="startship"`)
+			fail(w, 401, "MCP requires a personal access token")
+			return
+		}
 		if uid == "" {
 			fail(w, 401, "authentication required")
 			return
@@ -263,6 +268,12 @@ func (a *Server) api() http.Handler {
 		r = r.WithContext(context.WithValue(r.Context(), sessionKey{}, s))
 		if p[1] != "live" {
 			a.touchSession(s)
+		}
+		if s.token != nil {
+			if why := tokenDenied(r, p, s.token); why != "" {
+				fail(w, 403, why)
+				return
+			}
 		}
 		if p[1] == "me" && len(p) == 2 {
 			if r.Method == "PATCH" {
@@ -281,16 +292,21 @@ func (a *Server) api() http.Handler {
 				fail(w, 500, "account unavailable")
 				return
 			}
-			x := a.access(uid)
+			x := a.accessFor(s)
+			var token *tokenInfo
+			if s.token != nil {
+				token = &tokenInfo{s.token.id, s.token.name}
+			}
 			reply(w, 200, struct {
 				accountProfile
-				MustChangePassword bool     `json:"must_change_password"`
-				SetupCompleted     bool     `json:"setup_completed"`
-				LocalAdmin         bool     `json:"local_admin"`
-				PlatformAdmin      bool     `json:"platform_admin"`
-				Permissions        []string `json:"permissions"`
-				SessionID          string   `json:"session_id,omitempty"`
-			}{profile, pending, a.setupComplete(), s.local, x.admin, x.list("", ""), s.sessionID})
+				MustChangePassword bool       `json:"must_change_password"`
+				SetupCompleted     bool       `json:"setup_completed"`
+				LocalAdmin         bool       `json:"local_admin"`
+				PlatformAdmin      bool       `json:"platform_admin"`
+				Permissions        []string   `json:"permissions"`
+				SessionID          string     `json:"session_id,omitempty"`
+				Token              *tokenInfo `json:"token,omitempty"`
+			}{profile, pending, a.setupComplete(), s.local, x.admin, x.list("", ""), s.sessionID, token})
 			return
 		}
 		var pending bool
@@ -322,7 +338,15 @@ func (a *Server) api() http.Handler {
 			}
 			return
 		}
-		x := a.access(uid)
+		x := a.accessFor(s)
+		if len(p) >= 3 && p[1] == "me" && p[2] == "tokens" {
+			a.tokensAPI(w, r, p, uid, x)
+			return
+		}
+		if p[1] == "mcp" && len(p) == 2 {
+			a.mcpHandler(w, r, s)
+			return
+		}
 		if len(p) == 3 && p[1] == "pipeline" && p[2] == "templates" && r.Method == "GET" {
 			reply(w, 200, pipeline.Templates())
 			return
@@ -730,7 +754,7 @@ func (a *Server) api() http.Handler {
 		workspace, project := x.scope(v)
 		a.auditRecord(r.Context(), uid, verb, v, workspace, project)
 		a.refresh()
-		reply(w, 200, a.access(uid).publicRecord(v))
+		reply(w, 200, a.accessFor(requestSession(r.Context())).publicRecord(v))
 	})
 }
 func verifySignature(secret string, body []byte, signature string) bool {

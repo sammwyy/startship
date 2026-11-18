@@ -275,6 +275,8 @@ type access struct {
 	cache    map[string]map[string]bool
 	ovr      map[string][]override
 	projects map[string]Record
+	token    *tokenScope
+	root     bool
 }
 
 func (a *Server) access(uid string) *access {
@@ -282,6 +284,21 @@ func (a *Server) access(uid string) *access {
 	for _, v := range x.held {
 		if v.RoleID == platformAdminRole && v.Scope == scopePlatform {
 			x.admin = true
+		}
+	}
+	return x
+}
+
+// accessFor is the caller's access: a personal access token keeps only the permissions its scope
+// allows, so it never reaches further than its owner or than what it was created for.
+func (a *Server) accessFor(s sessionIdentity) *access {
+	x := a.access(s.userID)
+	if s.token != nil {
+		x.token, x.admin = s.token, false
+		for _, v := range x.held {
+			if v.RoleID == platformAdminRole && v.Scope == scopePlatform {
+				x.root = true
+			}
 		}
 	}
 	return x
@@ -305,11 +322,11 @@ func (x *access) at(workspaceID, projectID string) map[string]bool {
 		return v
 	}
 	out := map[string]bool{}
-	if x.admin {
+	if x.admin || x.root {
 		for _, p := range permissionCatalog {
 			out[p.Key] = true
 		}
-		x.cache[key] = out
+		x.cache[key] = x.masked(out, workspaceID)
 		return out
 	}
 	held := map[string]bool{}
@@ -355,8 +372,19 @@ func (x *access) at(workspaceID, projectID string) map[string]bool {
 	if projectID != "" {
 		apply(scopeProject, projectID)
 	}
-	x.cache[key] = out
+	x.cache[key] = x.masked(out, workspaceID)
 	return out
+}
+
+func (x *access) masked(perms map[string]bool, workspaceID string) map[string]bool {
+	if x.token != nil {
+		for k := range perms {
+			if !x.token.allows(k, workspaceID) {
+				delete(perms, k)
+			}
+		}
+	}
+	return perms
 }
 
 func (x *access) list(workspaceID, projectID string) []string {
@@ -416,7 +444,7 @@ func (x *access) can(r Record, perm string) bool {
 	w, p := x.scope(r)
 	if w == "" {
 		// Records outside any workspace predate roles: only their owner reaches them.
-		return r.Owner != "" && r.Owner == x.uid
+		return r.Owner != "" && r.Owner == x.uid && (x.token == nil || x.token.all && x.token.admin)
 	}
 	return x.at(w, p)[perm]
 }
@@ -436,7 +464,10 @@ func (x *access) permissionsFor(r Record) []string {
 }
 
 func (x *access) memberOf(workspaceID string) bool {
-	if x.admin || len(x.list(workspaceID, "")) > 0 {
+	if x.token != nil && !x.token.reaches(workspaceID) {
+		return false
+	}
+	if x.admin || x.root || len(x.list(workspaceID, "")) > 0 {
 		return true
 	}
 	for _, v := range x.held {

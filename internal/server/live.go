@@ -161,7 +161,7 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 			return x, Record{}, "forbidden"
 		}
 		return x, Record{}, ""
-	case "system_update", "account_activity", "account_sessions":
+	case "system_update", "account_activity", "account_sessions", "account_tokens":
 		return x, Record{}, ""
 	default:
 		return x, Record{}, "invalid subscription"
@@ -197,7 +197,7 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return out
 	}
 	switch s.Topic {
-	case "account_sessions", "account_activity", "workspace_activity", "project_activity", "audit_activity":
+	case "account_sessions", "account_activity", "account_tokens", "workspace_activity", "project_activity", "audit_activity":
 		data, err := a.activityLive(uid, s)
 		if err != nil {
 			return nil, nil, r, "activity unavailable"
