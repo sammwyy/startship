@@ -237,3 +237,14 @@
     padding-inline: 6px;
   }
 }
+:root[data-theme="light"] .token-access {
+  color: var(--success);
+}
+:root[data-theme="light"] .token-check:has(:checked) {
+  border-color: var(--success);
+}
+:root[data-theme="light"] .token-check :checked + .token-check-box {
+  border-color: var(--success);
+  background: var(--success);
+  color: #fff;
+}
