@@ -11,6 +11,15 @@
 .certificate-table td {
   vertical-align: top;
 }
+.certificate-table td:last-child {
+  vertical-align: middle;
+}
+.certificate-table .row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
 .certificate-table td:first-child {
   white-space: normal;
   width: 30%;
