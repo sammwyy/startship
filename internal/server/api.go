@@ -608,7 +608,14 @@ func (a *Server) api() http.Handler {
 		v := old
 		body, e := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
 		fields := map[string]json.RawMessage{}
-		if e != nil || json.Unmarshal(body, &fields) != nil || json.Unmarshal(body, &v) != nil {
+		if e != nil || json.Unmarshal(body, &fields) != nil {
+			fail(w, 400, "invalid JSON")
+			return
+		}
+		if _, ok := fields["pipeline"]; ok {
+			v.Pipeline = nil
+		}
+		if json.Unmarshal(body, &v) != nil {
 			fail(w, 400, "invalid JSON")
 			return
 		}

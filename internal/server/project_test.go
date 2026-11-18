@@ -241,6 +241,16 @@ func TestProjectDeploymentAPI(t *testing.T) {
 	request("PATCH", "projects/project", `{"build_type":"custom"}`, 400)
 	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"bad image"}}}`, 400)
 	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"},"deploy":{"artifact":"../escape"}}}`, 400)
+	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"},"test":{"expect_output":"pipeline-actual"}}}`, 200)
+	request("PATCH", "projects/project", `{"pipeline":{"build":{"image":"alpine:3.23"}}}`, 200)
+	request("PATCH", "projects/project", `{"name":"Project renamed"}`, 200)
+	var replaced Record
+	if err := json.Unmarshal(request("GET", "projects/project", "", 200), &replaced); err != nil {
+		t.Fatal(err)
+	}
+	if replaced.Pipeline == nil || replaced.Pipeline.Test.ExpectOutput != "" || replaced.Pipeline.Build.Image != "alpine:3.23" || replaced.Env["MODE"] != "snapshot" {
+		t.Fatal("pipeline was not replaced or omitted project fields changed", replaced)
+	}
 	request("PATCH", "projects/project", `{"build_type":"custom","pipeline":{"build":{"image":"alpine:3.23"},"test":{"commands":["echo ok"],"expect_exit_code":0},"deploy":{"port":8080,"health_path":"/health"}}}`, 200)
 	body := request("POST", "projects/project/deploy", `{"no_cache":true}`, 202)
 	json.Unmarshal(body, &release)
