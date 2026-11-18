@@ -294,7 +294,74 @@ POST /api/projects/<id>/redeploy   {"deployment_id": "<project-release-id>"}
 
 Redeploy requires a successful project release whose images/static directories still exist. Legacy individually deployed containers remain online during upgrade; the first project deployment establishes the grouped release history.
 
-## HTTPS
+## Daemon configuration and interface binding
+
+`startshipd` reads `--config PATH`, else `STARTSHIP_CONFIG`, else
+`/etc/startship/startship.toml` when present. An explicitly selected missing or
+invalid file is an error. Precedence is **daemon flags > environment variables >
+TOML file > defaults**. An empty legacy environment variable still means unset.
+Configuration is loaded at startup; restart after edits. No `$HOME` is needed.
+
+```toml
+# Bind the control-panel port only to loopback or your VPN interface:
+dashboard_listen = ["127.0.0.1:8080", "tailscale0:8080"]
+# Public application router (all IPv4/IPv6 interfaces where supported):
+http_listen = [":80"]
+https_listen = [":443"]
+data_dir = "/var/lib/startship"
+# dashboard_domain = "deploy.example.com"
+# acme_email = "admin@example.com"
+# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"
+# socket_path = "/run/startship/startship.sock"
+```
+
+Listen entries accept IP/hostname `host:port`, `[IPv6]:port`, `:port` (all
+interfaces), or interface names such as `eth0:8080` and `tailscale0:8080`.
+Interfaces resolve to all their current addresses at startup; nonexistent names
+that cannot resolve as hostnames fail clearly. Addresses changing later require
+a restart. Every bound address is logged. Overlapping wildcard/specific bindings
+on the same port fail rather than silently weakening the restriction.
+
+| TOML key | Daemon flag | Existing environment variable | Default |
+|---|---|---|---|
+| `dashboard_listen` | `--dashboard-listen` | `STARTSHIP_DASHBOARD_ADDR` | `:8080` |
+| `http_listen` | `--http-listen` | `STARTSHIP_HTTP_ADDR` | `:80` |
+| `https_listen` | `--https-listen` | `STARTSHIP_HTTPS_ADDR` | `:443` |
+| `data_dir` | `--data-dir` | `STARTSHIP_DATA` | `./_data` (existing `./data` retained) |
+| `dashboard_domain` | `--dashboard-domain` | `STARTSHIP_DASHBOARD_DOMAIN` | empty |
+| `acme_email` | `--acme-email` | `STARTSHIP_ACME_EMAIL` | empty |
+| `acme_directory` | `--acme-directory` | `STARTSHIP_ACME_DIRECTORY` | Let's Encrypt production |
+| `socket_path` | `--socket-path` | `STARTSHIP_SOCKET` | `$RUNTIME_DIRECTORY/startship.sock`, else data dir |
+
+Listen environment variables accept comma-separated entries; flags also support
+repetition. Scalar flags replace their value. Public route URLs use the first
+configured listener's port. Run `startshipd --help` for all flags.
+
+```sh
+startshipd --config ./startship.toml --dashboard-listen 127.0.0.1:8080
+startshipd --dashboard-listen 127.0.0.1:8080 --dashboard-listen '[::1]:8080'
+startship config path
+startship config show                       # exact selected file, not env/flags
+startship config get dashboard_listen       # JSON value from that file
+sudo startship config set dashboard_listen 127.0.0.1:8080 tailscale0:8080
+sudo startship config unset dashboard_listen
+startship config --config ./startship.toml set http_listen :8081
+sudo systemctl restart startshipd
+```
+
+The installer creates a commented example file without overwriting existing
+files. **Installed `/etc/startship/startshipd.env` settings still take precedence:**
+remove its corresponding `STARTSHIP_*_ADDR` assignments before using listener
+settings from TOML. `startship config` validates edits and preserves other
+settings/comments, but never modifies the environment file or restarts services.
+
+Binding the panel port privately does not restrict `dashboard_domain`: configuring
+that hostname also exposes the panel through the public proxy listeners. Leave
+it unset for VPN/loopback-only access. With Docker Compose, host exposure is also
+controlled by `ports` mappings (e.g. `127.0.0.1:8080:8080`); a host interface such
+as `tailscale0` is normally not visible inside the container.
+
+## HTTPS certificates
 
 The router always listens on HTTP (`STARTSHIP_HTTP_ADDR`, default `:80`) and
 HTTPS (`STARTSHIP_HTTPS_ADDR`, default `:443`). HTTPS requires a matching stored
