@@ -178,7 +178,7 @@ func TestCertificateSelection(t *testing.T) {
 func TestChallengeAndHTTPSRedirect(t *testing.T) {
 	a := testServer(t)
 	a.challenges.Store("/.well-known/acme-challenge/token", httpChallenge{Host: "example.com", Response: "proof"})
-	a.targets = []Target{{Route: Record{Host: "example.com", PathPrefix: "/", ForceHTTPS: true}}}
+	setTestTargets(a, []Target{{Route: Record{Host: "example.com", PathPrefix: "/", ForceHTTPS: true}}})
 	for _, v := range []struct {
 		path, host string
 		status     int

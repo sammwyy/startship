@@ -86,6 +86,13 @@ export const router = createHashRouter([
             element: <SystemLayout />,
             children: [
               {
+                path: "network-firewall",
+                lazy: async () => ({
+                  Component: (await import("./views/NetworkFirewallView"))
+                    .NetworkFirewallView,
+                }),
+              },
+              {
                 index: true,
                 lazy: async () => ({
                   Component: (await import("./views/NodeSettingsView"))
@@ -164,6 +171,13 @@ export const router = createHashRouter([
               Component: (
                 await import("./views/workspace/WorkspaceCertificatesView")
               ).WorkspaceCertificatesView,
+            }),
+          },
+          {
+            path: "workspace/:workspaceId/firewall/:section?",
+            lazy: async () => ({
+              Component: (await import("./views/workspace/FirewallView"))
+                .FirewallView,
             }),
           },
           {

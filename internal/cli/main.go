@@ -288,6 +288,28 @@ const usage = `startship [--json] COMMAND
   domains list WORKSPACE
   domains add WORKSPACE DOMAIN [--subdomains]
   domains rm WORKSPACE DOMAIN     domain ID or name; delete/remove also accepted
+  firewall show WS | firewall export WS | firewall apply WS FILE.json
+  firewall mode WS off|monitor|enforce
+  firewall managed WS RULE on|off [--action block|allow|log|ban]
+  firewall limits WS [--rate N/DUR] [--rate-action block|ban] [--ban DUR]
+    [--concurrent N] [--max-body SIZE] [--max-url SIZE]
+  firewall rules list WS
+  firewall rules add WS --name NAME --when 'FIELD OP VALUE' [--when ...]
+    [--any] --action block|allow|log|rate_limit|ban [--rate N/DUR] [--ban DUR]
+                                 'in' values are comma-separated; rate is per IP
+  firewall rules rm|enable|disable WS RULE
+  firewall rules move WS RULE POS positions are 1-based
+  firewall lists list WS | firewall lists add WS NAME [--kind block|allow]
+  firewall lists rm WS LIST
+  firewall lists entry add WS LIST VALUE [--for DUR]
+  firewall lists entry rm WS LIST VALUE
+  network status | network list
+  network block VALUE [--for DUR] [--router-only] [--note TEXT]
+  network unblock ID|VALUE       IP, CIDR or ISO-2 country; platform permission
+  firewall ban WS IP [--for DUR] | firewall unban WS IP
+  firewall events WS [--follow]   live snapshots over HTTP(S) or Unix socket
+                                 --json --follow prints new events as NDJSON
+                                 durations: 30s/15m/1h/7d; sizes: 10MB/512KB
   workspaces domains ...         alias for domains; quote wildcard names
   traffic PROJECT | detect JSON | version
   update check                   CLI, daemon and latest release versions
@@ -334,6 +356,12 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "domains" {
 		return c.runDomains(a)
+	}
+	if cmd == "firewall" {
+		return c.runFirewall(a)
+	}
+	if cmd == "network" {
+		return c.runNetwork(a)
 	}
 	if cmd == "catalog" {
 		return c.runCatalog(a)

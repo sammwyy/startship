@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/sammwyy/startship/internal/router"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -247,6 +248,10 @@ func testServer(t *testing.T) *Server {
 	a.initLive()
 	return a
 }
+
+func setTestTargets(a *Server, targets []Target) {
+	a.publicRouter().Update(router.Snapshot{Targets: targets})
+}
 func TestSetupAndOwnership(t *testing.T) {
 	a := testServer(t)
 	h := a.api()
@@ -299,7 +304,7 @@ func TestStaticProxy(t *testing.T) {
 	a := testServer(t)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "index.html"), []byte("static-ok"), 0600)
-	a.targets = []Target{{Route: Record{Host: "test.local", PathPrefix: "/static/", StripPrefix: true}, Deployment: Record{Status: "running", StaticDir: dir}}}
+	setTestTargets(a, []Target{{Route: Record{Host: "test.local", PathPrefix: "/static/", StripPrefix: true}, Deployment: Record{Status: "running", StaticDir: dir}}})
 	for _, p := range []string{"/static/", "/static/deep/link"} {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest("GET", "http://test.local"+p, nil)

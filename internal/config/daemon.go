@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/mail"
+	"net/netip"
 	"net/url"
 	"os"
 	"strconv"
@@ -26,19 +27,28 @@ type Daemon struct {
 	ACMEEmail       string   `toml:"acme_email"`
 	ACMEDirectory   string   `toml:"acme_directory"`
 	SocketPath      string   `toml:"socket_path"`
+	TrustedProxies  []string `toml:"trusted_proxies"`
+	GeoIPDatabase   string   `toml:"geoip_database"`
+	NetworkFirewall bool     `toml:"network_firewall"`
 }
 
 var environment = map[string]string{
 	"dashboard_listen": "STARTSHIP_DASHBOARD_ADDR", "http_listen": "STARTSHIP_HTTP_ADDR", "https_listen": "STARTSHIP_HTTPS_ADDR",
 	"data_dir": "STARTSHIP_DATA", "dashboard_domain": "STARTSHIP_DASHBOARD_DOMAIN", "acme_email": "STARTSHIP_ACME_EMAIL",
 	"acme_directory": "STARTSHIP_ACME_DIRECTORY", "socket_path": "STARTSHIP_SOCKET",
+	"trusted_proxies": "STARTSHIP_TRUSTED_PROXIES", "geoip_database": "STARTSHIP_GEOIP_DB",
+	"network_firewall": "STARTSHIP_NETWORK_FIREWALL",
+}
+
+func (d *Daemon) bools() map[string]*bool {
+	return map[string]*bool{"network_firewall": &d.NetworkFirewall}
 }
 
 func (d *Daemon) strings() map[string]*string {
-	return map[string]*string{"data_dir": &d.DataDir, "dashboard_domain": &d.DashboardDomain, "acme_email": &d.ACMEEmail, "acme_directory": &d.ACMEDirectory, "socket_path": &d.SocketPath}
+	return map[string]*string{"data_dir": &d.DataDir, "dashboard_domain": &d.DashboardDomain, "acme_email": &d.ACMEEmail, "acme_directory": &d.ACMEDirectory, "socket_path": &d.SocketPath, "geoip_database": &d.GeoIPDatabase}
 }
 func (d *Daemon) lists() map[string]*[]string {
-	return map[string]*[]string{"dashboard_listen": &d.DashboardListen, "http_listen": &d.HTTPListen, "https_listen": &d.HTTPSListen}
+	return map[string]*[]string{"dashboard_listen": &d.DashboardListen, "http_listen": &d.HTTPListen, "https_listen": &d.HTTPSListen, "trusted_proxies": &d.TrustedProxies}
 }
 func Defaults() Daemon {
 	return Daemon{DashboardListen: []string{":8080"}, HTTPListen: []string{":80"}, HTTPSListen: []string{":443"}, DataDir: DataDirectory(), ACMEDirectory: "https://acme-v02.api.letsencrypt.org/directory"}
@@ -81,6 +91,9 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 	f := flag.NewFlagSet("startshipd", flag.ContinueOnError)
 	f.SetOutput(out)
 	f.StringVar(&file, "config", "", "daemon TOML file (STARTSHIP_CONFIG, else /etc/startship/startship.toml if present)")
+	for key, p := range values.bools() {
+		f.BoolVar(p, strings.ReplaceAll(key, "_", "-"), false, "override "+key+" ("+environment[key]+")")
+	}
 	for key, p := range values.strings() {
 		f.StringVar(p, strings.ReplaceAll(key, "_", "-"), "", "override "+key+" ("+environment[key]+")")
 	}
@@ -116,8 +129,20 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 			*p = strings.Split(s, ",")
 		}
 	}
+	for key, p := range d.bools() {
+		if s := os.Getenv(environment[key]); s != "" {
+			value, err := strconv.ParseBool(s)
+			if err != nil {
+				return d, fmt.Errorf("%s: %w", environment[key], err)
+			}
+			*p = value
+		}
+	}
 	f.Visit(func(v *flag.Flag) {
 		key := strings.ReplaceAll(v.Name, "-", "_")
+		if p, ok := d.bools()[key]; ok {
+			*p = *values.bools()[key]
+		}
 		if p, ok := d.strings()[key]; ok {
 			*p = *values.strings()[key]
 		}
@@ -130,6 +155,16 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 
 func (d *Daemon) Validate() error {
 	for key, p := range d.lists() {
+		if key == "trusted_proxies" {
+			for i, s := range *p {
+				s = strings.TrimSpace(s)
+				(*p)[i] = s
+				if _, err := netip.ParsePrefix(s); err != nil {
+					return fmt.Errorf("trusted_proxies[%d]: invalid CIDR %q", i, s)
+				}
+			}
+			continue
+		}
 		if len(*p) == 0 {
 			return fmt.Errorf("%s needs at least one listen address", key)
 		}
@@ -226,13 +261,24 @@ func Resolve(entries []string) ([]string, error) {
 
 // Export keeps URL generation, socket defaults and legacy integrations in sync.
 func (d *Daemon) Export() error {
+	for key, p := range d.bools() {
+		if err := os.Setenv(environment[key], strconv.FormatBool(*p)); err != nil {
+			return err
+		}
+	}
 	for key, p := range d.strings() {
 		if err := os.Setenv(environment[key], *p); err != nil {
 			return err
 		}
 	}
 	for key, p := range d.lists() {
-		if err := os.Setenv(environment[key], (*p)[0]); err != nil {
+		value := ""
+		if key == "trusted_proxies" {
+			value = strings.Join(*p, ",")
+		} else if len(*p) > 0 {
+			value = (*p)[0]
+		}
+		if err := os.Setenv(environment[key], value); err != nil {
 			return err
 		}
 	}

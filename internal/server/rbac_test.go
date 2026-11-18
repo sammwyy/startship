@@ -90,6 +90,19 @@ func TestPlatformAdminBootstrapAndProtection(t *testing.T) {
 	}
 }
 
+func TestFirewallBuiltinPermissions(t *testing.T) {
+	for _, role := range builtinRoles {
+		wantView := role.ID == platformAdminRole || role.ID == "administrator" || role.ID == "contributor"
+		wantManage := role.ID == platformAdminRole || role.ID == "administrator"
+		if slices.Contains(role.Permissions, "firewall.view") != wantView || slices.Contains(role.Permissions, "firewall.manage") != wantManage || slices.Contains(role.Permissions, "network.firewall") != (role.ID == platformAdminRole) {
+			t.Fatal(role.ID, role.Permissions)
+		}
+	}
+	if permissionByKey["firewall.view"].Scope != scopeWorkspace || permissionByKey["firewall.manage"].Scope != scopeWorkspace || permissionByKey["network.firewall"].Scope != scopePlatform {
+		t.Fatal("wrong permission scopes")
+	}
+}
+
 func TestPlainUsersOnlyManageThemselves(t *testing.T) {
 	f := newRBACFixture(t)
 	accountRequest(t, f.h, "POST", "workspaces", `{"name":"New"}`, f.bob, 403)

@@ -215,6 +215,31 @@ fn main() {
         result = subprocess.check_output(["curl", "-fsS", "-H", "Host: test.local", proxy_url + path], text=True)
         print("curl " + path + ": " + result.strip())
         assert expected in result
+    firewall_path = "workspaces/" + ws["id"] + "/firewall"
+    original_policy = request(firewall_path)
+    enforced_policy = dict(original_policy, mode="enforce", managed={
+        **original_policy["managed"], "sqli": {"enabled": True, "action": "block"}})
+    try:
+        request(firewall_path, enforced_policy, "PUT")
+        blocked = subprocess.check_output([
+            "curl", "-sS", "--max-time", "10", "-o", str(work / "firewall-blocked.txt"),
+            "-w", "%{http_code}", "-H", "Host: test.local",
+            proxy_url + "/firewall-probe?id=1%27%20OR%201%3D1--"], text=True)
+        assert blocked == "403", blocked
+        assert "Blocked by Startship firewall" in (work / "firewall-blocked.txt").read_text()
+        normal = subprocess.check_output([
+            "curl", "-sS", "--max-time", "10", "-o", str(work / "firewall-normal.txt"),
+            "-w", "%{http_code}", "-H", "Host: test.local",
+            proxy_url + "/firewall-normal"], text=True)
+        assert normal == "200", normal
+        assert "hello from Startship python /firewall-normal" in (work / "firewall-normal.txt").read_text()
+        events = request(firewall_path + "/events")
+        assert any(event["rule_id"] == "sqli" and event["action"] == "block"
+                   and event["status"] == 403 and event["path"] == "/firewall-probe"
+                   for event in events), events
+        print("firewall enforce: routed SQLi=403, normal=200, block event visible: OK")
+    finally:
+        request(firewall_path, original_policy, "PUT")
     # A Dockerfile build failure must not replace the healthy release either.
     healthy = deployments["dockerfile"]
     dockerfile = repo / "dockerapp" / "Dockerfile"

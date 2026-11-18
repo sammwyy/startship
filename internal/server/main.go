@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/sammwyy/startship/internal/config"
+	"github.com/sammwyy/startship/internal/firewall"
 	"golang.org/x/crypto/acme"
 	"golang.org/x/crypto/acme/autocert"
 	"log"
@@ -78,6 +79,21 @@ func Run(settings config.Daemon) {
 	}
 	defer s.DB.Close()
 	a := &Server{store: s, data: data, queues: make(map[string]chan string), dashboardDomain: os.Getenv("STARTSHIP_DASHBOARD_DOMAIN")}
+	a.routerOptions.TrustedProxies, e = firewall.ParseTrustedProxies(settings.TrustedProxies)
+	if e != nil {
+		log.Fatal(e)
+	}
+	geo, e := firewall.OpenMMDB(settings.GeoIPDatabase)
+	if e != nil {
+		log.Fatal(e)
+	}
+	defer geo.Close()
+	if settings.GeoIPDatabase != "" {
+		a.routerOptions.GeoIP = geo
+	}
+	if len(settings.HTTPSListen) > 0 {
+		_, a.routerOptions.HTTPSPort, _ = net.SplitHostPort(settings.HTTPSListen[0])
+	}
 	a.reserveServicePorts(settings.DashboardListen, settings.HTTPListen, settings.HTTPSListen)
 	a.initLive()
 	if e = a.bootstrapAdmin(os.Getenv("STARTSHIP_ADMIN_USER"), os.Getenv("STARTSHIP_ADMIN_PASSWORD")); e != nil {
@@ -87,6 +103,8 @@ func Run(settings config.Daemon) {
 	a.reconcileServices()
 	metricsContext, stopMetrics := context.WithCancel(context.Background())
 	defer stopMetrics()
+	a.initNetwork(settings)
+	go a.watchNetwork(metricsContext)
 	go a.sampleTrafficResources(metricsContext)
 	go a.watchUpdates(metricsContext)
 	go a.watchCertificates(metricsContext)

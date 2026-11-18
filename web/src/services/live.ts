@@ -13,6 +13,7 @@ import type {
 export type LiveSubscription =
   | { topic: "services" | "volumes" | "backups"; workspace_id: string }
   | { topic: "certificates"; workspace_id: string }
+  | { topic: "firewall"; workspace_id: string }
   | { topic: "project"; project_id: string }
   | { topic: "workspace"; workspace_id: string }
   | { topic: "release_log"; release_id: string }
@@ -183,8 +184,11 @@ export function applyLiveMessage(
           /^projects\/[^/]+\/services$/.test(String(query.queryKey[0])),
       });
     }
-  } else if (spec.topic === "certificates" && event.type === "snapshot") {
-    const queryKey = [`workspaces/${spec.workspace_id}/certificates`];
+  } else if (
+    (spec.topic === "certificates" || spec.topic === "firewall") &&
+    event.type === "snapshot"
+  ) {
+    const queryKey = [`workspaces/${spec.workspace_id}/${spec.topic}`];
     void client.cancelQueries({ queryKey, exact: true });
     client.setQueryData(queryKey, event.data);
   } else if (spec.topic === "project") {

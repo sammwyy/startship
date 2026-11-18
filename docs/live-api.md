@@ -27,12 +27,20 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | `project` | `project_id` | project visible | `{project, containers[], releases[] (no log), routes[]}` = GET `projects/:id`, `containers?project_id=`, `releases?project_id=&logs=false`, `routes?project_id=` | `upsert`/`delete` with kind project, container, release, route | ProjectLayout 2s queries, DashboardLayout project 2s |
 | `workspace` | `workspace_id` | workspace visible | `{projects[]}` = GET `projects?workspace_id=` | `upsert`/`delete` kind project | projects list refetch |
 | `certificates` | `workspace_id` | `workspace.domains` | `{certificates[]}` = GET `workspaces/:id/certificates` (no private keys) | a full `snapshot` on certificate create/status/renew/delete; access rechecked | workspace certificate list |
+| `firewall` | `workspace_id` | workspace visible + `firewall.view` | `{policy, lists, events, stats, can_manage}` | replacement snapshots on policy/list changes and at most once per second during telemetry activity; access rechecked | workspace firewall data |
 | `release_log` | `release_id` (release or legacy deployment id) | `logs.view` | the record with `log`, = GET `releases/:id` | `log` chunks as the build writes them; `upsert` kind release on status/finished change | LogPanel release 2s |
 | `container_log` | `container_id` | `logs.view` | `{"log": "..."}` = GET `containers/:id/logs` (last 200 lines or the same "not deployed"/"static" text) | `log` chunks streamed from the running container; `log` with `reset:true` when the container's active deployment changes | LogPanel container 2s |
 | `traffic` | `project_id`, `window` 300/900/3600 | `traffic.view` | = GET `projects/:id/traffic?window=` | a new `snapshot` pushed every 5s | TrafficView 5s |
 | `system_update` | none | signed in (same as GET) | = GET `system/update` | a new `snapshot` whenever it changes (update requested, status file, release check) | SystemView 2s/60s |
 
 Mutations stay on the REST API; their effects arrive over the socket.
+
+## Firewall
+- Subscribe with `{"type":"subscribe","id":"fw","topic":"firewall","workspace_id":"..."}`.
+- `policy` and `lists` match the workspace firewall REST responses. `events` contains the latest 100 of the workspace's 500 buffered match events, newest first. `can_manage` reflects `firewall.manage` for the current user.
+- `stats` is `{total, blocked, by_action, minutes, top_rules, top_ips, top_countries}` over the last 60 minute buckets. Each minute is `{at, total, blocked, by_action}` (`at` = Unix seconds, oldest first); top arrays contain up to five `{value, count}` items ordered by descending count. Allowed requests = total minus blocked. Tops count match events, not distinct requests.
+- Policy/list mutations send replacement snapshots promptly; events **and observations of allowed requests** are coalesced to at most one snapshot per second. No configuration polling occurs while idle. Access is checked for each snapshot and on the normal session timer; lost visibility/`firewall.view` yields `error` and drops the subscription. Administrator can edit; Contributor can view; Member cannot subscribe by default.
+- See [firewall.md](firewall.md) for the complete rule language, event/stat semantics, storage and router contract. Events and stats are memory-only and reset on restart; policies/lists/bans persist.
 
 ## Services and volumes
 - Topics `services` and `volumes` take `workspace_id` and require workspace visibility.

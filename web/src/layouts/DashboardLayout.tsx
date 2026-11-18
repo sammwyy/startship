@@ -266,6 +266,8 @@ export function DashboardLayout() {
                   {navLink(`${url}/volumes`, "Volumes", "hard-drive")}
                   {navLink(`${url}/backups`, "Backups", "history")}
                   {navLink(`${url}/domains`, "Domains", "globe")}
+                  {can("firewall.view", workspace) &&
+                    navLink(`${url}/firewall`, "Firewall", "shield")}
                   {navLink(
                     `${url}/certificates`,
                     "Certificates",
