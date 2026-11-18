@@ -105,6 +105,49 @@ describe("authenticated live connection", () => {
     expect(Socket.instances).toHaveLength(1);
     window.removeEventListener("session-expired", expired);
   });
+  it.each([200, 401])(
+    "handles HTTP %d from refresh after a refused reconnect",
+    async (status) => {
+      const fetch = vi.fn().mockResolvedValue(new Response(null, { status }));
+      vi.stubGlobal("fetch", fetch);
+      const expired = vi.fn();
+      const ready = vi.fn();
+      const connection = new LiveConnection(vi.fn(), vi.fn(), ready);
+      window.addEventListener("session-expired", expired);
+      try {
+        connection.connect();
+        Socket.instances[0].receive({
+          type: "ready",
+          version: "v1",
+          commit: "abc",
+        });
+        Socket.instances[0].disconnect();
+        await vi.advanceTimersByTimeAsync(500);
+        Socket.instances[1].disconnect();
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(fetch).toHaveBeenCalledWith("/api/refresh", expect.anything());
+        if (status === 200) {
+          Socket.instances[2].receive({
+            type: "ready",
+            version: "v2",
+            commit: "def",
+          });
+          expect(ready).toHaveBeenLastCalledWith({
+            version: "v2",
+            commit: "def",
+          });
+          expect(expired).not.toHaveBeenCalled();
+        } else {
+          expect(expired).toHaveBeenCalledOnce();
+          expect(Socket.instances).toHaveLength(2);
+        }
+      } finally {
+        connection.disconnect();
+        window.removeEventListener("session-expired", expired);
+      }
+    },
+  );
   it("keeps subscriptions across a credential rotation pause", () => {
     const connection = new LiveConnection(vi.fn(), vi.fn(), vi.fn());
     connection.subscribe({ topic: "release_log", release_id: "r1" });
