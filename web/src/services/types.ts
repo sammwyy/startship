@@ -210,9 +210,33 @@ export interface WorkspaceDomain {
 export interface User extends Scoped {
   id: string;
   username: string;
+  display_name?: string;
+  email?: string;
+  session_id?: string;
   platform_admin?: boolean;
   must_change_password?: boolean;
   platform_roles?: string[];
+}
+export interface AccountSession {
+  id: string;
+  ip: string;
+  user_agent: string;
+  logged_at: string;
+  last_activity_at: string;
+  expires_at: string;
+}
+export interface ActivityEntry {
+  id: number;
+  at: string;
+  actor: string;
+  actor_id: string;
+  action: string;
+  target: string;
+  scope: string;
+  scope_id: string;
+  source?: string;
+  session_id?: string;
+  detail?: unknown;
 }
 export interface SystemVersion {
   version: string;

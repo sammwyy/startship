@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
@@ -14,7 +15,6 @@ import (
 	"github.com/sammwyy/startship/internal/routing"
 	"golang.org/x/crypto/bcrypt"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -158,129 +158,25 @@ func (a *Server) resetPassword(uid, pass string) error {
 	if err != nil {
 		return err
 	}
-	if _, err = a.store.DB.Exec("UPDATE users SET password=?,must_change_password=1 WHERE id=?", string(hash), uid); err == nil {
-		_, err = a.store.DB.Exec("DELETE FROM sessions WHERE user_id=?", uid)
-	}
-	return err
-}
-func (a *Server) user(r *http.Request) string {
-	if localRequest(r) {
-		// Whoever can reach the protected socket acts as the longest-serving Platform Admin.
-		var id string
-		a.store.DB.QueryRow("SELECT a.user_id FROM role_assignments a JOIN users u ON u.id=a.user_id WHERE a.role_id=? AND a.scope=? ORDER BY a.created,a.rowid LIMIT 1", platformAdminRole, scopePlatform).Scan(&id)
-		return id
-	}
-	c, e := r.Cookie("startship_session")
-	if e != nil {
-		return ""
-	}
-	var id string
-	a.store.DB.QueryRow("SELECT user_id FROM sessions WHERE id=? AND expires>?", c.Value, time.Now().Unix()).Scan(&id)
-	return id
-}
-func (a *Server) updateAccount(w http.ResponseWriter, r *http.Request, uid string) {
-	var v struct {
-		Username        *string `json:"username"`
-		CurrentPassword string  `json:"current_password"`
-		NewPassword     *string `json:"new_password"`
-	}
-	if decode(w, r, &v) != nil {
-		fail(w, 400, "invalid JSON")
-		return
-	}
-	if v.Username == nil && v.NewPassword == nil {
-		fail(w, 400, "provide a username or new password")
-		return
-	}
-	if v.Username != nil {
-		name := strings.TrimSpace(*v.Username)
-		if len(name) < 1 || len(name) > 100 {
-			fail(w, 400, "username must be between 1 and 100 bytes")
-			return
-		}
-		v.Username = &name
-	}
-	if v.NewPassword != nil && (len(*v.NewPassword) < 8 || len(*v.NewPassword) > 72) {
-		fail(w, 400, "new password must be between 8 and 72 bytes")
-		return
-	}
-	if v.CurrentPassword == "" {
-		fail(w, 400, "current password required")
-		return
-	}
-	a.store.Lock()
-	defer a.store.Unlock()
 	tx, err := a.store.DB.Begin()
 	if err != nil {
-		fail(w, 500, "account update failed")
-		return
+		return err
 	}
 	defer tx.Rollback()
-	cookie, _ := r.Cookie("startship_session")
-	var name, hash string
-	var pending bool
-	err = tx.QueryRow("SELECT u.username,u.password,u.must_change_password FROM users u JOIN sessions s ON s.user_id=u.id WHERE u.id=? AND s.id=? AND s.expires>?", uid, cookie.Value, time.Now().Unix()).Scan(&name, &hash, &pending)
-	if err != nil {
-		fail(w, 401, "session expired; sign in again")
-		return
+	if _, err = tx.Exec("UPDATE users SET password=?,must_change_password=1 WHERE id=?", string(hash), uid); err != nil {
+		return err
 	}
-	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(v.CurrentPassword)) != nil {
-		fail(w, 403, "current password is incorrect")
-		return
-	}
-	if v.Username != nil {
-		name = *v.Username
-		var count int
-		if err = tx.QueryRow("SELECT count(*) FROM users WHERE username=? AND id<>?", name, uid).Scan(&count); err != nil {
-			fail(w, 500, "account update failed")
-			return
-		}
-		if count != 0 {
-			fail(w, 409, "username is already in use")
-			return
-		}
-	}
-	if v.NewPassword != nil {
-		var generated []byte
-		generated, err = bcrypt.GenerateFromPassword([]byte(*v.NewPassword), bcrypt.DefaultCost)
-		if err != nil {
-			fail(w, 500, "account update failed")
-			return
-		}
-		hash = string(generated)
-	}
-	if pending && v.NewPassword != nil {
-		if *v.NewPassword == v.CurrentPassword {
-			fail(w, 400, "choose a different password")
-			return
-		}
-		if _, err = tx.Exec("UPDATE users SET must_change_password=0 WHERE id=?; INSERT OR IGNORE INTO settings VALUES('setup_completed',strftime('%Y-%m-%dT%H:%M:%SZ','now'))", uid); err != nil {
-			fail(w, 500, "account update failed")
-			return
-		}
-	}
-	if _, err = tx.Exec("UPDATE users SET username=?,password=? WHERE id=?", name, hash, uid); err != nil {
-		fail(w, 500, "account update failed")
-		return
-	}
-	token := randomID()
-	if _, err = tx.Exec("DELETE FROM sessions WHERE user_id=?", uid); err == nil {
-		_, err = tx.Exec("INSERT INTO sessions VALUES(?,?,?)", token, uid, time.Now().Add(7*24*time.Hour).Unix())
-	}
-	if err != nil {
-		fail(w, 500, "account update failed")
-		return
+	if _, err = tx.Exec("DELETE FROM sessions WHERE user_id=?", uid); err != nil {
+		return err
 	}
 	if err = tx.Commit(); err != nil {
-		fail(w, 500, "account update failed")
-		return
+		return err
 	}
-	http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode, MaxAge: 604800})
-	if pending && v.NewPassword != nil {
-		log.Print("Setup complete: administrator password changed")
-	}
-	reply(w, 200, map[string]string{"id": uid, "username": name})
+	a.publishAccount(uid)
+	return nil
 }
+func (a *Server) user(r *http.Request) string { return a.authenticate(r).userID }
+
 func (a *Server) api() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -288,6 +184,7 @@ func (a *Server) api() http.Handler {
 			dashboard.ServeHTTP(w, r)
 			return
 		}
+		w.Header().Set("Cache-Control", "no-store")
 		// Reject browser cross-origin mutations, including login CSRF.
 		if r.Method != "GET" && r.Method != "HEAD" {
 			if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+r.Host && origin != "https://"+r.Host {
@@ -296,7 +193,7 @@ func (a *Server) api() http.Handler {
 			}
 		}
 		p := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-		if localRequest(r) && len(p) > 1 && (p[1] == "login" || p[1] == "logout" || p[1] == "setup" && r.Method != "GET" || p[1] == "me" && r.Method != "GET") {
+		if localRequest(r) && len(p) > 1 && (p[1] == "login" || p[1] == "refresh" || p[1] == "logout" || p[1] == "setup" && r.Method != "GET" || p[1] == "me" && r.Method != "GET") {
 			fail(w, 400, "this operation requires an HTTP login session, not the local admin socket")
 			return
 		}
@@ -344,45 +241,32 @@ func (a *Server) api() http.Handler {
 			reply(w, 201, map[string]string{"id": id})
 			return
 		}
-		if p[1] == "login" && r.Method == "POST" {
-			var v struct{ Username, Password string }
-			if decode(w, r, &v) != nil {
-				fail(w, 400, "invalid JSON")
+		if len(p) == 2 && r.Method == "POST" {
+			switch p[1] {
+			case "login":
+				a.login(w, r)
+				return
+			case "refresh":
+				a.refreshSession(w, r)
+				return
+			case "logout":
+				a.logout(w, r)
 				return
 			}
-			a.store.Lock()
-			defer a.store.Unlock()
-			var id, hash string
-			e := a.store.DB.QueryRow("SELECT id,password FROM users WHERE username=?", strings.TrimSpace(v.Username)).Scan(&id, &hash)
-			if e != nil || bcrypt.CompareHashAndPassword([]byte(hash), []byte(v.Password)) != nil {
-				fail(w, 401, "invalid username or password")
-				return
-			}
-			token := randomID()
-			_, e = a.store.DB.Exec("INSERT INTO sessions VALUES(?,?,?)", token, id, time.Now().Add(7*24*time.Hour).Unix())
-			if e != nil {
-				fail(w, 500, "session failed")
-				return
-			}
-			http.SetCookie(w, &http.Cookie{Name: "startship_session", Value: token, Path: "/", HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode, MaxAge: 604800})
-			reply(w, 200, map[string]string{"id": id})
-			return
 		}
-		uid := a.user(r)
+		s := a.authenticate(r)
+		uid := s.userID
 		if uid == "" {
 			fail(w, 401, "authentication required")
 			return
 		}
-		if p[1] == "logout" && r.Method == "POST" {
-			c, _ := r.Cookie("startship_session")
-			a.store.DB.Exec("DELETE FROM sessions WHERE id=?", c.Value)
-			http.SetCookie(w, &http.Cookie{Name: "startship_session", Path: "/", MaxAge: -1, HttpOnly: true, Secure: secureRequest(r), SameSite: http.SameSiteLaxMode})
-			reply(w, 200, map[string]bool{"ok": true})
-			return
+		r = r.WithContext(context.WithValue(r.Context(), sessionKey{}, s))
+		if p[1] != "live" {
+			a.touchSession(s)
 		}
-		if p[1] == "me" {
+		if p[1] == "me" && len(p) == 2 {
 			if r.Method == "PATCH" {
-				a.updateAccount(w, r, uid)
+				a.updateAccount(w, r, s)
 				return
 			}
 			if r.Method != "GET" {
@@ -390,11 +274,23 @@ func (a *Server) api() http.Handler {
 				fail(w, 405, "method not allowed")
 				return
 			}
-			var name string
+			profile := accountProfile{ID: uid}
 			var pending bool
-			a.store.DB.QueryRow("SELECT username,must_change_password FROM users WHERE id=?", uid).Scan(&name, &pending)
+			if err := a.store.DB.QueryRow("SELECT username,display_name,email,must_change_password FROM users WHERE id=?", uid).
+				Scan(&profile.Username, &profile.DisplayName, &profile.Email, &pending); err != nil {
+				fail(w, 500, "account unavailable")
+				return
+			}
 			x := a.access(uid)
-			reply(w, 200, map[string]any{"id": uid, "username": name, "must_change_password": pending, "setup_completed": a.setupComplete(), "local_admin": localRequest(r), "platform_admin": x.admin, "permissions": x.list("", "")})
+			reply(w, 200, struct {
+				accountProfile
+				MustChangePassword bool     `json:"must_change_password"`
+				SetupCompleted     bool     `json:"setup_completed"`
+				LocalAdmin         bool     `json:"local_admin"`
+				PlatformAdmin      bool     `json:"platform_admin"`
+				Permissions        []string `json:"permissions"`
+				SessionID          string   `json:"session_id,omitempty"`
+			}{profile, pending, a.setupComplete(), s.local, x.admin, x.list("", ""), s.sessionID})
 			return
 		}
 		var pending bool
@@ -410,6 +306,22 @@ func (a *Server) api() http.Handler {
 			a.liveHandler(w, r, uid)
 			return
 		}
+		if len(p) >= 3 && p[1] == "me" && p[2] == "sessions" {
+			switch {
+			case len(p) == 3 && r.Method == "GET":
+				items, err := a.accountSessions(uid)
+				if err != nil {
+					fail(w, 500, "sessions unavailable")
+					return
+				}
+				reply(w, 200, items)
+			case len(p) == 4 && r.Method == "DELETE":
+				a.endSession(w, r, s, p[3], "session.revoke")
+			default:
+				fail(w, 405, "method not allowed")
+			}
+			return
+		}
 		x := a.access(uid)
 		if len(p) == 3 && p[1] == "pipeline" && p[2] == "templates" && r.Method == "GET" {
 			reply(w, 200, pipeline.Templates())
@@ -422,7 +334,7 @@ func (a *Server) api() http.Handler {
 			a.detectAPI(w, r, x)
 			return
 		}
-		if a.accessAPI(w, r, p, uid, x) || a.systemAPI(w, r, p, uid, x) {
+		if a.activityAPI(w, r, p, x) || a.accessAPI(w, r, p, uid, x) || a.systemAPI(w, r, p, uid, x) {
 			return
 		}
 		kind := p[1]
@@ -460,7 +372,7 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		if len(p) == 4 && kind == "projects" && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" {
-			a.projectDeployAPI(w, r, old, p[3])
+			a.projectDeployAPI(w, r, old, uid, p[3])
 			return
 		}
 		if containers && len(p) == 4 && p[3] == "logs" {
@@ -517,6 +429,8 @@ func (a *Server) api() http.Handler {
 				fail(w, 500, e.Error())
 				return
 			}
+			workspace, project := x.scope(old)
+			a.auditRecord(r.Context(), uid, p[3], old, workspace, project)
 			reply(w, 202, d)
 			return
 		}
@@ -596,10 +510,14 @@ func (a *Server) api() http.Handler {
 				fail(w, 409, "delete workspace services and volumes first")
 				return
 			}
-			a.store.Delete(old)
+			workspace, project := x.scope(old)
+			if err := a.store.Delete(old); err != nil {
+				fail(w, 500, "delete failed")
+				return
+			}
+			a.auditRecord(r.Context(), uid, "delete", old, workspace, project)
 			if old.Kind == "workspaces" || old.Kind == "projects" {
 				a.removeScopeAccess(strings.TrimSuffix(old.Kind, "s"), old.ID)
-				a.audit(uid, strings.TrimSuffix(old.Kind, "s")+".delete", old.Name, strings.TrimSuffix(old.Kind, "s"), old.ID, map[string]string{"id": old.ID})
 			}
 			if old.Kind == "projects" {
 				a.detachProjectServices(old.ID)
@@ -798,7 +716,6 @@ func (a *Server) api() http.Handler {
 				a.grant(tx, uid, "administrator", scopeWorkspace, v.ID, uid)
 				tx.Commit()
 			}
-			a.audit(uid, "workspace.create", v.Name, scopeWorkspace, v.ID, map[string]string{"id": v.ID})
 		}
 		if kind == "projects" {
 			if e := migrateProjectSources(a.store); e != nil {
@@ -806,6 +723,12 @@ func (a *Server) api() http.Handler {
 				return
 			}
 		}
+		verb := "update"
+		if old.ID == "" {
+			verb = "create"
+		}
+		workspace, project := x.scope(v)
+		a.auditRecord(r.Context(), uid, verb, v, workspace, project)
 		a.refresh()
 		reply(w, 200, a.access(uid).publicRecord(v))
 	})
@@ -862,6 +785,7 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 			fail(w, 409, err.Error())
 			return
 		}
+		a.audit(r.Context(), "", "project.autodeploy", project.Name, scopeProject, project.ID, map[string]string{"release_id": d.ID})
 		reply(w, 202, publicRecord(d))
 		return
 	}
@@ -897,6 +821,7 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 		deployments = append(deployments, d)
 	}
 	if len(deployments) != 0 {
+		a.audit(r.Context(), "", "project.autodeploy", project.Name, scopeProject, project.ID, nil)
 		if target.Kind == "apps" {
 			reply(w, 202, deployments[0])
 		} else {

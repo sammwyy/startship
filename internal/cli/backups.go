@@ -144,18 +144,7 @@ func backupPolicy(a accessArgs) (map[string]any, error) {
 }
 
 func (c *cli) download(path string, out io.Writer) error {
-	server, client, err := c.transport()
-	if err != nil {
-		return err
-	}
-	r, err := http.NewRequest("GET", server+"/api/"+path, nil)
-	if err != nil {
-		return err
-	}
-	if c.Token != "" {
-		r.AddCookie(&http.Cookie{Name: "startship_session", Value: c.Token})
-	}
-	resp, err := client.Do(r)
+	resp, err := c.doAPI(http.MethodGet, path, nil)
 	if err != nil {
 		return err
 	}

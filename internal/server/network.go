@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,21 +28,6 @@ type networkRuntime struct {
 
 func migrateNetwork(s *Store) error {
 	_, err := s.DB.Exec("CREATE TABLE IF NOT EXISTS network_rules(id TEXT PRIMARY KEY, body TEXT NOT NULL)")
-	return err
-}
-
-func networkAudit(tx *sql.Tx, uid, action, target string, detail any) error {
-	actor := "network firewall"
-	if uid != "" {
-		if err := tx.QueryRow("SELECT username FROM users WHERE id=?", uid).Scan(&actor); err != nil {
-			return err
-		}
-	}
-	b, err := json.Marshal(detail)
-	if err != nil {
-		return err
-	}
-	_, err = tx.Exec("INSERT INTO audit_log(at,actor_id,actor,action,target,scope,scope_id,detail) VALUES(?,?,?,?,?,?,?,?)", nowStamp(), uid, actor, action, target, scopePlatform, "", string(b))
 	return err
 }
 
@@ -76,7 +60,7 @@ func (a *Server) networkManager() *netfw.Manager {
 }
 
 // Caller holds network.mu across storage and kernel publication.
-func (a *Server) publishNetwork(old, next []netfw.Rule, uid, action, target string) error {
+func (a *Server) publishNetwork(ctx context.Context, old, next []netfw.Rule, uid, action, target string) error {
 	tx, err := a.store.DB.Begin()
 	if err != nil {
 		return err
@@ -94,7 +78,8 @@ func (a *Server) publishNetwork(old, next []netfw.Rule, uid, action, target stri
 			return err
 		}
 	}
-	if err = networkAudit(tx, uid, action, target, next); err != nil {
+	scope := activityScope{kind: scopePlatform}
+	if err = writeAudit(tx, requestSession(ctx), uid, action, target, "network firewall", scope, next); err != nil {
 		return err
 	}
 	manager := a.networkManager()
@@ -106,6 +91,9 @@ func (a *Server) publishNetwork(old, next []netfw.Rule, uid, action, target stri
 		if rollback != nil {
 			err = errors.Join(err, fmt.Errorf("restore previous network rules: %w", rollback))
 		}
+	}
+	if err == nil {
+		a.publishActivity(uid, scope)
 	}
 	a.network.err = err
 	return err
@@ -121,7 +109,7 @@ func (a *Server) expireNetwork(rules []netfw.Rule) ([]netfw.Rule, error) {
 	if len(live) == len(rules) {
 		return rules, nil
 	}
-	if err := a.publishNetwork(rules, live, "", "network.rule.expire", ""); err != nil {
+	if err := a.publishNetwork(context.Background(), rules, live, "", "network.rule.expire", ""); err != nil {
 		return nil, err
 	}
 	return live, nil
@@ -308,7 +296,7 @@ func (a *Server) networkAPI(w http.ResponseWriter, r *http.Request, path []strin
 	}
 	// Never republish an expired entry during an unrelated mutation.
 	next = slices.DeleteFunc(next, func(rule netfw.Rule) bool { return rule.ExpiresAt != nil && !time.Now().Before(*rule.ExpiresAt) })
-	if err = a.publishNetwork(rules, next, uid, action, target); err != nil {
+	if err = a.publishNetwork(r.Context(), rules, next, uid, action, target); err != nil {
 		fail(w, 500, "network firewall: "+strings.TrimSpace(err.Error()))
 		return true
 	}

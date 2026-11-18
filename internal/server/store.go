@@ -13,5 +13,5 @@ var errInvalid = errors.New("invalid request")
 func randomID() string { return store.RandomID() }
 
 func openStore(path string) (*Store, error) {
-	return store.Open(path, migrateProjectSources, migrateAccess, migrateDomains, migrateProjectConfig, migrateCertificates, migrateServices, migrateFirewall, migrateNetwork, migrateBackups)
+	return store.Open(path, migrateProjectSources, migrateAccess, migrateAccount, migrateActivity, migrateDomains, migrateProjectConfig, migrateCertificates, migrateServices, migrateFirewall, migrateNetwork, migrateBackups)
 }

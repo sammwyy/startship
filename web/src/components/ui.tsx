@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { Icon } from "./Icon";
+import { setThemePreference, useAppliedTheme } from "../lib/theme";
 
 export function Field({
   label,
@@ -89,31 +90,13 @@ export function AsyncForm({
   );
 }
 export function ThemeButton() {
-  const [theme, setTheme] = useState(
-    document.documentElement.dataset.theme || "dark",
-  );
-  const next = theme === "light" ? "dark" : "light";
-  useEffect(() => {
-    const sync = () =>
-      setTheme(document.documentElement.dataset.theme || "dark");
-    window.addEventListener("theme-changed", sync);
-    return () => window.removeEventListener("theme-changed", sync);
-  }, []);
+  const next = useAppliedTheme() === "light" ? "dark" : "light";
   return (
     <button
       type="button"
       className="theme-toggle"
       aria-label={`Switch to ${next} theme`}
-      onClick={() => {
-        document.documentElement.dataset.theme = next;
-        setTheme(next);
-        window.dispatchEvent(new Event("theme-changed"));
-        try {
-          localStorage.setItem("startship-theme", next);
-        } catch {
-          /* Theme remains usable without storage. */
-        }
-      }}
+      onClick={() => setThemePreference(next)}
     >
       <Icon name={next === "light" ? "sun" : "moon"} />
       <span>{next === "light" ? "Light" : "Dark"}</span>

@@ -8,8 +8,14 @@ export class ApiError extends Error {
 }
 let sessionRevision = 0;
 let rotatingCredentials = false;
+let renewal: {
+  controller: AbortController;
+  promise: Promise<boolean>;
+} | null = null;
 export function beginSessionChange() {
   sessionRevision++;
+  renewal?.controller.abort();
+  renewal = null;
 }
 export function setCredentialRotation(value: boolean) {
   rotatingCredentials = value;
@@ -19,6 +25,27 @@ export function setCredentialRotation(value: boolean) {
   );
 }
 
+export function refreshAccess(): Promise<boolean> {
+  if (renewal) return renewal.promise;
+  const controller = new AbortController();
+  const promise = fetch("/api/refresh", {
+    method: "POST",
+    credentials: "same-origin",
+    signal: controller.signal,
+  })
+    .then((response) => {
+      if (response.status === 401) return false;
+      if (!response.ok)
+        throw new ApiError("Could not renew access", response.status);
+      return true;
+    })
+    .finally(() => {
+      if (renewal?.controller === controller) renewal = null;
+    });
+  renewal = { controller, promise };
+  return promise;
+}
+
 export async function request<T>(
   path: string,
   body?: unknown,
@@ -26,20 +53,38 @@ export async function request<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const revision = sessionRevision;
-  const response = await fetch(`/api/${path}`, {
-    method,
-    credentials: "same-origin",
-    signal,
-    headers:
-      body === undefined ? undefined : { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const send = () =>
+    fetch(`/api/${path}`, {
+      method,
+      credentials: "same-origin",
+      signal,
+      headers:
+        body === undefined ? undefined : { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  let response = await send();
+  const protectedRequest = !["login", "setup", "logout", "refresh"].includes(
+    path,
+  );
+  const mayRenew =
+    protectedRequest &&
+    revision === sessionRevision &&
+    (!rotatingCredentials || (path === "me" && method === "PATCH"));
+  if (response.status === 401 && mayRenew && !signal?.aborted) {
+    if (await refreshAccess()) {
+      if (revision !== sessionRevision || signal?.aborted)
+        throw new DOMException("Request cancelled", "AbortError");
+      response = await send();
+    }
+  }
   const data = response.status === 204 ? undefined : await response.json();
   if (!response.ok) {
     if (
       response.status === 401 &&
       revision === sessionRevision &&
-      !rotatingCredentials
+      protectedRequest &&
+      !rotatingCredentials &&
+      !signal?.aborted
     )
       window.dispatchEvent(new Event("session-expired"));
     throw new ApiError(data?.error || "Request failed", response.status);

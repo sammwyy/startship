@@ -434,7 +434,7 @@ func (a *Server) activateProject(projectID, releaseID string, containers []Recor
 	return nil
 }
 
-func (a *Server) projectDeployAPI(w http.ResponseWriter, r *http.Request, p Record, action string) {
+func (a *Server) projectDeployAPI(w http.ResponseWriter, r *http.Request, p Record, uid, action string) {
 	var options struct {
 		NoCache      bool   `json:"no_cache"`
 		DeploymentID string `json:"deployment_id"`
@@ -469,6 +469,7 @@ func (a *Server) projectDeployAPI(w http.ResponseWriter, r *http.Request, p Reco
 		fail(w, 409, err.Error())
 		return
 	}
+	a.audit(r.Context(), uid, "project."+action, p.Name, scopeProject, p.ID, map[string]string{"release_id": d.ID})
 	reply(w, 202, publicRecord(d))
 }
 

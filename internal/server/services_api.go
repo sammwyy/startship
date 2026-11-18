@@ -192,7 +192,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				fail(w, 500, "save failed")
 				return true
 			}
-			a.audit(uid, "service.create", s.ID, scopeWorkspace, ws.ID, nil)
+			a.audit(r.Context(), uid, "service.create", s.ID, scopeWorkspace, ws.ID, nil)
 			a.launchService(s.ID, "recreate")
 			reply(w, 201, s)
 		} else {
@@ -222,7 +222,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				fail(w, 500, "save failed")
 				return true
 			}
-			a.audit(uid, "volume.create", v.ID, scopeWorkspace, ws.ID, nil)
+			a.audit(r.Context(), uid, "volume.create", v.ID, scopeWorkspace, ws.ID, nil)
 			a.notifyProject(v.ProjectID)
 			reply(w, 201, v)
 		}
@@ -276,7 +276,12 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				fail(w, 500, "save failed")
 				return true
 			}
-			a.audit(uid, "volume.attach", v.ID, scopeWorkspace, v.WorkspaceID, nil)
+			if old != "" && old != v.ProjectID {
+				a.audit(r.Context(), uid, "volume.detach", v.Name, scopeProject, old, nil)
+			}
+			if v.ProjectID != "" {
+				a.audit(r.Context(), uid, "volume.attach", v.Name, scopeProject, v.ProjectID, nil)
+			}
 			a.notifyProject(old)
 			a.notifyProject(v.ProjectID)
 			reply(w, 200, v)
@@ -294,7 +299,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				return true
 			}
 			a.deleteResource("volumes", v.ID, v.WorkspaceID)
-			a.audit(uid, "volume.delete", v.ID, scopeWorkspace, v.WorkspaceID, nil)
+			a.audit(r.Context(), uid, "volume.delete", v.ID, scopeWorkspace, v.WorkspaceID, nil)
 			reply(w, 200, map[string]bool{"ok": true})
 		default:
 			fail(w, 405, "method not allowed")
@@ -364,6 +369,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				return true
 			}
 			a.launchService(s.ID, "recreate")
+			a.audit(r.Context(), uid, "service.update", s.Name, scopeWorkspace, s.WorkspaceID, nil)
 			reply(w, 200, s)
 		case "DELETE":
 			_, existsErr := a.serviceDocker("container", "inspect", serviceContainer(s.ID))
@@ -397,7 +403,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 			for _, at := range s.Attachments {
 				a.notifyProject(at.ProjectID)
 			}
-			a.audit(uid, "service.delete", s.ID, scopeWorkspace, s.WorkspaceID, nil)
+			a.audit(r.Context(), uid, "service.delete", s.ID, scopeWorkspace, s.WorkspaceID, nil)
 			reply(w, 200, map[string]bool{"ok": true})
 		default:
 			fail(w, 405, "method not allowed")
@@ -423,10 +429,11 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 	}
 	if len(p) == 4 && (p[3] == "start" || p[3] == "stop" || p[3] == "restart") && r.Method == "POST" {
 		a.launchService(s.ID, p[3])
+		a.audit(r.Context(), uid, "service."+p[3], s.Name, scopeWorkspace, s.WorkspaceID, nil)
 		reply(w, 202, map[string]bool{"ok": true})
 		return true
 	}
-	if p[3] == "attachments" {
+	if len(p) >= 4 && p[3] == "attachments" {
 		var at Attachment
 		if len(p) == 4 && r.Method == "POST" {
 			if decode(w, r, &at) != nil || !serviceName.MatchString(at.Alias) {
@@ -477,7 +484,11 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 			return true
 		}
 		a.notifyProject(at.ProjectID)
-		a.audit(uid, "service.attach", s.ID, scopeWorkspace, s.WorkspaceID, at)
+		action := "service.attach"
+		if at.Alias == "" {
+			action = "service.detach"
+		}
+		a.audit(r.Context(), uid, action, s.Name, scopeProject, at.ProjectID, at)
 		reply(w, 200, s)
 		return true
 	}

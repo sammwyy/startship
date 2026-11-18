@@ -135,7 +135,7 @@ func (a *Server) domainsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 			fail(w, 409, d.Name+" is already claimed")
 			return
 		}
-		a.audit(uid, "domain.create", d.Name, scopeWorkspace, ws.ID, map[string]bool{"apex": d.Apex, "subdomains": d.Subdomains})
+		a.audit(r.Context(), uid, "domain.create", d.Name, scopeWorkspace, ws.ID, map[string]bool{"apex": d.Apex, "subdomains": d.Subdomains})
 		reply(w, 201, d)
 	case len(p) == 5 && r.Method == "DELETE":
 		if !manage {
@@ -159,7 +159,7 @@ func (a *Server) domainsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 			}
 		}
 		a.store.DB.Exec("DELETE FROM workspace_domains WHERE id=?", d.ID)
-		a.audit(uid, "domain.delete", d.Name, scopeWorkspace, ws.ID, nil)
+		a.audit(r.Context(), uid, "domain.delete", d.Name, scopeWorkspace, ws.ID, nil)
 		reply(w, 200, map[string]bool{"ok": true})
 	default:
 		fail(w, 405, "method not allowed")

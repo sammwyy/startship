@@ -212,11 +212,32 @@ export const router = createHashRouter([
               Component: (await import("./views/access/AuditView")).AuditView,
             }),
           },
+          {
+            path: "account/:section?",
+            lazy: async () => ({
+              Component: (await import("./views/access/AccountView"))
+                .AccountView,
+            }),
+          },
+          {
+            path: "workspace/:workspaceId/activity",
+            lazy: async () => ({
+              Component: (await import("./views/access/ActivityView"))
+                .ActivityView,
+            }),
+          },
           { path: "app/:containerId/:section?", element: <LegacyContainer /> },
           {
             path: "project/:projectId",
             element: <ProjectLayout />,
             children: [
+              {
+                path: "activity",
+                lazy: async () => ({
+                  Component: (await import("./views/access/ActivityView"))
+                    .ActivityView,
+                }),
+              },
               { index: true, element: <Navigate to="overview" replace /> },
               {
                 path: "overview",

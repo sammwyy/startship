@@ -174,7 +174,7 @@ func (a *Server) certificatesAPI(w http.ResponseWriter, r *http.Request, p []str
 			if _, err := a.store.DB.Exec("INSERT INTO settings VALUES('acme',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", string(b)); err != nil {
 				fail(w, 500, "save failed")
 			} else {
-				a.audit(uid, "acme.settings", "ACME settings", scopePlatform, "", nil)
+				a.audit(r.Context(), uid, "acme.settings", "ACME settings", scopePlatform, "", nil)
 				reply(w, 200, s)
 			}
 		default:
@@ -251,7 +251,7 @@ func (a *Server) certificatesAPI(w http.ResponseWriter, r *http.Request, p []str
 			if c.Source == "acme" {
 				a.startIssuance(c.ID)
 			}
-			a.audit(uid, "certificate.create", c.ID, scopeWorkspace, ws.ID, nil)
+			a.audit(r.Context(), uid, "certificate.create", c.ID, scopeWorkspace, ws.ID, nil)
 			reply(w, 201, c)
 		default:
 			fail(w, 405, "method not allowed")
@@ -284,7 +284,7 @@ func (a *Server) certificatesAPI(w http.ResponseWriter, r *http.Request, p []str
 			return true
 		}
 		a.store.Notify(Record{ID: c.ID, Kind: "certificates", WorkspaceID: ws.ID})
-		a.audit(uid, "certificate.delete", c.ID, scopeWorkspace, ws.ID, nil)
+		a.audit(r.Context(), uid, "certificate.delete", c.ID, scopeWorkspace, ws.ID, nil)
 		reply(w, 200, map[string]bool{"ok": true})
 	case len(p) == 6 && p[5] == "renew" && r.Method == "POST":
 		if c.Source != "acme" {
@@ -295,7 +295,7 @@ func (a *Server) certificatesAPI(w http.ResponseWriter, r *http.Request, p []str
 			fail(w, 409, "certificate is issuing")
 			return true
 		}
-		a.audit(uid, "certificate.renew", c.ID, scopeWorkspace, ws.ID, nil)
+		a.audit(r.Context(), uid, "certificate.renew", c.ID, scopeWorkspace, ws.ID, nil)
 		reply(w, 202, map[string]string{"status": "issuing"})
 	default:
 		fail(w, 405, "method not allowed")

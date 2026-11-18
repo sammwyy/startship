@@ -161,7 +161,7 @@ func (a *Server) rolesAPI(w http.ResponseWriter, r *http.Request, p []string, ui
 			fail(w, 500, "delete failed")
 			return
 		}
-		a.audit(uid, "role.delete", old.Name, scopePlatform, "", map[string]any{"role_id": old.ID, "members": old.Members})
+		a.audit(r.Context(), uid, "role.delete", old.Name, scopePlatform, "", map[string]any{"role_id": old.ID, "members": old.Members})
 		reply(w, 200, map[string]bool{"ok": true})
 		return
 	}
@@ -241,7 +241,7 @@ func (a *Server) rolesAPI(w http.ResponseWriter, r *http.Request, p []string, ui
 	} else if v.CloneOf != "" {
 		detail["clone_of"] = v.CloneOf
 	}
-	a.audit(uid, action, next.Name, scopePlatform, "", detail)
+	a.audit(r.Context(), uid, action, next.Name, scopePlatform, "", detail)
 	reply(w, 200, a.roles()[next.ID])
 }
 
@@ -304,7 +304,7 @@ func (a *Server) usersAPI(w http.ResponseWriter, r *http.Request, p []string, ui
 			fail(w, status, err.Error())
 			return
 		}
-		a.audit(uid, "user.create", strings.TrimSpace(v.Username), scopePlatform, "", map[string]any{"user_id": id})
+		a.audit(r.Context(), uid, "user.create", strings.TrimSpace(v.Username), scopePlatform, "", map[string]any{"user_id": id})
 		reply(w, 201, map[string]string{"id": id, "username": strings.TrimSpace(v.Username)})
 		return
 	}
@@ -353,7 +353,7 @@ func (a *Server) usersAPI(w http.ResponseWriter, r *http.Request, p []string, ui
 			}
 			changes = append(changes, "password")
 		}
-		a.audit(uid, "user.update", name, scopePlatform, "", map[string]any{"user_id": target, "changed": changes})
+		a.audit(r.Context(), uid, "user.update", name, scopePlatform, "", map[string]any{"user_id": target, "changed": changes})
 		reply(w, 200, map[string]string{"id": target, "username": name})
 	case "DELETE":
 		if target == uid {
@@ -382,7 +382,8 @@ func (a *Server) usersAPI(w http.ResponseWriter, r *http.Request, p []string, ui
 			fail(w, 500, "delete failed")
 			return
 		}
-		a.audit(uid, "user.delete", name, scopePlatform, "", map[string]any{"user_id": target})
+		a.audit(r.Context(), uid, "user.delete", name, scopePlatform, "", map[string]any{"user_id": target})
+		a.publishAccount(target)
 		reply(w, 200, map[string]bool{"ok": true})
 	default:
 		fail(w, 405, "method not allowed")
@@ -437,7 +438,7 @@ func (a *Server) assignmentsAPI(w http.ResponseWriter, r *http.Request, p []stri
 			fail(w, 500, "save failed")
 			return
 		}
-		a.audit(uid, "assignment.create", a.username(v.UserID)+" → "+role.Name, v.Scope, v.ScopeID, map[string]any{"assignment_id": id, "user_id": v.UserID, "role_id": role.ID})
+		a.audit(r.Context(), uid, "assignment.create", a.username(v.UserID)+" → "+role.Name, v.Scope, v.ScopeID, map[string]any{"assignment_id": id, "user_id": v.UserID, "role_id": role.ID})
 		reply(w, 201, a.assignments("a.id=?", id)[0])
 	case r.Method == "DELETE" && len(p) == 3:
 		a.store.Lock()
@@ -458,7 +459,7 @@ func (a *Server) assignmentsAPI(w http.ResponseWriter, r *http.Request, p []stri
 			return
 		}
 		a.store.DB.Exec("DELETE FROM role_assignments WHERE id=?", v.ID)
-		a.audit(uid, "assignment.delete", v.Username+" → "+role.Name, v.Scope, v.ScopeID, map[string]any{"assignment_id": v.ID, "user_id": v.UserID, "role_id": role.ID})
+		a.audit(r.Context(), uid, "assignment.delete", v.Username+" → "+role.Name, v.Scope, v.ScopeID, map[string]any{"assignment_id": v.ID, "user_id": v.UserID, "role_id": role.ID})
 		reply(w, 200, map[string]bool{"ok": true})
 	default:
 		fail(w, 405, "method not allowed")
@@ -525,7 +526,7 @@ func (a *Server) overridesAPI(w http.ResponseWriter, r *http.Request, uid string
 	target := v.SubjectType + " " + subject
 	if len(v.Allow) == 0 && len(v.Deny) == 0 {
 		a.store.DB.Exec("DELETE FROM permission_overrides WHERE scope=? AND scope_id=? AND subject_type=? AND subject_id=?", v.Scope, v.ScopeID, v.SubjectType, v.SubjectID)
-		a.audit(uid, "override.delete", target, v.Scope, v.ScopeID, map[string]any{"subject_type": v.SubjectType, "subject_id": v.SubjectID})
+		a.audit(r.Context(), uid, "override.delete", target, v.Scope, v.ScopeID, map[string]any{"subject_type": v.SubjectType, "subject_id": v.SubjectID})
 		reply(w, 200, map[string]bool{"ok": true})
 		return
 	}
@@ -535,62 +536,27 @@ func (a *Server) overridesAPI(w http.ResponseWriter, r *http.Request, uid string
 		fail(w, 500, "save failed")
 		return
 	}
-	a.audit(uid, "override.update", target, v.Scope, v.ScopeID, map[string]any{"subject_type": v.SubjectType, "subject_id": v.SubjectID, "allow": v.Allow, "deny": v.Deny})
+	a.audit(r.Context(), uid, "override.update", target, v.Scope, v.ScopeID, map[string]any{"subject_type": v.SubjectType, "subject_id": v.SubjectID, "allow": v.Allow, "deny": v.Deny})
 	reply(w, 200, v)
 }
 
 func (a *Server) auditAPI(w http.ResponseWriter, r *http.Request, x *access) {
-	q := r.URL.Query()
-	scopes := []any{}
-	if !x.platform("audit.view") {
-		wid := q.Get("workspace_id")
-		if wid == "" || !x.at(wid, "")["members.manage"] {
+	if r.Method != "GET" {
+		fail(w, 405, "method not allowed")
+		return
+	}
+	wid := r.URL.Query().Get("workspace_id")
+	if wid == "" {
+		if !x.platform("audit.view") {
 			forbidden(w)
 			return
 		}
-		scopes = append(scopes, wid)
-		for _, p := range a.store.List("projects", "") {
-			if projectWorkspace(p) == wid {
-				scopes = append(scopes, p.ID)
-			}
-		}
-	} else if wid := q.Get("workspace_id"); wid != "" {
-		scopes = append(scopes, wid)
-		for _, p := range a.store.List("projects", "") {
-			if projectWorkspace(p) == wid {
-				scopes = append(scopes, p.ID)
-			}
-		}
-	}
-	query := "SELECT id,at,actor_id,actor,action,target,scope,scope_id,detail FROM audit_log"
-	if len(scopes) > 0 {
-		query += " WHERE scope_id IN (" + strings.TrimSuffix(strings.Repeat("?,", len(scopes)), ",") + ")"
-	}
-	rows, err := a.store.DB.Query(query+" ORDER BY id DESC LIMIT 500", scopes...)
-	if err != nil {
-		fail(w, 500, "audit log unavailable")
+		a.replyActivity(w, scopePlatform, "", true)
 		return
 	}
-	defer rows.Close()
-	type entry struct {
-		ID      int             `json:"id"`
-		At      string          `json:"at"`
-		ActorID string          `json:"actor_id"`
-		Actor   string          `json:"actor"`
-		Action  string          `json:"action"`
-		Target  string          `json:"target"`
-		Scope   string          `json:"scope"`
-		ScopeID string          `json:"scope_id"`
-		Detail  json.RawMessage `json:"detail"`
+	if !x.platform("audit.view") && !x.at(wid, "")["members.manage"] {
+		forbidden(w)
+		return
 	}
-	out := []entry{}
-	for rows.Next() {
-		var e entry
-		var detail string
-		if rows.Scan(&e.ID, &e.At, &e.ActorID, &e.Actor, &e.Action, &e.Target, &e.Scope, &e.ScopeID, &detail) == nil {
-			e.Detail = json.RawMessage(detail)
-			out = append(out, e)
-		}
-	}
-	reply(w, 200, out)
+	a.replyActivity(w, scopeWorkspace, wid, true)
 }
