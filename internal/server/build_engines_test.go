@@ -67,6 +67,10 @@ func TestNixpacksVariables(t *testing.T) {
 }
 
 func TestEngineImageCommands(t *testing.T) {
+	stage := engineStageDockerfile("node:22-alpine")
+	if !strings.Contains(stage, "FROM node:22-alpine") || !strings.Contains(stage, "COPY app/ /app/") || strings.Contains(stage, "ENTRYPOINT") || strings.Contains(stage, "CMD") {
+		t.Fatal("stage image must retain its base start command", stage)
+	}
 	for _, engine := range []string{"nixpacks", "buildpacks"} {
 		p := &pipeline.Pipeline{Build: pipeline.Build{Engine: engine}}
 		for _, custom := range []bool{false, true} {

@@ -114,6 +114,11 @@
 .pipeline-editor-tabs .pipeline-stage-body > .split {
   display: contents;
 }
+.pipeline-editor-tabs .pipeline-engine-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: subgrid;
+}
 @media (max-width: 600px) {
   .settings-navigation.pipeline-tabs {
     display: grid;

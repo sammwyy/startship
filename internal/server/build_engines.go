@@ -303,11 +303,15 @@ func engineStageImage(root string, out io.Writer, projectID, built, image, base,
 	if err = command("", out, "docker", "cp", container+":"+source+"/.", filepath.Join(stage, "app")); err != nil {
 		return err
 	}
-	content := fmt.Sprintf("FROM %s\nWORKDIR /app\nCOPY app/ /app/\nENTRYPOINT []\n", base)
+	content := engineStageDockerfile(base)
 	if err = os.WriteFile(filepath.Join(stage, "Dockerfile"), []byte(content), 0600); err != nil {
 		return err
 	}
 	return buildImage(stage, out, projectID, image, imageBuild{Dockerfile: "Dockerfile"})
+}
+
+func engineStageDockerfile(base string) string {
+	return fmt.Sprintf("FROM %s\nWORKDIR /app\nCOPY app/ /app/\n", base)
 }
 
 func engineCommand(p *pipeline.Pipeline, image, command string, customImage bool) []string {

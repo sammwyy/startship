@@ -61,6 +61,10 @@ Test and Deploy settings still apply. The generated engine image retains its sta
 command unless `deploy.command` overrides it. Build fields are retained so switching
 back to Docker restores them.
 
+In Auto with a non-Docker engine, detection supplies container roots and the
+default port, not Docker-template runtime images/commands. Project Test and
+Deploy overrides still apply; otherwise the engine supplies the runtime.
+
 Nixpacks **1.41.0** is installed on the daemon host by `install.sh`, and bundled
 in the daemon Docker image (checksum-verified musl binaries for amd64/arm64).
 For a manually built daemon, download

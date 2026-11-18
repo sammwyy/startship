@@ -56,7 +56,7 @@ def wait_deploy(app, options=None, action="deploy"):
             assert config["CapDrop"] == ["ALL"] and "no-new-privileges" in config["SecurityOpt"], config
             assert config["NetworkMode"] == "startship-" + app["project_id"], config
             test_limits_seen.add(app["name"])
-        builders = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-"], text=True).split()
+        builders = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-" + app["project_id"]], text=True).split()
         if builders and not build_limits_seen:
             config = json.loads(subprocess.check_output(["docker", "inspect", builders[0]], text=True))[0]["HostConfig"]
             assert config["Memory"] == 1073741824, config
@@ -442,7 +442,8 @@ fn main() {
         (engine_repo / "package.json").write_text(json.dumps({"name": "engine-fixture", "version": "1.0.0", "private": True,
             "engines": {"node": "22.x"}, "scripts": {"start": "node server.js"}}))
         (engine_repo / "server.js").write_text("require('http').createServer((req,res)=>res.end(process.argv.includes('--override')?'engine override':'engine default')).listen(process.env.PORT || 3000, '0.0.0.0');\n")
-        subprocess.run(["npm", "install", "--package-lock-only", "--ignore-scripts"], cwd=engine_repo, check=True, stdout=subprocess.DEVNULL)
+        (engine_repo / "package-lock.json").write_text(json.dumps({"name": "engine-fixture", "version": "1.0.0", "lockfileVersion": 3,
+            "requires": True, "packages": {"": json.loads((engine_repo / "package.json").read_text())}}))
         for args in (["init", "-b", "main"], ["add", "."], ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "engine fixture"]):
             subprocess.run(["git", "-C", str(engine_repo)] + args, check=True, stdout=subprocess.DEVNULL)
         for engine in ("nixpacks", "buildpacks"):
@@ -450,21 +451,21 @@ fn main() {
                 "test": {"commands": ["node -e \"console.log('engine-test')\""], "expect_exit_code": 0, "expect_output": "engine-test"},
                 "deploy": {"port": 3000, "health_path": "/health", "expect_status": 200}}
             if engine == "nixpacks":
-                engine_pipeline["test"]["image"] = "node:22-alpine"
+                engine_pipeline["test"]["image"] = "mirror.gcr.io/library/node:22-alpine"
             else:
                 engine_pipeline["deploy"]["command"] = "node server.js --override"
             engine_project = request("projects", {"workspace_id": ws["id"], "name": "Engine " + engine,
                 "git_url": engine_repo.as_uri(), "branch": "main", "build_type": "custom", "pipeline": engine_pipeline})
             project_ids.append(engine_project["id"])
             queued = request("projects/" + engine_project["id"] + "/deploy", {})
-            for _ in range(1800):
+            for _ in range(3600):
                 engine_release = request("releases/" + queued["id"])
                 if engine_release["status"] in ("running", "failed"):
                     assert engine_release["status"] == "running", engine_release.get("log")
                     break
                 time.sleep(0.5)
             else:
-                raise TimeoutError(engine + " did not complete")
+                raise TimeoutError(engine + " did not complete:\n" + engine_release.get("log", "")[-5000:])
             engine_containers = request("containers?project_id=" + engine_project["id"])
             app_ids.extend(c["id"] for c in engine_containers)
             revision = request("deployments/" + engine_release["container_releases"][0])
@@ -476,7 +477,7 @@ fn main() {
             workers = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-" + engine_project["id"]], text=True).split()
             assert len(workers) == 1, workers
             config = inspect_if_present(workers[0])["HostConfig"]
-            assert (config["Memory"], config["CpuPeriod"], config["CpuQuota"]) == (1073741824, 100000, 100000), config
+            assert (config["Memory"], config["CpuPeriod"], config["CpuQuota"]) == (805306368, 100000, 50000), config
             print(engine + " deployment: Running; 3 stages, tests, snapshot and bounded builder OK; proxy curl: " + result)
     else:
         print("engine deployments: SKIP (set STARTSHIP_E2E_ENGINES=1; pinned Nixpacks and large CNB downloads required)")

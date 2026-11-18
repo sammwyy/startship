@@ -40,9 +40,12 @@ function stageValues(p: Pipeline, tab: (typeof tabs)[number], auto: boolean) {
   const { build, test, deploy } = clean(p);
   switch (tab) {
     case "build":
-      return auto
-        ? []
-        : [build.image || "", build.dockerfile || "", build.commands || []];
+      return [
+        build.engine || "docker",
+        ...(!auto && (!build.engine || build.engine === "docker")
+          ? [build.image || "", build.dockerfile || "", build.commands || []]
+          : []),
+      ];
     case "test":
       return [
         test.image || "",
@@ -372,7 +375,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             className="pipeline-stage"
           >
             <fieldset disabled={!editable} className="pipeline-stage-body">
-              <div className="split">
+              <div className="pipeline-engine-row">
                 <label>
                   Engine
                   <select

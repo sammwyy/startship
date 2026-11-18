@@ -117,6 +117,50 @@ func commitProjectFixture(t *testing.T, repo string) {
 	}
 }
 
+func TestExternalEngineIgnoresDockerfilePort(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "source")
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "ignored"), []byte("EXPOSE 9999\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, engine := range []string{"nixpacks", "buildpacks"} {
+		p := &pipeline.Pipeline{Build: pipeline.Build{Engine: engine, Dockerfile: "../ignored"}}
+		candidate, err := resolvedCandidate(dir, ".", "dockerfile", Record{BuildType: "dockerfile", Pipeline: p})
+		if err != nil || candidate.Port != 0 {
+			t.Fatal(candidate, err)
+		}
+	}
+}
+
+func TestAutoEngineUsesEngineRuntime(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module engine-test\n\ngo 1.26\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, engine := range []string{"nixpacks", "buildpacks"} {
+		p := &pipeline.Pipeline{Build: pipeline.Build{Engine: engine}, Test: pipeline.Test{Commands: []string{"echo test"}}}
+		candidates, err := projectCandidates(dir, Record{RootDir: ".", BuildType: "auto", Pipeline: p})
+		if err != nil || len(candidates) != 1 {
+			t.Fatal(candidates, err)
+		}
+		resolved := candidates[0].Pipeline
+		if resolved.Deploy.Image != "" || resolved.Deploy.Command != "" || resolved.Deploy.Artifact != "" || resolved.Deploy.Static || resolved.Deploy.Port != 8080 || len(resolved.Test.Commands) != 1 {
+			t.Fatal("engine runtime replaced by Docker template defaults", resolved)
+		}
+		p.Deploy = pipeline.Deploy{Image: "alpine:3.23", Artifact: "dist", Command: "custom --serve", Port: 9090, HealthPath: "/health", ExpectStatus: 204, HealthTimeout: 15}
+		candidates, err = projectCandidates(dir, Record{RootDir: ".", BuildType: "auto", Pipeline: p})
+		if err != nil || len(candidates) != 1 {
+			t.Fatal(candidates, err)
+		}
+		if candidates[0].Pipeline.Deploy != p.Deploy {
+			t.Fatal("lost project Deploy overrides", candidates[0].Pipeline)
+		}
+	}
+}
+
 func TestProjectDeploymentSwitchesContainersTogether(t *testing.T) {
 	a := testServer(t)
 	repo := t.TempDir()

@@ -92,6 +92,9 @@ describe("project pipeline", () => {
       });
       expect(screen.queryByLabelText("Build image")).not.toBeInTheDocument();
       expect(screen.queryByLabelText("Build commands")).not.toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /1 Build/ })).toHaveTextContent(
+        "Modified",
+      );
       fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
       fireEvent.change(screen.getByLabelText("Test commands"), {
         target: { value: "echo engine-test" },
