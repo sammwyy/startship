@@ -155,6 +155,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
     [hasDetected, setHasDetected] = useState(false),
     [detectError, setDetectError] = useState<unknown>();
   const auto = strategy === "auto",
+    engine = pipeline.build.engine || "docker",
     staticServing = !auto && !!pipeline.deploy.static,
     current =
       strategy === "auto"
@@ -371,7 +372,36 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             className="pipeline-stage"
           >
             <fieldset disabled={!editable} className="pipeline-stage-body">
-              {auto ? (
+              <div className="split">
+                <label>
+                  Engine
+                  <select
+                    value={engine}
+                    onChange={(event) =>
+                      stage("build", {
+                        engine: event.target
+                          .value as Pipeline["build"]["engine"],
+                      })
+                    }
+                  >
+                    <option value="docker">Dockerfile</option>
+                    <option value="nixpacks">Nixpacks</option>
+                    <option value="buildpacks">Buildpacks</option>
+                  </select>
+                </label>
+              </div>
+              {engine !== "docker" ? (
+                <div className="pipeline-auto-note">
+                  <TemplateIcon
+                    slug={engine === "nixpacks" ? "nixos" : "cncf"}
+                  />
+                  <p className="small muted">
+                    {engine === "nixpacks"
+                      ? "Nixpacks detects and builds your app; its start command is kept unless overridden in Deploy."
+                      : "Paketo Buildpacks detects and builds your app into a container using the bounded build worker."}
+                  </p>
+                </div>
+              ) : auto ? (
                 <DetectedNote />
               ) : (
                 <>
@@ -421,7 +451,13 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             className="pipeline-stage"
           >
             <fieldset disabled={!editable} className="pipeline-stage-body">
-              {pipeline.build.dockerfile && !auto ? (
+              {engine !== "docker" ? (
+                <p className="small muted">
+                  Tests run in the built container by default. A separate test
+                  image receives the application files.
+                </p>
+              ) : null}
+              {engine === "docker" && pipeline.build.dockerfile && !auto ? (
                 <p className="small muted">
                   Tests run in the Dockerfile’s final image.
                 </p>
@@ -475,7 +511,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             <fieldset disabled={!editable} className="pipeline-stage-body">
               {auto ? (
                 <DetectedNote />
-              ) : pipeline.build.dockerfile ? (
+              ) : engine === "docker" && pipeline.build.dockerfile ? (
                 <p className="small muted">
                   Runtime image and start command come from your Dockerfile.
                 </p>

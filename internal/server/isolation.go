@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -133,15 +134,40 @@ func removeProjectBuilders(projectID, keep string, out io.Writer) {
 	}
 }
 
-func buildArgs(builder, image, dockerfile string, noCache bool) []string {
-	args := []string{"buildx", "build", "--builder", builder, "--load", "--progress", "plain", "-t", image, "-f", dockerfile}
-	if noCache {
+type imageBuild struct {
+	Dockerfile string
+	Target     string
+	Output     string
+	NoCache    bool
+	Args       map[string]string
+}
+
+func buildArgs(builder, image string, options imageBuild) []string {
+	args := []string{"buildx", "build", "--builder", builder}
+	if options.Output == "" {
+		args = append(args, "--load")
+	} else {
+		args = append(args, "--output", options.Output)
+	}
+	args = append(args, "--progress", "plain", "-t", image, "-f", options.Dockerfile)
+	if options.NoCache {
 		args = append(args, "--no-cache")
+	}
+	if options.Target != "" {
+		args = append(args, "--target", options.Target)
+	}
+	keys := make([]string, 0, len(options.Args))
+	for key := range options.Args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		args = append(args, "--build-arg", key+"="+options.Args[key])
 	}
 	return append(args, ".")
 }
 
-func buildImage(root string, out io.Writer, projectID, image, dockerfile string, noCache bool, target string) error {
+func buildImage(root string, out io.Writer, projectID, image string, options imageBuild) error {
 	builder, opts, err := buildConfig(projectID)
 	if err != nil {
 		return err
@@ -159,9 +185,6 @@ func buildImage(root string, out io.Writer, projectID, image, dockerfile string,
 		}
 	}
 	defer command("", out, "docker", "buildx", "prune", "--builder", builder, "--max-used-space", limitEnv("STARTSHIP_BUILD_CACHE", "5g"), "--reserved-space", "0", "-f")
-	args := buildArgs(builder, image, dockerfile, noCache)
-	if target != "" {
-		args = append(args[:len(args)-1], "--target", target, ".")
-	}
+	args := buildArgs(builder, image, options)
 	return command(root, out, "docker", args...)
 }

@@ -82,6 +82,67 @@ function show(entry = "/") {
   );
 }
 describe("project pipeline", () => {
+  it.each(["nixpacks", "buildpacks"] as const)(
+    "selects %s without changing the strategy or test/deploy settings",
+    async (engine) => {
+      state.project.build_type = "go";
+      show();
+      fireEvent.change(await screen.findByLabelText("Engine"), {
+        target: { value: engine },
+      });
+      expect(screen.queryByLabelText("Build image")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Build commands")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
+      fireEvent.change(screen.getByLabelText("Test commands"), {
+        target: { value: "echo engine-test" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+      await waitFor(() =>
+        expect(state.request).toHaveBeenCalledWith(
+          "projects/p1",
+          expect.objectContaining({
+            build_type: "go",
+            pipeline: expect.objectContaining({
+              build: expect.objectContaining({ engine }),
+              test: expect.objectContaining({ commands: ["echo engine-test"] }),
+              deploy: expect.objectContaining({ port: 8080 }),
+            }),
+          }),
+          "PATCH",
+        ),
+      );
+      fireEvent.click(screen.getByRole("tab", { name: /1 Build/ }));
+      fireEvent.change(screen.getByLabelText("Engine"), {
+        target: { value: "docker" },
+      });
+      expect(screen.getByLabelText("Build image")).toHaveValue("golang:1.26");
+    },
+  );
+  it("keeps Auto as the strategy when changing engines and preserves a saved engine", async () => {
+    state.project.pipeline = {
+      build: { engine: "nixpacks" },
+      test: { expect_exit_code: 0 },
+      deploy: { port: 0 },
+    };
+    show();
+    expect(await screen.findByLabelText("Engine")).toHaveValue("nixpacks");
+    fireEvent.change(screen.getByLabelText("Engine"), {
+      target: { value: "buildpacks" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({
+          build_type: "auto",
+          pipeline: expect.objectContaining({
+            build: { engine: "buildpacks" },
+          }),
+        }),
+        "PATCH",
+      ),
+    );
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     state.editable = true;

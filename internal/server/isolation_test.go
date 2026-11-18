@@ -119,7 +119,7 @@ func TestPersistentBuildConfig(t *testing.T) {
 
 func TestBuildArgs(t *testing.T) {
 	for _, noCache := range []bool{false, true} {
-		args := buildArgs("builder", "image", "Dockerfile", noCache)
+		args := buildArgs("builder", "image", imageBuild{Dockerfile: "Dockerfile", NoCache: noCache})
 		if strings.Contains(strings.Join(args, " "), "--no-cache") != noCache {
 			t.Fatal(args)
 		}

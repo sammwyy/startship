@@ -13,6 +13,7 @@ import (
 )
 
 type Build struct {
+	Engine     string   `json:"engine,omitempty"`
 	Image      string   `json:"image,omitempty"`
 	Commands   []string `json:"commands,omitempty"`
 	Dockerfile string   `json:"dockerfile,omitempty"`
@@ -249,15 +250,23 @@ func (p Pipeline) Validate() error {
 	if p.Deploy.HealthTimeout < 0 || p.Deploy.HealthTimeout > 600 {
 		return fmt.Errorf("health timeout must be between 0 and 600 seconds")
 	}
-	for _, s := range []string{p.Build.Image, p.Test.Image, p.Deploy.Image} {
+	if p.Build.Engine != "" && p.Build.Engine != "docker" && p.Build.Engine != "nixpacks" && p.Build.Engine != "buildpacks" {
+		return fmt.Errorf("invalid build engine %q", p.Build.Engine)
+	}
+	docker := p.Build.Engine == "" || p.Build.Engine == "docker"
+	images := []string{p.Test.Image, p.Deploy.Image}
+	if docker {
+		images = append(images, p.Build.Image)
+	}
+	for _, s := range images {
 		if s != "" && !imageName.MatchString(s) {
 			return fmt.Errorf("invalid image %q", s)
 		}
 	}
-	if p.Build.Dockerfile == "" && p.Build.Image == "" {
+	if docker && p.Build.Dockerfile == "" && p.Build.Image == "" {
 		return fmt.Errorf("build image is required")
 	}
-	if !safePath(p.Build.Dockerfile) || !safePath(p.Deploy.Artifact) {
+	if (docker && !safePath(p.Build.Dockerfile)) || !safePath(p.Deploy.Artifact) {
 		return fmt.Errorf("artifact and Dockerfile must be safe relative paths")
 	}
 	if p.Deploy.Port < 0 || p.Deploy.Port > 65535 {
@@ -269,7 +278,11 @@ func (p Pipeline) Validate() error {
 	if p.Deploy.HealthPath != "" && (!strings.HasPrefix(p.Deploy.HealthPath, "/") || strings.ContainsAny(p.Deploy.HealthPath, "\r\n")) {
 		return fmt.Errorf("invalid health path")
 	}
-	for _, commands := range [][]string{p.Build.Commands, p.Test.Commands} {
+	commandsToCheck := [][]string{p.Test.Commands}
+	if docker {
+		commandsToCheck = append(commandsToCheck, p.Build.Commands)
+	}
+	for _, commands := range commandsToCheck {
 		for _, c := range commands {
 			if strings.TrimSpace(c) == "" || strings.ContainsAny(c, "\x00\r\n") {
 				return fmt.Errorf("commands must be non-empty single lines")
@@ -281,6 +294,9 @@ func (p Pipeline) Validate() error {
 func (p Pipeline) Dockerfile() (string, error) {
 	if e := p.Validate(); e != nil {
 		return "", e
+	}
+	if p.Build.Engine != "" && p.Build.Engine != "docker" {
+		return "", fmt.Errorf("build engine %s generates its own image", p.Build.Engine)
 	}
 	if p.Build.Dockerfile != "" {
 		return "", fmt.Errorf("use repository Dockerfile")

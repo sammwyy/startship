@@ -109,6 +109,7 @@ fn main() {
                  ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "fixture"]):
         subprocess.run(["git", "-C", str(repo)] + args, check=True, stdout=subprocess.DEVNULL)
     environment = dict(os.environ, STARTSHIP_DATA=str(work / "data"), STARTSHIP_DASHBOARD_ADDR="127.0.0.1:" + dashboard_port,
+                       STARTSHIP_SOCKET=str(work / "startship.sock"),
                        STARTSHIP_HTTP_ADDR="127.0.0.1:" + proxy_port, STARTSHIP_HTTPS_ADDR="127.0.0.1:" + https_port, STARTSHIP_ADMIN_USER="admin",
                        STARTSHIP_ADMIN_PASSWORD="test-password", STARTSHIP_ACME_EMAIL="", STARTSHIP_DASHBOARD_DOMAIN="")
     process = subprocess.Popen([str(root / "startshipd")], env=environment, stdout=log, stderr=log)
@@ -435,6 +436,50 @@ fn main() {
     ip = revision["ip"]
     assert subprocess.check_output(["curl", "-fsS", "http://" + ip + ":8080/health"], text=True)
     print("custom pipeline expected output fails then passes, HTTP health path succeeds: OK")
+    if os.getenv("STARTSHIP_E2E_ENGINES") == "1":
+        engine_repo = work / "engine-source"
+        engine_repo.mkdir()
+        (engine_repo / "package.json").write_text(json.dumps({"name": "engine-fixture", "version": "1.0.0", "private": True,
+            "engines": {"node": "22.x"}, "scripts": {"start": "node server.js"}}))
+        (engine_repo / "server.js").write_text("require('http').createServer((req,res)=>res.end(process.argv.includes('--override')?'engine override':'engine default')).listen(process.env.PORT || 3000, '0.0.0.0');\n")
+        subprocess.run(["npm", "install", "--package-lock-only", "--ignore-scripts"], cwd=engine_repo, check=True, stdout=subprocess.DEVNULL)
+        for args in (["init", "-b", "main"], ["add", "."], ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "engine fixture"]):
+            subprocess.run(["git", "-C", str(engine_repo)] + args, check=True, stdout=subprocess.DEVNULL)
+        for engine in ("nixpacks", "buildpacks"):
+            engine_pipeline = {"build": {"engine": engine, "image": "ignored image", "commands": ["false"], "dockerfile": "../ignored"},
+                "test": {"commands": ["node -e \"console.log('engine-test')\""], "expect_exit_code": 0, "expect_output": "engine-test"},
+                "deploy": {"port": 3000, "health_path": "/health", "expect_status": 200}}
+            if engine == "nixpacks":
+                engine_pipeline["test"]["image"] = "node:22-alpine"
+            else:
+                engine_pipeline["deploy"]["command"] = "node server.js --override"
+            engine_project = request("projects", {"workspace_id": ws["id"], "name": "Engine " + engine,
+                "git_url": engine_repo.as_uri(), "branch": "main", "build_type": "custom", "pipeline": engine_pipeline})
+            project_ids.append(engine_project["id"])
+            queued = request("projects/" + engine_project["id"] + "/deploy", {})
+            for _ in range(1800):
+                engine_release = request("releases/" + queued["id"])
+                if engine_release["status"] in ("running", "failed"):
+                    assert engine_release["status"] == "running", engine_release.get("log")
+                    break
+                time.sleep(0.5)
+            else:
+                raise TimeoutError(engine + " did not complete")
+            engine_containers = request("containers?project_id=" + engine_project["id"])
+            app_ids.extend(c["id"] for c in engine_containers)
+            revision = request("deployments/" + engine_release["container_releases"][0])
+            assert revision["pipeline"]["build"]["engine"] == engine
+            assert all(header in revision["log"] for header in ("==> 1/3 Build (" + engine + ")", "==> 2/3 Test", "engine-test", "==> 3/3 Deploy")), revision["log"]
+            request("routes", {"project_id": engine_project["id"], "container_id": engine_containers[0]["id"], "host": engine + ".local"})
+            result = subprocess.check_output(["curl", "-fsS", "-H", "Host: " + engine + ".local", proxy_url + "/"], text=True)
+            assert result == ("engine default" if engine == "nixpacks" else "engine override"), result
+            workers = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-" + engine_project["id"]], text=True).split()
+            assert len(workers) == 1, workers
+            config = inspect_if_present(workers[0])["HostConfig"]
+            assert (config["Memory"], config["CpuPeriod"], config["CpuQuota"]) == (1073741824, 100000, 100000), config
+            print(engine + " deployment: Running; 3 stages, tests, snapshot and bounded builder OK; proxy curl: " + result)
+    else:
+        print("engine deployments: SKIP (set STARTSHIP_E2E_ENGINES=1; pinned Nixpacks and large CNB downloads required)")
     print("E2E PASS")
 finally:
     if process and process.poll() is None:

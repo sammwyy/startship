@@ -27,6 +27,8 @@ import {
   siReactrouter,
   siNestjs,
   siHugo,
+  siNixos,
+  siCncf,
 } from "simple-icons";
 import { Icon } from "./Icon";
 
@@ -58,6 +60,8 @@ const brands = {
   reactrouter: siReactrouter,
   nestjs: siNestjs,
   hugo: siHugo,
+  nixos: siNixos,
+  cncf: siCncf,
 };
 export function TemplateIcon({ slug }: { slug: string }) {
   const brand = brands[slug as keyof typeof brands];
