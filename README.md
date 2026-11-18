@@ -186,6 +186,45 @@ members can list them. Cross-workspace overlapping claims are rejected. Project
 route hosts must be allowed by their workspace; Platform Admins bypass this host
 restriction. Use `routes add`/`routes update` to configure actual project routing.
 
+### Services and persistent volumes
+
+```sh
+startship catalog                         # engines, versions, ports; --json includes config fields
+startship services Team                   # shorthand for services list Team
+startship services create Team redis cache --version 7.4 --port 16380
+startship services create Team postgresql db --set user=app --set database=app
+startship services show SERVICE_ID --json
+startship services patch SERVICE_ID --version 7.2 --port 0
+startship services patch SERVICE_ID --set password=new-password
+startship services start SERVICE_ID        # also stop, restart
+startship services logs SERVICE_ID --tail 200
+startship services attach SERVICE_ID website cache_db
+startship services connections website    # attached + available services, connection env
+startship services detach SERVICE_ID website
+startship services delete SERVICE_ID      # keeps its data volume
+startship services delete OTHER_ID --delete-volume
+startship volumes list Team
+startship volumes create Team uploads --project website --mount /app/uploads
+startship volumes create Team data
+startship volumes attach VOLUME_ID website /app/data
+startship volumes detach VOLUME_ID
+startship volumes delete VOLUME_ID        # rejected while attached to a project/service
+```
+
+Workspace and project arguments accept names or IDs; service and volume targets
+use IDs. Every command supports `--json`, preserving its API response (including
+list wrappers and log objects). `services [list] WORKSPACE` and
+`volumes [list] WORKSPACE` accept the optional `list` action. Repeated
+`--set KEY=VALUE` options merge config fields; `--port 0` disables external access.
+Use `services create ... --volume VOLUME_ID` to reuse an unattached workspace
+volume instead of creating one. `--project` and `--mount` must be used together.
+Redeploy projects after changing service attachments or volume mounts.
+
+Service/volume mutations require workspace `services.manage`; project attachment
+changes also require `project.settings`. Credentials are only returned with
+`services.manage`. Passwords supplied as command arguments may appear in shell
+history and process listings.
+
 ## Run
 
 Requires [Docker Engine](https://docs.docker.com/engine/install/) with Compose and [Git](https://git-scm.com/downloads); your user must be able to access the Docker daemon. Ports 80, 443 and 8080 must be free on the host.

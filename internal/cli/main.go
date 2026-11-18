@@ -269,6 +269,17 @@ const usage = `startship [--json] COMMAND
   containers list [PROJECT] | containers get ID
   routes list [PROJECT] | routes add PROJECT CONTAINER HOST [PATH] | routes rm ID
   routes update ID JSON          edit an existing route
+  catalog                        service engines, versions and ports
+  services [list] WORKSPACE
+  services create WORKSPACE ENGINE NAME [--version V] [--set KEY=VALUE]... [--port N] [--volume ID]
+  services show ID | services patch ID [--version V] [--set KEY=VALUE]... [--port N]
+  services start|stop|restart ID | services logs ID [--tail N]
+  services delete ID [--delete-volume]  keeps data by default
+  services attach ID PROJECT ALIAS | services detach ID PROJECT
+  services connections PROJECT   attached services, connection env and available services
+  volumes [list] WORKSPACE
+  volumes create WORKSPACE NAME [--project P --mount /path]
+  volumes attach ID PROJECT /path | volumes detach ID | volumes delete ID
   domains list WORKSPACE
   domains add WORKSPACE DOMAIN [--subdomains]
   domains rm WORKSPACE DOMAIN     domain ID or name; delete/remove also accepted
@@ -318,6 +329,15 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "domains" {
 		return c.runDomains(a)
+	}
+	if cmd == "catalog" {
+		return c.runCatalog(a)
+	}
+	if cmd == "services" {
+		return c.runServices(a)
+	}
+	if cmd == "volumes" {
+		return c.runVolumes(a)
 	}
 	if cmd == "workspaces" && len(a) > 0 && a[0] == "domains" {
 		return c.runDomains(a[1:])
