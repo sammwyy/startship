@@ -1,0 +1,356 @@
+.workspace-map {
+  min-width: 0;
+  container-type: inline-size;
+}
+.map-meta,
+.map-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.map-meta {
+  justify-content: space-between;
+  margin: 24px 0 12px;
+}
+.map-live,
+.map-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.map-board {
+  --map-vertical: 0;
+  --map-edge-live: var(--accent);
+  --map-edge-idle: #7c858b;
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(156px, 17cqw, 184px);
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+}
+.map-column {
+  min-width: 0;
+}
+.map-column h2,
+.map-tree-orphans h2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 5px;
+  margin: 0 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.map-column h2 span {
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.map-node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.map-node {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 72px;
+  padding: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  color: var(--text);
+  background: var(--raised);
+  text-decoration: none;
+  transition:
+    opacity 160ms,
+    border-color 160ms;
+}
+.map-node:hover,
+.map-node.is-connected {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.map-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+.map-node-icon,
+.map-node .engine-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  border-radius: 8px;
+}
+.map-node-icon {
+  color: var(--muted);
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+.map-node-icon svg,
+.map-node .engine-icon svg {
+  width: 17px;
+  height: 17px;
+}
+.map-node-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.map-node-copy strong,
+.map-node-copy small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.map-node-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.map-node-copy small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.map-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.map-dot.running {
+  background: var(--success);
+  animation: map-pulse 3s ease-in-out infinite;
+}
+.map-dot.busy {
+  background: var(--warning);
+}
+.map-dot.failed {
+  background: var(--error);
+}
+.map-edges {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 0;
+}
+.map-edges path {
+  fill: none;
+  stroke: var(--map-edge-idle);
+  stroke-width: 2;
+}
+.map-edges .is-live path {
+  stroke: var(--map-edge-live);
+  stroke-dasharray: 5 6;
+  animation: map-flow 1.6s linear infinite;
+}
+.map-lane {
+  height: 20px;
+}
+:root[data-theme="light"] .map-board {
+  --map-edge-live: #3f6212;
+  --map-edge-idle: #9ca3af;
+}
+.map-edges circle {
+  fill: var(--map-edge-idle);
+  stroke: var(--panel);
+  stroke-width: 1;
+}
+.map-edges .is-live circle {
+  fill: var(--map-edge-live);
+}
+.map-edge-label {
+  pointer-events: auto;
+}
+.map-edge-label rect {
+  fill: var(--panel);
+  stroke: var(--line);
+}
+.map-edge-label text {
+  fill: var(--text);
+  font-size: 9px;
+}
+.map-node.is-dimmed,
+.map-edges .is-dimmed {
+  opacity: 0.25;
+}
+.map-column-empty {
+  margin: 0;
+  padding: 22px 0;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+.map-legend {
+  margin-top: 14px;
+}
+.map-hint {
+  margin-left: auto;
+}
+@keyframes map-flow {
+  to {
+    stroke-dashoffset: -22;
+  }
+}
+@keyframes map-pulse {
+  50% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+}
+@media (max-width: 1000px) {
+  .map-node {
+    padding: 10px 8px;
+    gap: 7px;
+  }
+  .map-node-icon,
+  .map-node .engine-icon {
+    width: 24px;
+    height: 24px;
+    flex-basis: 24px;
+  }
+}
+@container (max-width: 720px) {
+  .map-board {
+    --map-vertical: 1;
+    display: block;
+    padding: 12px;
+    border-radius: 12px;
+  }
+  .map-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+  .map-tree ul {
+    list-style: none;
+    padding: 0 0 0 14px;
+    margin: 8px 0 0 12px;
+  }
+  .map-tree li {
+    position: relative;
+    margin-top: 8px;
+  }
+  .map-tree li:first-child {
+    margin-top: 0;
+  }
+  .map-tree li::before {
+    content: "";
+    position: absolute;
+    top: 29px;
+    left: -14px;
+    width: 14px;
+    border-top: 1px solid var(--map-edge-idle);
+  }
+  .map-tree li::after {
+    content: "";
+    position: absolute;
+    top: -8px;
+    bottom: 0;
+    left: -14px;
+    border-left: 1px solid var(--map-edge-idle);
+  }
+  .map-tree li:first-child::after {
+    top: 0;
+  }
+  .map-tree li:last-child::after {
+    bottom: calc(100% - 29px);
+  }
+  .map-tree .map-node {
+    min-height: 58px;
+    padding: 10px;
+    gap: 9px;
+    border-radius: 9px;
+  }
+  .map-tree-project > .map-node {
+    background: var(--accent-soft);
+  }
+  .map-tree .map-node-copy strong {
+    font-size: 11px;
+    white-space: normal;
+    overflow-wrap: normal;
+  }
+  .map-tree .map-node-copy small {
+    font-size: 10px;
+  }
+  .map-tree-alias {
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .map-tree-empty {
+    margin: 10px 0 0 15px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .map-tree-orphans h2 {
+    margin-bottom: 12px;
+    color: var(--muted);
+  }
+  .map-tree-orphans > ul {
+    border: 0;
+    margin-left: 0;
+    padding-left: 0;
+  }
+  .map-tree-orphans > ul > li::before,
+  .map-tree-orphans > ul > li::after {
+    display: none;
+  }
+  .workspace-map .map-legend > .map-hint {
+    display: none;
+  }
+  .map-node-icon,
+  .map-node .engine-icon {
+    width: 22px;
+    height: 24px;
+    flex-basis: 22px;
+    border: 0;
+    background: none;
+  }
+  .map-node-icon svg,
+  .map-node .engine-icon svg {
+    width: 15px;
+    height: 15px;
+  }
+  .map-meta {
+    font-size: 10px;
+    gap: 8px;
+  }
+  .map-legend {
+    gap: 12px;
+    font-size: 10px;
+  }
+}
+@media (hover: none) {
+  .workspace-map .map-legend > .map-hint {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-map *,
+  .workspace-map path {
+    animation: none !important;
+    transition: none !important;
+  }
+}
