@@ -287,6 +287,11 @@
     font-size: 10px;
   }
 }
+@media (hover: none) {
+  .map-hint {
+    display: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .workspace-map *,
   .workspace-map path {

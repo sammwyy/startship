@@ -4,6 +4,7 @@ import {
   connectedMapNodes,
   placeMapLabels,
   orderMapRow,
+  mapLabelPositions,
 } from "./map";
 import type { Project, Service, Volume } from "../services/types";
 
@@ -131,6 +132,48 @@ describe("map label placement", () => {
     const placed = placeMapLabels([label, label], [], 200);
     expect(placed[0]).toEqual({ x: 175, y: 80, width: 74 });
     expect(placed[1]).toEqual({ x: 175, y: 56, width: 74 });
+  });
+  it("samples the preferred and fallback points on horizontal and vertical curves", () => {
+    const horizontal = mapLabelPositions(
+      { x: 0, y: 0 },
+      { x: 200, y: 100 },
+      false,
+    );
+    expect(horizontal[0]).toEqual({ x: 140.625, y: 84.375 });
+    expect(horizontal[1]).toEqual({ x: 100, y: 50 });
+    expect(horizontal[2]).toEqual({ x: 59.375, y: 15.625 });
+    expect(horizontal).toHaveLength(4);
+    expect(mapLabelPositions({ x: 0, y: 0 }, { x: 100, y: 200 }, true)).toEqual(
+      horizontal.map(({ x, y }) => ({ x: y, y: x })),
+    );
+  });
+  it("retries alternate curve points after the preferred desktop region is exhausted", () => {
+    const retry = { ...label, y: 120, alternatives: [{ x: 175, y: 360 }] };
+    const cards = [{ x: 100, y: 0, width: 140, height: 240 }];
+    expect(placeMapLabels([retry], cards, 500)).toEqual([
+      { x: 175, y: 360, width: 74 },
+    ]);
+    expect(
+      placeMapLabels([retry], [{ ...cards[0], height: 500 }], 500),
+    ).toEqual([null]);
+  });
+  it("retries alternate points within the mobile row gap after horizontal nudges fail", () => {
+    const retry = {
+      ...label,
+      x: 150,
+      y: 240,
+      top: 200,
+      bottom: 400,
+      alternatives: [{ x: 150, y: 320 }],
+    };
+    expect(
+      placeMapLabels(
+        [retry],
+        [{ x: 0, y: 220, width: 390, height: 40 }],
+        500,
+        390,
+      ),
+    ).toEqual([{ x: 150, y: 320, width: 74 }]);
   });
   it("clamps labels to the gutter and avoids cards", () => {
     const [placed] = placeMapLabels(

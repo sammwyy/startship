@@ -17,6 +17,7 @@ import {
   mapKey,
   placeMapLabels,
   orderMapRow,
+  mapLabelPositions,
 } from "../../lib/map";
 import { Heading } from "../../components/Heading";
 import { Empty, ErrorMessage, Loading } from "../../components/ui";
@@ -191,6 +192,11 @@ export function WorkspaceMapView() {
             ?.getBoundingClientRect();
         const sourceGroup = groupBounds(edge.from),
           targetGroup = groupBounds(edge.to);
+        const [preferred, ...alternatives] = mapLabelPositions(
+          { x: x1, y: y1 },
+          { x: x2, y: y2 },
+          vertical,
+        );
         return [
           {
             ...edge,
@@ -199,18 +205,8 @@ export function WorkspaceMapView() {
               : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
             labelBox: edge.label
               ? {
-                  x: vertical
-                    ? x1 * 0.15625 + x2 * 0.84375
-                    : x1 * 0.015625 +
-                      (x1 + bend) * 0.140625 +
-                      (x2 - bend) * 0.421875 +
-                      x2 * 0.421875,
-                  y: vertical
-                    ? y1 * 0.015625 +
-                      (y1 + bend) * 0.140625 +
-                      (y2 - bend) * 0.421875 +
-                      y2 * 0.421875
-                    : y1 * 0.15625 + y2 * 0.84375,
+                  ...preferred,
+                  alternatives,
                   width: Math.min(edge.label.length, 19) * 7 + 18,
                   left: x1,
                   right: x2,

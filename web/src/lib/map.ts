@@ -118,6 +118,31 @@ export interface MapLabel {
   right: number;
   top?: number;
   bottom?: number;
+  alternatives?: { x: number; y: number }[];
+}
+export function mapLabelPositions(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  vertical: boolean,
+) {
+  const bend = (vertical ? to.y - from.y : to.x - from.x) / 2;
+  const a = {
+    x: from.x + (vertical ? 0 : bend),
+    y: from.y + (vertical ? bend : 0),
+  };
+  const b = {
+    x: to.x - (vertical ? 0 : bend),
+    y: to.y - (vertical ? bend : 0),
+  };
+  const point = (t: number, axis: "x" | "y") =>
+    (1 - t) ** 3 * from[axis] +
+    3 * (1 - t) ** 2 * t * a[axis] +
+    3 * (1 - t) * t ** 2 * b[axis] +
+    t ** 3 * to[axis];
+  return [0.75, 0.5, 0.25, 0.85].map((t) => ({
+    x: point(t, "x"),
+    y: point(t, "y"),
+  }));
 }
 export function placeMapLabels(
   labels: (MapLabel | null)[],
@@ -143,36 +168,38 @@ export function placeMapLabels(
         : label.right - label.left < label.width + 12
     )
       return null;
-    const baseX = vertical
-      ? Math.max(
-          6 + label.width / 2,
-          Math.min(label.x, verticalWidth - 6 - label.width / 2),
+    for (const candidate of [label, ...(label.alternatives || [])]) {
+      const baseX = vertical
+        ? Math.max(
+            6 + label.width / 2,
+            Math.min(candidate.x, verticalWidth - 6 - label.width / 2),
+          )
+        : Math.max(
+            label.left + 6 + label.width / 2,
+            Math.min(candidate.x, label.right - 6 - label.width / 2),
+          );
+      const baseY = vertical
+        ? Math.max(label.top! + 16, Math.min(candidate.y, label.bottom! - 16))
+        : candidate.y;
+      for (const offset of [0, -24, 24, -48, 48, -72, 72, -96, 96]) {
+        const x = baseX + (vertical ? (offset / 24) * (label.width + 6) : 0);
+        const y = baseY + (vertical ? 0 : offset);
+        const box = {
+          x: x - label.width / 2,
+          y: y - 10,
+          width: label.width,
+          height: 20,
+        };
+        if (
+          box.y < 0 ||
+          box.y + box.height > height ||
+          (vertical && (box.x < 6 || box.x + box.width > verticalWidth - 6)) ||
+          [...cards, ...placed].some((other) => overlaps(box, other))
         )
-      : Math.max(
-          label.left + 6 + label.width / 2,
-          Math.min(label.x, label.right - 6 - label.width / 2),
-        );
-    const baseY = vertical
-      ? Math.max(label.top! + 16, Math.min(label.y, label.bottom! - 16))
-      : label.y;
-    for (const offset of [0, -24, 24, -48, 48, -72, 72, -96, 96]) {
-      const x = baseX + (vertical ? (offset / 24) * (label.width + 6) : 0);
-      const y = baseY + (vertical ? 0 : offset);
-      const box = {
-        x: x - label.width / 2,
-        y: y - 10,
-        width: label.width,
-        height: 20,
-      };
-      if (
-        box.y < 0 ||
-        box.y + box.height > height ||
-        (vertical && (box.x < 6 || box.x + box.width > verticalWidth - 6)) ||
-        [...cards, ...placed].some((other) => overlaps(box, other))
-      )
-        continue;
-      placed.push(box);
-      return { x, y, width: label.width };
+          continue;
+        placed.push(box);
+        return { x, y, width: label.width };
+      }
     }
     return null;
   });
