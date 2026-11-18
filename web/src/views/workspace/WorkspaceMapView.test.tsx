@@ -1,0 +1,184 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WorkspaceMapView } from "./WorkspaceMapView";
+
+const state = vi.hoisted(() => ({
+  empty: false,
+  error: null as Error | null,
+  pending: false,
+  live: "connected",
+}));
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>();
+  const data = [
+    {
+      data: state.empty ? [] : [{ id: "p", name: "Website" }],
+      error: state.error,
+      isPending: state.pending,
+    },
+    { data: [{ project_id: "p", active_deployment: "r", status: "running" }] },
+    { data: [{ project_id: "p", status: "running", created: "2026-01-01" }] },
+  ];
+  const empty: never[] = [];
+  return {
+    ...actual,
+    useQueries: () => [
+      {
+        ...data[0],
+        data: state.empty ? empty : data[0].data,
+        error: state.error,
+        isPending: state.pending,
+      },
+      data[1],
+      data[2],
+    ],
+  };
+});
+vi.mock("../../layouts/DashboardLayout", () => ({
+  useDashboard: () => ({ workspace: { name: "Studio" } }),
+}));
+vi.mock("../../providers/UIProvider", () => ({
+  useUI: () => ({ openNavigation: vi.fn() }),
+}));
+vi.mock("../../providers/LiveProvider", () => ({
+  useLiveProjects: vi.fn(),
+  useLiveSubscription: () => null,
+  useLiveStatus: () => state.live,
+}));
+vi.mock("../../services/services", () => {
+  const hooks = {
+    useServices: () => ({
+      data: {
+        services: state.empty
+          ? []
+          : [
+              {
+                id: "s",
+                name: "Database",
+                engine: "postgresql",
+                version: "17",
+                status: "running",
+                volume_id: "v",
+                attachments: [{ project_id: "p", alias: "db" }],
+              },
+              {
+                id: "other",
+                name: "Unattached",
+                engine: "valkey",
+                version: "8",
+                status: "stopped",
+                attachments: [],
+              },
+            ],
+      },
+    }),
+    useVolumes: () => ({
+      data: {
+        volumes: state.empty
+          ? []
+          : [
+              {
+                id: "v",
+                name: "Database data",
+                size_bytes: 1024,
+                size_updated: "2026-01-01",
+              },
+            ],
+      },
+    }),
+  };
+  const services = hooks.useServices(),
+    volumes = hooks.useVolumes();
+  const emptyServices = { data: { services: [] } },
+    emptyVolumes = { data: { volumes: [] } };
+  return {
+    useServices: () => (state.empty ? emptyServices : services),
+    useVolumes: () => (state.empty ? emptyVolumes : volumes),
+  };
+});
+
+beforeEach(() => {
+  state.empty = false;
+  state.error = null;
+  state.pending = false;
+  state.live = "connected";
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+});
+function setup() {
+  render(
+    <MemoryRouter initialEntries={["/workspace/w/map"]}>
+      <Routes>
+        <Route
+          path="/workspace/:workspaceId/map"
+          element={<WorkspaceMapView />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+  return userEvent.setup();
+}
+describe("workspace map view", () => {
+  it("renders resource links and traces connected nodes on keyboard focus", async () => {
+    const user = setup();
+    const project = screen.getByRole("link", { name: /Website/ });
+    expect(project).toHaveAttribute("href", "/project/p");
+    expect(
+      screen.getByRole("link", { name: /^Database postgresql/ }),
+    ).toHaveAttribute("href", "/workspace/w/services/s");
+    expect(screen.getByRole("link", { name: /Database data/ })).toHaveAttribute(
+      "href",
+      "/workspace/w/volumes",
+    );
+    expect(screen.getByText("1.0 KB")).toBeInTheDocument();
+    await user.tab();
+    await user.tab();
+    expect(project).toHaveFocus();
+    expect(screen.getByRole("link", { name: /Unattached/ })).toHaveClass(
+      "is-dimmed",
+    );
+    expect(screen.getByRole("link", { name: /Database data/ })).not.toHaveClass(
+      "is-dimmed",
+    );
+    await user.unhover(project);
+    expect(screen.getByRole("link", { name: /Unattached/ })).toHaveClass(
+      "is-dimmed",
+    );
+  });
+  it("shows an empty workspace", () => {
+    state.empty = true;
+    setup();
+    expect(screen.getByText("Your workspace, connected")).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+  it("shows failures without presenting a failed request as an empty workspace", () => {
+    state.empty = true;
+    state.error = new Error("Access denied");
+    setup();
+    expect(screen.getByRole("alert")).toHaveTextContent("Access denied");
+    expect(
+      screen.queryByText("Your workspace, connected"),
+    ).not.toBeInTheDocument();
+  });
+  it("shows loading and disconnected live states honestly", () => {
+    state.pending = true;
+    const { unmount } = render(
+      <MemoryRouter>
+        <WorkspaceMapView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Loading");
+    unmount();
+    state.pending = false;
+    state.live = "disconnected";
+    setup();
+    expect(screen.getByText("Updates disconnected")).toBeInTheDocument();
+  });
+});
