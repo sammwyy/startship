@@ -916,6 +916,17 @@
   width: 14px;
   height: 14px;
 }
+.scoped-activity-tabs a {
+  min-height: 44px;
+  padding: 0 2px;
+  font-size: 12px;
+}
+.scoped-activity-tabs a:hover {
+  color: var(--text);
+}
+.scoped-activity-tabs a:focus-visible {
+  outline-offset: -2px;
+}
 .node-settings {
   display: grid;
   gap: 20px;
