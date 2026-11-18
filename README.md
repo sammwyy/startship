@@ -14,10 +14,7 @@
   <a href="#what-you-can-do">Explore the features</a>
 </p>
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/assets/dashboard-light.png">
-  <img src="docs/assets/dashboard-dark.png" alt="Startship workspace dashboard showing projects, running containers, recent deployments, and navigation to the workspace Map, Services, Volumes, Backups, Domains, and Firewall">
-</picture>
+<img src="docs/assets/dashboard.png" alt="Startship workspace dashboard split between light and dark themes, showing projects, running containers, and recent deployment activity">
 
 Startship is a self-hosted deployment platform for web apps, APIs, and static sites. Connect a Git repository, deploy it to Docker, and put it behind a domain. Manage deployments, data, and access from one dashboard or the CLI. The Go daemon embeds the dashboard and stores its state in SQLite, so you don't need a separate web server or database to run it.
 
