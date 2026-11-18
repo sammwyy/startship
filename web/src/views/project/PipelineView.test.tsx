@@ -270,6 +270,130 @@ describe("project pipeline", () => {
       ),
     );
   });
+  it.each([601, -1])(
+    "opens the tab holding an invalid field when saving (timeout %s)",
+    async (value) => {
+      state.project.build_type = "go";
+      show("/?tab=health");
+      const timeout = await screen.findByLabelText(
+        "Readiness timeout (seconds)",
+      );
+      const reportValidity = vi.spyOn(
+        timeout as HTMLInputElement,
+        "reportValidity",
+      );
+      fireEvent.change(timeout, { target: { value: String(value) } });
+      fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+      await waitFor(() =>
+        expect(
+          screen.getByRole("tab", { name: /4 Health check/ }),
+        ).toHaveAttribute("aria-selected", "true"),
+      );
+      expect(timeout).toBeVisible();
+      expect(timeout).toHaveFocus();
+      expect(reportValidity).toHaveBeenCalledTimes(1);
+      expect(state.request).not.toHaveBeenCalledWith(
+        "projects/p1",
+        expect.anything(),
+        "PATCH",
+      );
+      fireEvent.change(timeout, { target: { value: "90" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+      await waitFor(() =>
+        expect(state.request).toHaveBeenCalledWith(
+          "projects/p1",
+          expect.objectContaining({
+            pipeline: expect.objectContaining({
+              deploy: expect.objectContaining({ health_timeout: 90 }),
+            }),
+          }),
+          "PATCH",
+        ),
+      );
+    },
+  );
+
+  it("reports only the first invalid field across tabs", async () => {
+    state.project.build_type = "go";
+    show("/?tab=deploy");
+    const port = await screen.findByLabelText("HTTP port");
+    fireEvent.change(port, { target: { value: "65536" } });
+    fireEvent.click(screen.getByRole("tab", { name: /4 Health check/ }));
+    const timeout = screen.getByLabelText("Readiness timeout (seconds)");
+    fireEvent.change(timeout, { target: { value: "601" } });
+    const reportPort = vi.spyOn(port as HTMLInputElement, "reportValidity");
+    const reportTimeout = vi.spyOn(
+      timeout as HTMLInputElement,
+      "reportValidity",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() => expect(port).toHaveFocus());
+    expect(screen.getByRole("tab", { name: /3 Deploy/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(reportPort).toHaveBeenCalledTimes(1);
+    expect(reportTimeout).not.toHaveBeenCalled();
+    expect(state.request).not.toHaveBeenCalledWith(
+      "projects/p1",
+      expect.anything(),
+      "PATCH",
+    );
+  });
+
+  it("keeps the current tab when its invalid field precedes a hidden invalid field", async () => {
+    state.project.build_type = "go";
+    show("/?tab=health");
+    fireEvent.change(
+      await screen.findByLabelText("Readiness timeout (seconds)"),
+      { target: { value: "601" } },
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /3 Deploy/ }));
+    fireEvent.change(screen.getByLabelText("HTTP port"), {
+      target: { value: "65536" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    expect(screen.getByRole("tab", { name: /3 Deploy/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(state.request).not.toHaveBeenCalledWith(
+      "projects/p1",
+      expect.anything(),
+      "PATCH",
+    );
+  });
+
+  it.each(["", "0", "600"])(
+    "saves a valid timeout %j from another tab",
+    async (value) => {
+      state.project.build_type = "go";
+      show("/?tab=health");
+      const timeout = await screen.findByLabelText(
+        "Readiness timeout (seconds)",
+      );
+      fireEvent.change(timeout, { target: { value: "90" } });
+      fireEvent.change(timeout, { target: { value } });
+      fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+      await waitFor(() =>
+        expect(state.request).toHaveBeenCalledWith(
+          "projects/p1",
+          expect.objectContaining({
+            pipeline: expect.objectContaining({
+              deploy: expect.objectContaining({
+                health_timeout: Number(value),
+              }),
+            }),
+          }),
+          "PATCH",
+        ),
+      );
+    },
+  );
+
   it("filters templates by search and category", async () => {
     show();
     fireEvent.click(

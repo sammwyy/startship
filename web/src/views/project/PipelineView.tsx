@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useProject } from "../../layouts/ProjectLayout";
@@ -34,6 +34,8 @@ const autoTemplate: PipelineTemplate = {
 const lines = (value: string) => value.split("\n");
 const tabs = ["build", "test", "deploy", "health"] as const;
 const tabNames = ["Build", "Test", "Deploy", "Health check"];
+type ValidatableField =
+  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 function stageValues(p: Pipeline, tab: (typeof tabs)[number], auto: boolean) {
   const { build, test, deploy } = clean(p);
   switch (tab) {
@@ -106,6 +108,17 @@ export function PipelineView() {
 function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
   const [params, setParams] = useSearchParams();
   const tab = tabs.find((value) => value === params.get("tab")) || "build";
+  const [invalidField, setInvalidField] = useState<ValidatableField>();
+  useEffect(() => {
+    if (
+      !invalidField ||
+      invalidField.closest<HTMLElement>('[role="tabpanel"]')?.hidden
+    )
+      return;
+    invalidField.focus();
+    invalidField.reportValidity();
+    setInvalidField(undefined);
+  }, [invalidField, tab]);
   function selectTab(value: string) {
     setParams(
       (previous) => {
@@ -196,7 +209,27 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
     }
   }
   return (
-    <div className="pipeline-page">
+    <div
+      className="pipeline-page"
+      onInvalidCapture={(event) => {
+        const field = event.target as ValidatableField;
+        const panel = field.closest<HTMLElement>('[role="tabpanel"]');
+        const value = panel?.id.replace("pipeline-panel-", "");
+        if (!value || !panel?.hidden) return;
+        event.preventDefault();
+        const firstInvalid = Array.from(field.form?.elements || []).find(
+          (control) =>
+            (control instanceof HTMLInputElement ||
+              control instanceof HTMLTextAreaElement ||
+              control instanceof HTMLSelectElement) &&
+            control.willValidate &&
+            !control.validity.valid,
+        );
+        if (firstInvalid !== field) return;
+        setInvalidField(field);
+        selectTab(value);
+      }}
+    >
       {!editable && (
         <p className="note locked-note">
           You can view this section, but your roles do not let you change it.
