@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link, Navigate, NavLink, useParams } from "react-router-dom";
 import { Heading } from "../../components/Heading";
 import { Icon } from "../../components/Icon";
@@ -10,12 +11,14 @@ import { useUI } from "../../providers/UIProvider";
 import { remove } from "../../services/api";
 import type { AccountSession } from "../../services/types";
 import { ActivityFeed, ActivityTime } from "./ActivityView";
+import { Tokens } from "./TokensPanel";
 import "./AccountView.css";
 
 const tabs = [
   ["", "Profile", "user"],
   ["appearance", "Appearance", "sun"],
   ["sessions", "Sessions", "key"],
+  ["tokens", "Tokens", "plug"],
   ["activity", "Activity", "history"],
 ] as const;
 
@@ -41,6 +44,7 @@ export function AccountView() {
       {section === "" && <Profile />}
       {section === "appearance" && <Appearance />}
       {section === "sessions" && <Sessions />}
+      {section === "tokens" && <Tokens />}
       {section === "activity" && (
         <ActivityFeed spec={{ topic: "account_activity" }} personal />
       )}
@@ -48,12 +52,14 @@ export function AccountView() {
   );
 }
 
-function PanelHeading({
+export function PanelHeading({
   title,
   description,
+  children,
 }: {
   title: string;
   description: string;
+  children?: ReactNode;
 }) {
   return (
     <header className="account-panel-header">
@@ -61,6 +67,7 @@ function PanelHeading({
         <h2>{title}</h2>
         <p className="small">{description}</p>
       </div>
+      {children}
     </header>
   );
 }

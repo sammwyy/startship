@@ -27,6 +27,8 @@ const actionLabels: Record<string, string> = {
   "session.logout": "Signed out",
   "session.revoke": "Revoked a session",
   "account.update": "Updated account settings",
+  "token.create": "Created an access token",
+  "token.revoke": "Revoked an access token",
   "project.deploy": "Queued a deployment",
   "project.redeploy": "Queued a redeployment",
 };
@@ -40,6 +42,7 @@ function actionLabel(action: string) {
 }
 function actionIcon(action: string) {
   if (action.startsWith("session.")) return "key";
+  if (action.startsWith("token.")) return "plug";
   if (action.endsWith(".delete")) return "trash";
   if (action.endsWith(".create")) return "plus";
   if (/deploy$/.test(action)) return "rocket";
@@ -124,16 +127,30 @@ export function ActivityFeed({
                       </Link>
                     </>
                   )}
-                  {personal && !entry.session_id && (
+                  {entry.source === "token" && (
                     <>
                       <span aria-hidden="true">·</span>
-                      <span>
-                        {entry.source === "local_socket"
-                          ? "Local CLI"
-                          : "Session unavailable"}
-                      </span>
+                      {personal ? (
+                        <Link to="/account/tokens" title={entry.token_id}>
+                          Token {entry.token}
+                        </Link>
+                      ) : (
+                        <span>Access token</span>
+                      )}
                     </>
                   )}
+                  {personal &&
+                    !entry.session_id &&
+                    entry.source !== "token" && (
+                      <>
+                        <span aria-hidden="true">·</span>
+                        <span>
+                          {entry.source === "local_socket"
+                            ? "Local CLI"
+                            : "Session unavailable"}
+                        </span>
+                      </>
+                    )}
                   {!personal && (
                     <span className="activity-scope">{entry.scope}</span>
                   )}

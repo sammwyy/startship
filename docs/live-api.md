@@ -33,6 +33,7 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | `traffic` | `project_id`, `window` 300/900/3600 | `traffic.view` | = GET `projects/:id/traffic?window=` | a new `snapshot` pushed every 5s | TrafficView 5s |
 | `system_update` | none | signed in (same as GET) | = GET `system/update` | a new `snapshot` whenever it changes (update requested, status file, release check) | SystemView 2s/60s |
 | `account_sessions` | none | signed in | = GET `me/sessions` | replacement snapshot when session data changes | account session list |
+| `account_tokens` | none | signed in | = GET `me/tokens` | replacement snapshot when a token is created, used from a new IP or after a minute, or revoked | account access tokens |
 | `account_activity` | none | signed in | = GET `me/activity` | replacement snapshot when the actor records an action | account activity |
 | `workspace_activity` | `workspace_id` | workspace visible + `activity.view` at workspace level | = GET `workspaces/:id/activity` | replacement snapshot when the workspace or one of its projects records an action | workspace activity |
 | `project_activity` | `project_id` | project visible + `activity.view` at project level | = GET `projects/:id/activity` | replacement snapshot when that project records an action | project activity |

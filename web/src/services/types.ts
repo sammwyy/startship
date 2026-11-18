@@ -225,6 +225,21 @@ export interface AccountSession {
   last_activity_at: string;
   expires_at: string;
 }
+export interface AccessToken {
+  id: string;
+  name: string;
+  prefix: string;
+  all_workspaces: boolean;
+  workspaces: string[];
+  access: "operate" | "admin";
+  api: boolean;
+  mcp: boolean;
+  created_at: string;
+  expires_at?: string;
+  last_used_at?: string;
+  last_used_ip?: string;
+  last_user_agent?: string;
+}
 export interface ActivityEntry {
   id: number;
   at: string;
@@ -236,6 +251,8 @@ export interface ActivityEntry {
   scope_id: string;
   source?: string;
   session_id?: string;
+  token_id?: string;
+  token?: string;
   detail?: unknown;
 }
 export interface SystemVersion {

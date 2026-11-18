@@ -1,0 +1,239 @@
+.token-endpoint {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 12px;
+  padding: 16px 22px;
+}
+.token-endpoint > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.token-endpoint > p {
+  grid-column: 2;
+  margin: 4px 0 0;
+}
+.token-endpoint .copy-value code,
+.token-secret .copy-value code {
+  font-size: 13px;
+}
+.token-created {
+  border-color: var(--accent);
+}
+.token-secret {
+  display: grid;
+  gap: 12px;
+  padding: 16px 22px 20px;
+  min-width: 0;
+}
+.token-secret > .copy-value {
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+}
+.token-secret p {
+  margin: 0;
+}
+.token-config {
+  position: relative;
+  min-width: 0;
+}
+.token-config pre {
+  margin: 0;
+  padding: 12px 44px 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  font-size: 12px;
+}
+.token-config .icon-button {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 6px;
+}
+.token-form {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+}
+.token-form .form-fields {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.token-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 15px 18px;
+}
+.token-form-grid > label {
+  min-width: 0;
+  margin: 0;
+}
+.token-form-grid input {
+  width: 100%;
+}
+.token-form input:focus-visible {
+  outline: none;
+  border-color: var(--success);
+  box-shadow: inset 0 0 0 1px var(--success);
+}
+.token-choice {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.token-choice legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+.token-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.token-segments {
+  display: flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.token-segments label {
+  position: relative;
+  margin: 0;
+  cursor: pointer;
+}
+.token-segments input,
+.token-check input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+}
+.token-segments span {
+  display: block;
+  padding: 6px 11px;
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+.token-segments label:hover span,
+.token-segments :checked + span {
+  color: var(--text);
+  background: var(--raised);
+}
+.token-segments :checked + span {
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.token-segments :focus-visible + span {
+  box-shadow: inset 0 0 0 1px var(--success);
+}
+.token-workspaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.token-choice > .token-workspaces:first-of-type {
+  margin-top: 0;
+}
+.token-workspaces > p {
+  margin: 0;
+}
+.token-check {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 12px 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.token-check:hover,
+.token-check:has(:checked) {
+  background: var(--raised);
+}
+.token-check:has(:checked) {
+  border-color: var(--accent);
+}
+.token-check:has(:focus-visible) {
+  border-color: var(--success);
+  box-shadow: inset 0 0 0 1px var(--success);
+}
+.token-check-box {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid var(--muted);
+  border-radius: 4px;
+  color: transparent;
+}
+.token-check-box .icon {
+  width: 11px;
+  height: 11px;
+}
+.token-check :checked + .token-check-box {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg, #fff);
+}
+.token-note {
+  margin: 0;
+}
+.token-form .account-form-actions {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+.token-access {
+  color: var(--accent);
+}
+.token-activity {
+  margin: 10px 0 0 48px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .token-form-grid,
+  .token-cards {
+    grid-template-columns: 1fr;
+  }
+  .token-segments label {
+    flex: 1;
+    text-align: center;
+  }
+}
+@media (max-width: 520px) {
+  .token-endpoint,
+  .token-secret,
+  .token-form {
+    padding-inline: 14px;
+  }
+  .token-endpoint > p {
+    grid-column: 1 / -1;
+  }
+  .token-activity {
+    margin-inline-start: 0;
+  }
+  .token-segments span {
+    padding-inline: 6px;
+  }
+}

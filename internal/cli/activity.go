@@ -51,6 +51,12 @@ func (c *cli) runAccount(args []string) error {
 		}
 	case "activity":
 		return c.showActivity("me/activity", args[1:], map[string]string{"topic": "account_activity"}, true)
+	case "tokens":
+		if len(args) == 1 {
+			return c.firewallTable("me/tokens", "", "id", "name", "access", "all_workspaces", "workspaces", "last_used_ip", "last_used_at", "expires_at")
+		}
+	case "token":
+		return c.runToken(args[1:])
 	}
 	return errors.New("use account update|sessions|revoke|activity")
 }
