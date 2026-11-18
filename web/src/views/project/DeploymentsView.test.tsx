@@ -1,10 +1,22 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { DeploymentsView } from "./DeploymentsView";
 const state = vi.hoisted(() => ({
+  canDeploy: true,
+  request: vi.fn(async () => ({})),
+  refresh: vi.fn(),
+  notify: vi.fn(),
   useLog: vi.fn(() => ({
-    data: { log: "Build output", status: "running" },
+    data: { log: "Build output", status: "running", redeployable: true },
     isFetching: false,
     error: null,
   })),
@@ -14,11 +26,17 @@ vi.mock("../../components/LogPanel", () => ({
   LogPanel: () => <pre>Build output</pre>,
 }));
 vi.mock("../../components/ProjectHeading", () => ({
-  ProjectHeading: () => <h1>Deployments</h1>,
+  ProjectHeading: ({ actions }: { actions: ReactNode }) => (
+    <header>
+      <h1>Deployments</h1>
+      {actions}
+    </header>
+  ),
 }));
+vi.mock("../../services/api", () => ({ request: state.request }));
 vi.mock("../../layouts/ProjectLayout", () => ({
   useProject: () => ({
-    project: { id: "p1" },
+    project: { id: "p1", git_url: "https://example.com/repo.git" },
     releases: [
       {
         id: "newest",
@@ -28,15 +46,22 @@ vi.mock("../../layouts/ProjectLayout", () => ({
       },
       { id: "older", status: "failed", created: "2026-11-16" },
     ],
-    refresh: vi.fn(),
+    refresh: state.refresh,
   }),
 }));
 vi.mock("../../providers/SessionProvider", () => ({
-  useSession: () => ({ can: () => true }),
+  useSession: () => ({ can: () => state.canDeploy }),
 }));
 vi.mock("../../providers/UIProvider", () => ({
-  useUI: () => ({ run: vi.fn() }),
+  useUI: () => ({
+    run: (action: () => Promise<unknown>) => action(),
+    notify: state.notify,
+  }),
 }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  state.canDeploy = true;
+});
 afterEach(cleanup);
 describe("deployment history", () => {
   it("opens the selected deployment linked from the overview and supports selection", () => {
@@ -61,5 +86,60 @@ describe("deployment history", () => {
       </MemoryRouter>,
     );
     expect(state.useLog).toHaveBeenLastCalledWith("newest");
+  });
+  it("keeps build controls in the header and sends cache choice only to new builds", async () => {
+    render(
+      <MemoryRouter initialEntries={["/project/p1/deployments?release=older"]}>
+        <DeploymentsView />
+      </MemoryRouter>,
+    );
+    const header = screen.getByRole("banner");
+    fireEvent.click(
+      within(header).getByRole("checkbox", { name: "Build without cache" }),
+    );
+    fireEvent.click(within(header).getByRole("button", { name: "Deploy" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith("projects/p1/deploy", {
+        no_cache: true,
+      }),
+    );
+    await waitFor(() => expect(state.refresh).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(
+        within(header).getByRole("button", { name: "Deploy" }),
+      ).not.toBeDisabled(),
+    );
+    expect(
+      screen.getByRole("region", { name: "Deployment history" }),
+    ).not.toContainElement(screen.getByRole("checkbox"));
+  });
+  it("redeploys the selected release instead of starting a new build", async () => {
+    render(
+      <MemoryRouter initialEntries={["/project/p1/deployments?release=older"]}>
+        <DeploymentsView />
+      </MemoryRouter>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Redeploy selected" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith("projects/p1/redeploy", {
+        deployment_id: "older",
+      }),
+    );
+    await waitFor(() =>
+      expect(state.notify).toHaveBeenCalledWith("Project deployment queued"),
+    );
+  });
+  it("preserves read-only deployment permissions after moving the controls", () => {
+    state.canDeploy = false;
+    render(
+      <MemoryRouter>
+        <DeploymentsView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("button", { name: "Deploy" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Redeploy selected" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("checkbox")).toBeDisabled();
   });
 });

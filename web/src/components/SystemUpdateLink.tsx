@@ -9,15 +9,13 @@ export function SystemUpdateLink() {
     <NavLink
       to="/system"
       className="sidebar-selector"
-      title="System updates"
+      title="Node settings"
       aria-label={
-        data?.update_available
-          ? "System updates: update available"
-          : "System updates"
+        data?.update_available ? "System: update available" : "System"
       }
     >
       <Icon name="server" />
-      <span className="selector-name">System updates</span>
+      <span className="selector-name">System</span>
       {data?.update_available && (
         <span className="update-dot" aria-hidden="true" />
       )}

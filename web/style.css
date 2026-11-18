@@ -270,7 +270,6 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .project-log-panel .log { min-height: 420px; height: calc(100dvh - 205px); max-height: none; }
 .project-form { width: 100%; }
 .project-form textarea { min-height: 300px; }
-.release-toolbar { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
 .container-row { display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .container-row:last-child { border-bottom: 0; }
 .container-copy { flex: 1; min-width: 140px; overflow-wrap: anywhere; }
@@ -288,7 +287,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .release-entry.select-deploy { display: block; width: 100%; text-align: left; white-space: normal; padding: 12px 14px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
 .release-entry:last-child { border-bottom: 0; }
 .release-entry:hover { background: var(--raised); }
-.release-entry.selected { background: var(--accent-soft); box-shadow: inset 2px 0 var(--success); }
+.release-entry.selected { background: var(--accent-soft); }
 .release-entry:focus-visible { outline-offset: -3px; }
 .release-main, .release-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
 .release-id { display: inline-flex; align-items: center; gap: 7px; font: 10px ui-monospace, monospace; }
