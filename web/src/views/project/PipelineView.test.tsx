@@ -108,7 +108,7 @@ describe("project pipeline", () => {
     ).toHaveLength(2);
     expect(screen.queryByLabelText("Build image")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Test image")).toBeEnabled();
-    expect(screen.getByLabelText("Port override (0 = detect)")).toHaveValue(0);
+    expect(screen.getByLabelText("Port override")).toHaveValue(null);
     expect(state.request).not.toHaveBeenCalledWith(
       "detect",
       expect.anything(),
@@ -129,7 +129,7 @@ describe("project pipeline", () => {
     expect(
       screen.getByLabelText("Serve artifact as static files"),
     ).toBeChecked();
-    fireEvent.change(screen.getByLabelText("Expected output contains"), {
+    fireEvent.change(screen.getByLabelText("Output contains"), {
       target: { value: "passed" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
@@ -173,7 +173,7 @@ describe("project pipeline", () => {
       "Start command",
       "HTTP port",
       "Health check path",
-      "Expected HTTP status",
+      "HTTP status",
     ]) {
       expect(screen.getByLabelText(label)).toBeDisabled();
     }
@@ -186,6 +186,7 @@ describe("project pipeline", () => {
           build_type: "vite",
           pipeline: {
             ...templates[0].pipeline,
+            test: { expect_exit_code: 0, expect_output: "" },
             deploy: staticDeploy,
           },
         },
@@ -223,6 +224,55 @@ describe("project pipeline", () => {
       within(modal).getByRole("button", { name: "Close templates" }),
     );
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+  it("shows a template port hint and saves a cleared port as automatic", async () => {
+    state.project.build_type = "go";
+    state.project.pipeline = {
+      ...templates[1].pipeline,
+      deploy: { port: 0 },
+    };
+    show();
+    const port = await screen.findByLabelText("HTTP port");
+    expect(port).toHaveValue(null);
+    expect(port).toHaveAttribute("placeholder", "8080");
+    fireEvent.change(port, { target: { value: "9000" } });
+    fireEvent.change(port, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({
+          pipeline: expect.objectContaining({ deploy: { port: 0 } }),
+        }),
+        "PATCH",
+      ),
+    );
+  });
+  it("clears a saved output expectation when switching templates", async () => {
+    state.project.build_type = "vite";
+    state.project.pipeline = {
+      ...templates[0].pipeline,
+      test: { expect_exit_code: 0, expect_output: "pipeline-actual" },
+    };
+    show();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Change template" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Use Auto-detect" }));
+    expect(screen.getByLabelText("Output contains")).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({
+          build_type: "auto",
+          pipeline: expect.objectContaining({
+            test: expect.objectContaining({ expect_output: "" }),
+          }),
+        }),
+        "PATCH",
+      ),
+    );
   });
   it("detects on click and prefers the resolved pipeline", async () => {
     state.request.mockImplementation(async (path: string) =>

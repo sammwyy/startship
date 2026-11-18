@@ -128,12 +128,34 @@
 .pipeline-stage-body {
   padding: 18px;
 }
+.pipeline-stage:first-child {
+  display: flex;
+  flex-direction: column;
+}
+.pipeline-stage:first-child .pipeline-stage-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.pipeline-stage:first-child label:has(textarea) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.pipeline-stage:first-child textarea {
+  flex: 1;
+}
+.pipeline-build-hint {
+  margin: 0;
+}
 .pipeline-stage-body label {
   font-size: 11px;
+  min-width: 0;
 }
 .pipeline-stage-body .split,
 .pipeline-health-grid {
   gap: 10px;
+  align-items: end;
 }
 .pipeline-health-grid {
   display: grid;
@@ -272,10 +294,24 @@
   padding: 3px;
   min-height: 0;
 }
+:is(.sidebar, .content, .template-grid)::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+:is(.sidebar, .content, .template-grid)::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 6px;
+}
+:is(.sidebar, .content, .template-grid)::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
 .template-tile {
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  justify-content: flex-start;
   text-align: left;
   border: 1px solid var(--line);
   background: transparent;
@@ -292,17 +328,29 @@
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.template-tile:focus-visible {
+  outline-offset: -2px;
+}
 .template-tile-top {
+  min-height: 40px;
+  flex-shrink: 0;
   justify-content: space-between;
   margin-bottom: 2px;
 }
 .template-tile strong {
   font-size: 13px;
   font-weight: 500;
+  line-height: 20px;
+  min-height: 20px;
 }
 .template-tile > .small {
   font-size: 11px;
   line-height: 1.6;
+  min-height: 35.2px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 .template-markers {
   color: var(--accent);
@@ -320,6 +368,9 @@
   flex-shrink: 0;
 }
 @media (max-width: 1100px) {
+  .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
   .pipeline-stage-list {
     grid-template-columns: 1fr;
   }
@@ -345,7 +396,7 @@
 }
 @media (max-width: 600px) {
   .template-grid {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
   .pipeline-modal {
     padding: 18px;
@@ -367,6 +418,7 @@
   }
   .pipeline-strategy .section-head {
     align-items: flex-start;
+    flex-wrap: wrap;
   }
 }
 .form-fields {

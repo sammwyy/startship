@@ -34,7 +34,11 @@ const lines = (value: string) => value.split("\n");
 const clean = (p: Pipeline): Pipeline => ({
   ...p,
   build: { ...p.build, commands: p.build.commands?.filter((s) => s.trim()) },
-  test: { ...p.test, commands: p.test.commands?.filter((s) => s.trim()) },
+  test: {
+    ...p.test,
+    commands: p.test.commands?.filter((s) => s.trim()),
+    expect_output: p.test.expect_output || "",
+  },
   deploy: p.deploy.static
     ? {
         static: true,
@@ -97,6 +101,9 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
       strategy === "auto"
         ? autoTemplate
         : templates.find((t) => t.id === strategy);
+  const detectedPort = detected.find((d) => auto || d.template === strategy)
+    ?.pipeline?.deploy.port;
+  const portHint = detectedPort || current?.pipeline.deploy.port;
   function stage<K extends keyof Pipeline>(
     key: K,
     patch: Partial<Pipeline[K]>,
@@ -238,7 +245,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                     <label>
                       Build commands
                       <textarea
-                        rows={3}
+                        rows={9}
                         placeholder="One command per line"
                         value={pipeline.build.commands?.join("\n") || ""}
                         onChange={(e) =>
@@ -247,6 +254,9 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                       />
                     </label>
                   )}
+                  <p className="small muted pipeline-build-hint">
+                    Runs in /app with your repository copied in.
+                  </p>
                 </>
               )}
             </div>
@@ -268,7 +278,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
               ) : (
                 <Field
                   label="Test image"
-                  placeholder="Defaults to build image"
+                  placeholder="Same as build"
                   value={pipeline.test.image || ""}
                   onChange={(e) => stage("test", { image: e.target.value })}
                 />
@@ -277,7 +287,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                 Test commands
                 <textarea
                   rows={3}
-                  placeholder="One command per line (optional)"
+                  placeholder="Optional"
                   value={pipeline.test.commands?.join("\n") || ""}
                   onChange={(e) =>
                     stage("test", { commands: lines(e.target.value) })
@@ -286,7 +296,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
               </label>
               <div className="split">
                 <Field
-                  label="Expected exit code"
+                  label="Exit code"
                   type="number"
                   required
                   value={pipeline.test.expect_exit_code}
@@ -295,8 +305,8 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                   }
                 />
                 <Field
-                  label="Expected output contains"
-                  placeholder="Optional substring"
+                  label="Output contains"
+                  placeholder="Optional"
                   value={pipeline.test.expect_output || ""}
                   onChange={(e) =>
                     stage("test", { expect_output: e.target.value })
@@ -327,7 +337,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                     <Field
                       label="Runtime image"
                       disabled={staticServing}
-                      placeholder="Defaults to build image"
+                      placeholder="Same as build"
                       value={pipeline.deploy.image || ""}
                       onChange={(e) =>
                         stage("deploy", { image: e.target.value })
@@ -335,7 +345,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                     />
                     <Field
                       label="Artifact path"
-                      placeholder=". (entire build)"
+                      placeholder="."
                       value={pipeline.deploy.artifact || ""}
                       onChange={(e) =>
                         stage("deploy", { artifact: e.target.value })
@@ -368,13 +378,13 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
               )}
               <div className="pipeline-health-grid">
                 <Field
-                  label={auto ? "Port override (0 = detect)" : "HTTP port"}
+                  label={auto ? "Port override" : "HTTP port"}
                   disabled={staticServing}
                   type="number"
                   min={0}
                   max={65535}
-                  required
-                  value={pipeline.deploy.port || 0}
+                  placeholder={portHint ? String(portHint) : "Auto"}
+                  value={pipeline.deploy.port || ""}
                   onChange={(e) =>
                     stage("deploy", { port: Number(e.target.value) })
                   }
@@ -382,14 +392,14 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                 <Field
                   label="Health check path"
                   disabled={staticServing}
-                  placeholder="Empty = TCP check"
+                  placeholder="TCP check"
                   value={pipeline.deploy.health_path || ""}
                   onChange={(e) =>
                     stage("deploy", { health_path: e.target.value })
                   }
                 />
                 <Field
-                  label="Expected HTTP status"
+                  label="HTTP status"
                   disabled={staticServing}
                   type="number"
                   min={100}
