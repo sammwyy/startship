@@ -45,6 +45,9 @@ import {
   GitBranch,
   Workflow,
   Check,
+  Download,
+  RotateCcw,
+  ArchiveRestore,
 } from "lucide-react";
 
 const icons = {
@@ -69,6 +72,9 @@ const icons = {
   grid: Grid2X2,
   heart: Heart,
   history: History,
+  download: Download,
+  restore: RotateCcw,
+  archive: ArchiveRestore,
   key: KeyRound,
   layers: Layers,
   lock: Lock,

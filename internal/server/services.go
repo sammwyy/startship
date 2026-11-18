@@ -27,6 +27,8 @@ type Service struct {
 	Config       map[string]string `json:"config"`
 	ExternalPort int               `json:"external_port"`
 	VolumeID     string            `json:"volume_id"`
+	Backup       *BackupPolicy     `json:"backup,omitempty"`
+	BackupAt     *time.Time        `json:"next_backup,omitempty"`
 	Attachments  []Attachment      `json:"attachments"`
 	Status       string            `json:"status"`
 	LastError    string            `json:"last_error"`
@@ -42,6 +44,7 @@ type Volume struct {
 	ProjectID   string    `json:"project_id"`
 	MountPath   string    `json:"mount_path"`
 	ServiceID   string    `json:"service_id"`
+	Purpose     string    `json:"purpose,omitempty"`
 	SizeBytes   int64     `json:"size_bytes"`
 	SizeUpdated time.Time `json:"size_updated"`
 	Created     time.Time `json:"created"`
@@ -240,7 +243,18 @@ func (a *Server) launchService(id, action string) {
 	go func() { lock := serviceLock(id); lock.Lock(); defer lock.Unlock(); a.serviceAction(id, action) }()
 }
 func (a *Server) reconcileServices() {
+	for _, b := range listResources[Backup](a, "backups", "") {
+		if b.Status == "running" {
+			b.Status, b.Error, b.Finished = "failed", "interrupted by a daemon restart", time.Now().UTC()
+			a.saveBackup(b)
+		}
+	}
 	for _, s := range listResources[Service](a, "services", "") {
+		if s.Status == "restoring" {
+			s.Status, s.LastError = "failed", "restore interrupted by a daemon restart"
+			a.saveService(s)
+			continue
+		}
 		if s.Status == "running" || s.Status == "pending" || s.Status == "pulling" || s.Status == "starting" {
 			go func(s Service) {
 				lock := serviceLock(s.ID)

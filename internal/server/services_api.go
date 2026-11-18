@@ -253,7 +253,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				ProjectID string `json:"project_id"`
 				MountPath string `json:"mount_path"`
 			}
-			if decode(w, r, &input) != nil || v.ServiceID != "" {
+			if decode(w, r, &input) != nil || v.ServiceID != "" || v.Purpose == backupVolumePurpose {
 				fail(w, 400, "invalid volume")
 				return true
 			}
@@ -283,6 +283,10 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 		case "DELETE":
 			if v.ServiceID != "" || v.ProjectID != "" {
 				fail(w, 409, "volume is in use")
+				return true
+			}
+			if v.Purpose == backupVolumePurpose && len(a.backups(v.WorkspaceID, "")) > 0 {
+				fail(w, 409, "volume still holds backups")
 				return true
 			}
 			if _, err = a.serviceDocker("volume", "rm", volumeName(v.ID)); err != nil {

@@ -35,6 +35,13 @@ export function useVolumes(workspaceId: string) {
   });
   return { ...useQuery(queries.volumes(workspaceId)), liveError };
 }
+export function useBackups(workspaceId: string) {
+  const liveError = useLiveSubscription({
+    topic: "backups",
+    workspace_id: workspaceId,
+  });
+  return { ...useQuery(queries.backups(workspaceId)), liveError };
+}
 export const validServiceName = (value: string) =>
   /^[a-z][a-z0-9_-]{0,62}$/.test(value);
 export const envPrefix = (alias: string) =>

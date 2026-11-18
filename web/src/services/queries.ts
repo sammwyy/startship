@@ -17,6 +17,7 @@ import type {
   Service,
   Volume,
   ProjectServices,
+  Backups,
 } from "./types";
 
 function resource<T>(path: string) {
@@ -30,6 +31,7 @@ export const queries = {
   services: (id: string) =>
     resource<{ services: Service[] }>(`workspaces/${id}/services`),
   service: (id: string) => resource<Service>(`services/${id}`),
+  backups: (id: string) => resource<Backups>(`workspaces/${id}/backups`),
   volumes: (id: string) =>
     resource<{ volumes: Volume[] }>(`workspaces/${id}/volumes`),
   projectServices: (id: string) =>
