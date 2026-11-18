@@ -285,6 +285,11 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 		return
 	}
 	defer conn.CloseNow()
+	if uid == "" {
+		// Legacy dashboards can see a WebSocket close code but not a handshake's HTTP 401.
+		conn.Close(websocket.StatusCode(4401), "reauthentication required")
+		return
+	}
 	conn.SetReadLimit(8192)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()

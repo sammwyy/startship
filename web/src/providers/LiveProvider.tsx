@@ -3,10 +3,12 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { reloadDashboard } from "../lib/dashboardReload";
 import {
   LiveConnection,
   applyLiveMessage,
@@ -14,6 +16,7 @@ import {
   type LiveSubscription,
 } from "../services/live";
 import { queries } from "../services/queries";
+import type { SystemVersion } from "../services/types";
 
 const Context = createContext<{
   connection: LiveConnection | null;
@@ -22,6 +25,7 @@ const Context = createContext<{
 export function LiveProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient();
   const [status, setStatus] = useState<LiveStatus>("connecting");
+  const daemonVersion = useRef<SystemVersion>(undefined);
   const connection = useMemo(
     () =>
       new LiveConnection(
@@ -38,6 +42,16 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         },
         setStatus,
         (version) => {
+          const previous = daemonVersion.current;
+          if (
+            previous &&
+            (version.version !== previous.version ||
+              version.commit !== previous.commit)
+          ) {
+            reloadDashboard();
+            return;
+          }
+          daemonVersion.current = version;
           void client.cancelQueries({
             queryKey: queries.version().queryKey,
             exact: true,

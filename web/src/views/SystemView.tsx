@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ErrorMessage, Loading } from "../components/ui";
+import { reloadDashboard } from "../lib/dashboardReload";
+import { useLiveStatus } from "../providers/LiveProvider";
 import { useSession } from "../providers/SessionProvider";
 import { useUI } from "../providers/UIProvider";
 import { ApiError, request } from "../services/api";
@@ -21,9 +23,12 @@ export function SystemView() {
   const [startedAt, setStartedAt] = useState(0);
   const [timedOut, setTimedOut] = useState(false);
   const [installed, setInstalled] = useState<string>();
-  const status = useQuery(queries.updates());
+  const liveStatus = useLiveStatus();
+  const refetchInterval =
+    tracking && !timedOut && liveStatus !== "connected" ? 2000 : false;
+  const status = useQuery({ ...queries.updates(), refetchInterval });
   const info = status.data;
-  const version = useQuery(queries.version());
+  const version = useQuery({ ...queries.version(), refetchInterval });
   const refresh = useMutation({
     mutationFn: () => request<UpdateInfo>("system/update?refresh=1"),
     onSuccess: (data) => client.setQueryData(queries.updates().queryKey, data),
@@ -66,9 +71,9 @@ export function SystemView() {
     ) {
       setInstalled(version.data.version);
       setTracking(undefined);
-      void client.invalidateQueries(queries.updates());
+      reloadDashboard();
     }
-  }, [tracking, version.data, client]);
+  }, [tracking, version.data]);
   useEffect(() => {
     if (!tracking) return;
     const timer = window.setTimeout(
@@ -202,8 +207,7 @@ export function SystemView() {
           )}
           {installed && (
             <p className="note" role="status">
-              Startship {installed} is running. Reload the dashboard to load its
-              new assets.
+              Startship {installed} is running. Reloading the dashboard…
             </p>
           )}
           <div className="form-actions">

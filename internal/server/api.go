@@ -257,6 +257,14 @@ func (a *Server) api() http.Handler {
 		s := a.authenticate(r)
 		uid := s.userID
 		if uid == "" {
+			if len(p) == 2 && p[1] == "live" && s.digest != "" &&
+				r.Method == http.MethodGet && strings.EqualFold(r.Header.Get("Upgrade"), "websocket") &&
+				r.Header.Get("Origin") != "" {
+				if refresh, err := r.Cookie(refreshCookie); err != nil || refresh.Value == "" {
+					a.liveHandler(w, r, "")
+					return
+				}
+			}
 			fail(w, 401, "authentication required")
 			return
 		}

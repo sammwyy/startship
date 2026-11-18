@@ -25,6 +25,53 @@ func liveTestSession(t *testing.T, a *Server, uid string) (sid, token string) {
 	return sid, token
 }
 
+func TestLiveStaleAccessCookie(t *testing.T) {
+	a := testServer(t)
+	srv := httptest.NewServer(a.api())
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cookie := "startship_session=" + randomID()
+	origin := srv.URL
+	for _, tc := range []struct {
+		name, cookie, origin string
+		status               int
+	}{
+		{"legacy browser", cookie, origin, http.StatusSwitchingProtocols},
+		{"no cookie", "", origin, http.StatusUnauthorized},
+		{"can refresh", cookie + "; startship_refresh=" + randomID(), origin, http.StatusUnauthorized},
+		{"cross-origin", cookie, "https://other.example", http.StatusForbidden},
+		{"no origin", cookie, "", http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			headers := http.Header{}
+			if tc.origin != "" {
+				headers.Set("Origin", tc.origin)
+			}
+			if tc.cookie != "" {
+				headers.Set("Cookie", tc.cookie)
+			}
+			c, res, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: headers})
+			if c != nil {
+				defer c.CloseNow()
+			}
+			if res == nil || res.StatusCode != tc.status {
+				t.Fatalf("dial: %v (%v), want status %d", res, err, tc.status)
+			}
+			if tc.status == http.StatusSwitchingProtocols {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, b, err := c.Read(ctx); websocket.CloseStatus(err) != 4401 {
+					t.Fatalf("first read: %q, %v; want close code 4401 without a ready message", b, err)
+				}
+			} else if err == nil {
+				t.Fatal("unauthenticated handshake succeeded")
+			}
+		})
+	}
+}
+
 func TestLive(t *testing.T) {
 	a := testServer(t)
 	a.liveSessionInterval = 50 * time.Millisecond
