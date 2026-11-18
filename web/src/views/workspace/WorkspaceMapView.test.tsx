@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceMapView } from "./WorkspaceMapView";
 
 const state = vi.hoisted(() => ({
@@ -120,6 +120,7 @@ beforeEach(() => {
     },
   );
 });
+afterEach(() => vi.restoreAllMocks());
 function setup() {
   render(
     <MemoryRouter initialEntries={["/workspace/w/map"]}>
@@ -142,6 +143,11 @@ describe("workspace map view", () => {
     expect(
       connections.getByRole("link", { name: /Uploads/ }),
     ).toBeInTheDocument();
+    expect(connections.getByText("/uploads · 2.0 KB")).toBeInTheDocument();
+    expect(connections.getByRole("link", { name: /Uploads/ })).toHaveAttribute(
+      "title",
+      expect.stringContaining("/uploads · 2.0 KB"),
+    );
     expect(
       connections.getByRole("link", { name: /^Database postgresql/ }),
     ).toBeInTheDocument();
@@ -152,6 +158,44 @@ describe("workspace map view", () => {
     expect(
       storage.queryByRole("link", { name: /Uploads/ }),
     ).not.toBeInTheDocument();
+  });
+  it("anchors vertical edges at the card bottom and the next card top", () => {
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      getPropertyValue: () => "1",
+    } as unknown as CSSStyleDeclaration);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        if (this.classList.contains("map-board"))
+          return {
+            left: 0,
+            right: 390,
+            top: 0,
+            bottom: 800,
+            width: 390,
+            height: 800,
+            x: 0,
+            y: 0,
+            toJSON() {},
+          };
+        const top = this.dataset.mapKey === "projects:p" ? 100 : 300;
+        return {
+          left: 0,
+          right: 100,
+          top,
+          bottom: top + 72,
+          width: 100,
+          height: 72,
+          x: 0,
+          y: top,
+          toJSON() {},
+        };
+      },
+    );
+    setup();
+    expect(document.querySelector(".map-edges path")).toHaveAttribute(
+      "d",
+      "M50,172 C50,236 50,236 50,300",
+    );
   });
   it("renders resource links and traces connected nodes on keyboard focus", async () => {
     const user = setup();

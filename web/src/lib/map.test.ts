@@ -146,4 +146,29 @@ describe("map label placement", () => {
     expect(placeMapLabels([label], [], 10)).toEqual([null]);
     expect(placeMapLabels([], [], 200)).toEqual([]);
   });
+  it("separates vertical-layout labels along x within the row gap", () => {
+    const vertical = { ...label, x: 150, y: 240, top: 200, bottom: 264 };
+    expect(placeMapLabels([vertical, vertical], [], 500, 390)).toEqual([
+      { x: 150, y: 240, width: 74 },
+      { x: 70, y: 240, width: 74 },
+    ]);
+  });
+  it("keeps vertical labels in the board and hides labels in blocked or undersized gaps", () => {
+    const vertical = { ...label, x: 380, y: 260, top: 200, bottom: 264 };
+    expect(placeMapLabels([vertical], [], 500, 390)).toEqual([
+      { x: 347, y: 248, width: 74 },
+    ]);
+    expect(
+      placeMapLabels(
+        [vertical],
+        [{ x: 0, y: 200, width: 390, height: 64 }],
+        500,
+        390,
+      ),
+    ).toEqual([null]);
+    expect(
+      placeMapLabels([{ ...vertical, bottom: 220 }], [], 500, 390),
+    ).toEqual([null]);
+    expect(placeMapLabels([vertical], [], 500, 60)).toEqual([null]);
+  });
 });

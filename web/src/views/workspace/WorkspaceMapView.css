@@ -1,5 +1,6 @@
 .workspace-map {
   min-width: 0;
+  container-type: inline-size;
 }
 .map-meta,
 .map-legend {
@@ -21,11 +22,12 @@
   gap: 7px;
 }
 .map-board {
+  --map-vertical: 0;
   position: relative;
   isolation: isolate;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(18px, 8vw, 144px);
+  gap: clamp(168px, 18cqw, 192px);
   padding: 18px;
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -209,35 +211,47 @@
     flex-basis: 24px;
   }
 }
-@media (max-width: 600px) {
+@container (max-width: 720px) {
   .map-board {
-    gap: 16px;
-    padding: 12px 9px;
+    --map-vertical: 1;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 64px;
+    padding: 16px 12px;
     border-radius: 12px;
   }
   .map-column h2 {
-    font-size: 10px;
+    font-size: 11px;
     margin-bottom: 14px;
   }
   .map-node {
-    min-height: 56px;
-    padding: 8px 5px;
-    gap: 4px;
+    min-height: 76px;
+    padding: 10px 8px;
+    gap: 7px;
+    align-items: flex-start;
     border-radius: 8px;
   }
   .map-node-copy strong {
-    font-size: 10px;
+    font-size: 11px;
   }
-  .map-node-copy small,
-  .map-edge-label,
+  .map-node-copy strong,
+  .map-node-copy small {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+  }
+  .map-node-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
   .map-hint {
     display: none;
   }
   .map-node-icon,
   .map-node .engine-icon {
-    width: 17px;
+    width: 20px;
     height: 22px;
-    flex-basis: 17px;
+    flex-basis: 20px;
     border: 0;
     background: none;
   }
@@ -247,9 +261,14 @@
     height: 14px;
   }
   .map-dot {
+    margin-top: 6px;
     width: 5px;
     height: 5px;
     flex-basis: 5px;
+  }
+  .map-legend .map-dot,
+  .map-live .map-dot {
+    margin-top: 0;
   }
   .map-meta {
     font-size: 10px;

@@ -105,11 +105,14 @@ export interface MapLabel {
   width: number;
   left: number;
   right: number;
+  top?: number;
+  bottom?: number;
 }
 export function placeMapLabels(
   labels: (MapLabel | null)[],
   cards: MapBox[],
   height: number,
+  verticalWidth?: number,
 ) {
   const placed: MapBox[] = [];
   const overlaps = (a: MapBox, b: MapBox) =>
@@ -118,13 +121,32 @@ export function placeMapLabels(
     a.y < b.y + b.height + 4 &&
     a.y + a.height + 4 > b.y;
   return labels.map((label) => {
-    if (!label || label.right - label.left < label.width + 12) return null;
-    const x = Math.max(
-      label.left + 6 + label.width / 2,
-      Math.min(label.x, label.right - 6 - label.width / 2),
-    );
+    if (!label) return null;
+    const vertical = verticalWidth !== undefined;
+    if (
+      vertical
+        ? label.top === undefined ||
+          label.bottom === undefined ||
+          label.bottom - label.top < 32 ||
+          verticalWidth < label.width + 12
+        : label.right - label.left < label.width + 12
+    )
+      return null;
+    const baseX = vertical
+      ? Math.max(
+          6 + label.width / 2,
+          Math.min(label.x, verticalWidth - 6 - label.width / 2),
+        )
+      : Math.max(
+          label.left + 6 + label.width / 2,
+          Math.min(label.x, label.right - 6 - label.width / 2),
+        );
+    const baseY = vertical
+      ? Math.max(label.top! + 16, Math.min(label.y, label.bottom! - 16))
+      : label.y;
     for (const offset of [0, -24, 24, -48, 48, -72, 72, -96, 96]) {
-      const y = label.y + offset;
+      const x = baseX + (vertical ? (offset / 24) * (label.width + 6) : 0);
+      const y = baseY + (vertical ? 0 : offset);
       const box = {
         x: x - label.width / 2,
         y: y - 10,
@@ -134,6 +156,7 @@ export function placeMapLabels(
       if (
         box.y < 0 ||
         box.y + box.height > height ||
+        (vertical && (box.x < 6 || box.x + box.width > verticalWidth - 6)) ||
         [...cards, ...placed].some((other) => overlaps(box, other))
       )
         continue;

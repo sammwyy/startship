@@ -116,7 +116,12 @@ export function WorkspaceMapView() {
       return {
         key: mapKey("volumes", v.id),
         name: v.name,
-        detail: v.size_updated ? volumeSize(v.size_bytes) : "Size pending",
+        detail: [
+          v.project_id && v.mount_path,
+          v.size_updated ? volumeSize(v.size_bytes) : "Size pending",
+        ]
+          .filter(Boolean)
+          .join(" · "),
         status: owners.some((n) => tone(n.status) === "running")
           ? "running"
           : "idle",
@@ -147,6 +152,9 @@ export function WorkspaceMapView() {
     if (!element) return;
     const measure = () => {
       const bounds = element.getBoundingClientRect();
+      const vertical =
+        getComputedStyle(element).getPropertyValue("--map-vertical").trim() ===
+        "1";
       const anchors = new Map(
         Array.from(element.querySelectorAll<HTMLElement>("[data-map-key]")).map(
           (node) => [node.dataset.mapKey!, node.getBoundingClientRect()],
@@ -156,26 +164,43 @@ export function WorkspaceMapView() {
         const a = anchors.get(edge.from),
           b = anchors.get(edge.to);
         if (!a || !b) return [];
-        const x1 = a.right - bounds.left,
-          x2 = b.left - bounds.left,
-          y1 = a.top + a.height / 2 - bounds.top,
-          y2 = b.top + b.height / 2 - bounds.top;
-        const bend = (x2 - x1) * 0.5;
+        const x1 = (vertical ? a.left + a.width / 2 : a.right) - bounds.left,
+          x2 = (vertical ? b.left + b.width / 2 : b.left) - bounds.left,
+          y1 = (vertical ? a.bottom : a.top + a.height / 2) - bounds.top,
+          y2 = (vertical ? b.top : b.top + b.height / 2) - bounds.top;
+        const bend = (vertical ? y2 - y1 : x2 - x1) * 0.5;
+        const groupBounds = (key: string) =>
+          Array.from(element.querySelectorAll<HTMLElement>("[data-map-key]"))
+            .find((node) => node.dataset.mapKey === key)
+            ?.closest(".map-column")
+            ?.getBoundingClientRect();
+        const sourceGroup = groupBounds(edge.from),
+          targetGroup = groupBounds(edge.to);
         return [
           {
             ...edge,
-            d: `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
+            d: vertical
+              ? `M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2}`
+              : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
             labelBox: edge.label
               ? {
-                  x:
-                    x1 * 0.015625 +
-                    (x1 + bend) * 0.140625 +
-                    (x2 - bend) * 0.421875 +
-                    x2 * 0.421875,
-                  y: y1 * 0.15625 + y2 * 0.84375,
+                  x: vertical
+                    ? x1 * 0.15625 + x2 * 0.84375
+                    : x1 * 0.015625 +
+                      (x1 + bend) * 0.140625 +
+                      (x2 - bend) * 0.421875 +
+                      x2 * 0.421875,
+                  y: vertical
+                    ? y1 * 0.015625 +
+                      (y1 + bend) * 0.140625 +
+                      (y2 - bend) * 0.421875 +
+                      y2 * 0.421875
+                    : y1 * 0.15625 + y2 * 0.84375,
                   width: Math.min(edge.label.length, 19) * 7 + 18,
                   left: x1,
                   right: x2,
+                  top: sourceGroup ? sourceGroup.bottom - bounds.top : y1,
+                  bottom: targetGroup ? targetGroup.top - bounds.top : y2,
                 }
               : null,
           },
@@ -191,6 +216,7 @@ export function WorkspaceMapView() {
         measured.map((edge) => edge.labelBox),
         cards,
         bounds.height,
+        vertical ? bounds.width : undefined,
       );
       setCurves(
         measured.map((edge, index) => ({
