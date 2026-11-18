@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/coder/websocket v1.8.13
 	github.com/google/go-containerregistry v0.20.3
+	github.com/oschwald/maxminddb-golang v1.13.1
 	golang.org/x/crypto v0.48.0
 	modernc.org/sqlite v1.46.1
 )
