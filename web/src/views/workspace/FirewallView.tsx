@@ -17,7 +17,7 @@ import {
   useFirewallCatalog,
 } from "../../services/firewall";
 import type { Action, Policy, Rule, Stats } from "../../services/firewall";
-import { ActionPill, Picker, Toggle } from "./FirewallControls";
+import { ActionPill, Picker, Toggle, optionLabel } from "./FirewallControls";
 import { FirewallRuleEditor, rulePreset } from "./FirewallRuleEditor";
 import { FirewallLimits } from "./FirewallLimits";
 import { FirewallLists } from "./FirewallLists";
@@ -58,6 +58,7 @@ function FirewallChart({ stats }: { stats: Stats }) {
         >
           <path className="traffic-gridline" d="M0 10H604M0 85H604M0 160H604" />
           {minutes.map((m, i) => {
+            if (!m.total) return null;
             const total = (m.total / max) * 150,
               blocked = (m.blocked / max) * 150;
             return (
@@ -66,14 +67,6 @@ function FirewallChart({ stats }: { stats: Stats }) {
                   {trafficTime(m.at * 1000)} · {m.total - m.blocked} allowed ·{" "}
                   {m.blocked} blocked
                 </title>
-                <rect
-                  className="traffic-bar-track"
-                  x={4 + i * 10}
-                  y={10}
-                  width={6}
-                  height={150}
-                  rx={2}
-                />
                 <rect
                   className="traffic-bar"
                   x={4 + i * 10}
@@ -262,14 +255,15 @@ export function FirewallView() {
                       <tbody>
                         {data.events.map((event, i) => (
                           <tr key={`${event.time}-${i}`}>
-                            <td>{trafficTime(event.time)}</td>
-                            <td>
+                            <td data-label="Time">{trafficTime(event.time)}</td>
+                            <td data-label="Client" className="fw-client">
                               <code>{event.ip}</code>
-                              <small>
-                                {event.country || "Unknown country"}
-                              </small>
+                              <span className="muted">
+                                {" "}
+                                · {event.country || "Unknown country"}
+                              </span>
                             </td>
-                            <td>
+                            <td data-label="Request">
                               <span className="fw-request">
                                 <b>{event.method}</b>
                                 <span title={`${event.host}${event.path}`}>
@@ -278,11 +272,13 @@ export function FirewallView() {
                                 </span>
                               </span>
                             </td>
-                            <td title={event.ua}>
-                              {event.ua_class || "unknown"}
+                            <td data-label="UA class" title={event.ua}>
+                              {optionLabel(event.ua_class || "unknown")}
                             </td>
-                            <td>{event.rule_name || event.rule_id}</td>
-                            <td>
+                            <td data-label="Rule">
+                              {event.rule_name || event.rule_id}
+                            </td>
+                            <td data-label="Action">
                               <ActionPill
                                 action={event.action}
                                 monitored={event.monitored}

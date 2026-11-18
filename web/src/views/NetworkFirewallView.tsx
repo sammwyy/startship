@@ -12,7 +12,7 @@ import {
   useNetworkFirewall,
 } from "../services/firewall";
 import type { NetworkRule } from "../services/firewall";
-import { Expiry, Picker } from "./workspace/FirewallControls";
+import { Expiry, Picker, optionLabel } from "./workspace/FirewallControls";
 import "./workspace/FirewallView.css";
 
 function NetworkFields() {
@@ -208,20 +208,24 @@ export function NetworkFirewallView() {
                         <tbody>
                           {data.rules.map((rule) => (
                             <tr key={rule.id}>
-                              <td>
+                              <td data-label="Value">
                                 <code>{rule.value}</code>
                               </td>
-                              <td>{rule.kind}</td>
-                              <td>
+                              <td data-label="Kind">
+                                {optionLabel(rule.kind)}
+                              </td>
+                              <td data-label="Scope">
                                 {rule.ports === "router"
                                   ? "Router only"
                                   : "All ports"}
                               </td>
-                              <td>
+                              <td data-label="Expires">
                                 <Expiry value={rule.expires_at} />
                               </td>
-                              <td className="fw-wrap">{rule.note || "—"}</td>
-                              <td>
+                              <td data-label="Note" className="fw-wrap">
+                                {rule.note || "—"}
+                              </td>
+                              <td data-label="Actions">
                                 <button
                                   className="icon-button danger"
                                   aria-label={`Remove ${rule.value}`}

@@ -150,12 +150,19 @@
 }
 .fw-chart {
   min-width: 0;
+  padding: 20px 22px;
 }
 .fw-chart .traffic-volume-chart {
   height: 145px;
 }
 .fw-chart .traffic-volume-chart svg {
   height: 145px;
+}
+.fw-chart .traffic-panel-head {
+  padding: 0;
+}
+.fw-client {
+  white-space: nowrap;
 }
 .fw-table {
   overflow-x: auto;
@@ -165,7 +172,7 @@
   width: 100%;
 }
 .fw-table :is(th, td) {
-  padding: 13px 18px;
+  padding: 9px 18px;
   font-size: 12px;
 }
 .fw-table td {
@@ -220,7 +227,7 @@
   font-size: 10px;
   font-weight: 500;
   white-space: nowrap;
-  text-transform: capitalize;
+  text-transform: none;
 }
 .fw-action-block,
 .fw-action-ban {
@@ -375,6 +382,16 @@
 }
 .fw-size {
   display: flex;
+  margin-top: 8px;
+}
+.fw-size > input {
+  margin-top: 0;
+}
+fieldset.fw-form-grid {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  min-width: 0;
 }
 .fw-size > input {
   border-radius: 6px 0 0 6px;
@@ -391,6 +408,15 @@
 }
 .fw-list {
   overflow: hidden;
+}
+.fw-duration > .fw-picker {
+  flex-basis: 120px;
+  width: 120px;
+}
+.fw-duration > .fw-picker:only-child {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
 }
 .fw-list h3 > .icon {
   width: 16px;
@@ -473,6 +499,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+.fw-condition-footer > .fw-picker {
+  width: 112px;
 }
 .fw-check {
   display: inline-flex;
@@ -683,8 +712,77 @@
   .fw-network-status {
     align-items: flex-start;
   }
-  .fw-network .fw-table table {
-    min-width: 660px;
+  .fw-chart .traffic-panel-head {
+    padding: 0;
+  }
+  .fw-chart {
+    padding: 16px;
+  }
+  .fw-table {
+    overflow: visible;
+    position: relative;
+  }
+  .fw-table table,
+  .fw-table tbody {
+    display: block;
+    min-width: 0;
+  }
+  .fw-table thead {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .fw-table tbody tr {
+    display: grid;
+    gap: 7px;
+    padding: 14px 16px;
+    border-top: 1px solid var(--line);
+  }
+  .fw-table tbody td {
+    display: grid;
+    grid-template-columns: 65px minmax(0, 1fr);
+    align-items: baseline;
+    gap: 10px;
+    padding: 0;
+    min-width: 0;
+    max-width: none;
+    border: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .fw-table td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .fw-table td.fw-client {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+  }
+  .fw-client::before {
+    flex: 0 0 75px;
+  }
+  .fw-table td.fw-wrap {
+    min-width: 0;
+    max-width: none;
+  }
+  .fw-table td > .fw-action,
+  .fw-table td > button {
+    justify-self: start;
+  }
+  .fw-request {
+    align-items: baseline;
+    min-width: 0;
+  }
+  .fw-request > span {
+    max-width: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .fw-stats + .fw-toolbar {
     margin-bottom: 16px;

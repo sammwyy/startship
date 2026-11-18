@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Icon } from "../../components/Icon";
 import { AsyncForm, Field } from "../../components/ui";
-import { Picker, Toggle } from "./FirewallControls";
-import { durationSeconds, durationText } from "../../services/firewall";
+import { Duration, Picker, Toggle, optionLabel } from "./FirewallControls";
 import type {
   Action,
   Catalog,
@@ -53,10 +52,12 @@ function Chips({
   value,
   onChange,
   options,
+  single = false,
 }: {
   value: string[];
   onChange: (values: string[]) => void;
   options?: string[];
+  single?: boolean;
 }) {
   const [text, setText] = useState("");
   function add() {
@@ -64,7 +65,7 @@ function Chips({
       .split(",")
       .map((v) => v.trim())
       .filter(Boolean);
-    onChange([...new Set([...value, ...next])]);
+    onChange(single ? next.slice(-1) : [...new Set([...value, ...next])]);
     setText("");
   }
   return (
@@ -77,7 +78,7 @@ function Chips({
             aria-label={`Remove ${v}`}
             onClick={() => onChange(value.filter((s) => s !== v))}
           >
-            {v}
+            {optionLabel(v)}
             <Icon name="close" />
           </button>
         ))}
@@ -127,10 +128,9 @@ export function FirewallRuleEditor({
   onSave: (rule: Rule) => Promise<unknown>;
 }) {
   const [rule, setRule] = useState<Rule>(structuredClone(initial));
-  const [window, setWindow] = useState(
-    durationText(initial.rate?.window_seconds || 60),
-  );
-  const [ban, setBan] = useState(durationText(initial.ban_seconds || 0));
+  const [window, setWindow] = useState(initial.rate?.window_seconds || 60);
+  const [ban, setBan] = useState(initial.ban_seconds || 0);
+  const [banAfterLimit, setBanAfterLimit] = useState(!!initial.ban_seconds);
   const setCondition = (i: number, patch: Partial<Condition>) =>
     setRule((r) => ({
       ...r,
@@ -154,12 +154,13 @@ export function FirewallRuleEditor({
         if (next.action === "rate_limit")
           next.rate = {
             requests: rule.rate?.requests || 10,
-            window_seconds: durationSeconds(window),
+            window_seconds: window,
             by: rule.rate?.by || "ip",
           };
         else delete next.rate;
         if (next.action === "ban" || next.action === "rate_limit")
-          next.ban_seconds = durationSeconds(ban);
+          next.ban_seconds =
+            next.action === "rate_limit" && !banAfterLimit ? 0 : ban;
         else delete next.ban_seconds;
         await onSave(next);
       }}
@@ -199,6 +200,21 @@ export function FirewallRuleEditor({
                 f.id ===
                 (c.field.startsWith("header.") ? "header.<name>" : c.field),
             );
+            const values =
+              field?.values ||
+              (c.field === "method"
+                ? [
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE",
+                    "HEAD",
+                    "OPTIONS",
+                    "CONNECT",
+                    "TRACE",
+                  ]
+                : undefined);
             return (
               <div className="fw-condition" key={i}>
                 <div className="fw-condition-selects">
@@ -220,7 +236,8 @@ export function FirewallRuleEditor({
                               ? "header.x-example"
                               : value,
                           op: f.ops[0],
-                          value: f.values?.[0] || "",
+                          value:
+                            f.values?.[0] || (value === "method" ? "GET" : ""),
                         });
                       }}
                     />
@@ -262,10 +279,29 @@ export function FirewallRuleEditor({
                 {c.op !== "exists" && (
                   <div>
                     <span className="field-label">Value</span>
-                    {c.op === "in" ? (
+                    {c.field === "country" ? (
+                      <Chips
+                        value={
+                          Array.isArray(c.value)
+                            ? c.value
+                            : c.value
+                              ? [c.value]
+                              : []
+                        }
+                        single={c.op !== "in"}
+                        onChange={(value) =>
+                          setCondition(i, {
+                            value:
+                              c.op === "in"
+                                ? value.map((v) => v.toUpperCase())
+                                : (value[0] || "").toUpperCase(),
+                          })
+                        }
+                      />
+                    ) : c.op === "in" ? (
                       <Chips
                         value={Array.isArray(c.value) ? c.value : []}
-                        options={field?.values}
+                        options={values}
                         onChange={(value) => setCondition(i, { value })}
                       />
                     ) : c.op === "in_list" ? (
@@ -278,11 +314,11 @@ export function FirewallRuleEditor({
                         }))}
                         onChange={(value) => setCondition(i, { value })}
                       />
-                    ) : field?.values ? (
+                    ) : values ? (
                       <Picker
                         label={`Condition ${i + 1} value`}
                         value={String(c.value)}
-                        options={field.values}
+                        options={values}
                         onChange={(value) => setCondition(i, { value })}
                       />
                     ) : (
@@ -307,16 +343,15 @@ export function FirewallRuleEditor({
                   </p>
                 )}
                 <div className="fw-condition-footer">
-                  <label className="fw-check">
-                    <input
-                      type="checkbox"
-                      checked={!!c.negate}
-                      onChange={(e) =>
-                        setCondition(i, { negate: e.target.checked })
-                      }
-                    />
-                    Negate condition
-                  </label>
+                  <Picker
+                    label={`Condition ${i + 1} polarity`}
+                    value={c.negate ? "not" : "is"}
+                    options={[
+                      { value: "is", label: "Is" },
+                      { value: "not", label: "Is not" },
+                    ]}
+                    onChange={(v) => setCondition(i, { negate: v === "not" })}
+                  />
                   <button
                     type="button"
                     className="icon-button danger"
@@ -359,9 +394,11 @@ export function FirewallRuleEditor({
               label="Rule action"
               value={rule.action}
               options={catalog.actions}
-              onChange={(action) =>
-                setRule({ ...rule, action: action as Action })
-              }
+              onChange={(action) => {
+                if (action === "rate_limit" && banAfterLimit && !ban)
+                  setBan(900);
+                setRule({ ...rule, action: action as Action });
+              }}
             />
           </label>
           <div className="fw-enabled">
@@ -392,12 +429,7 @@ export function FirewallRuleEditor({
                 })
               }
             />
-            <Field
-              label="Window"
-              value={window}
-              onChange={(e) => setWindow(e.target.value)}
-              required
-            />
+            <Duration label="Window" value={window} onChange={setWindow} />
             <label>
               Count by
               <Picker
@@ -421,12 +453,27 @@ export function FirewallRuleEditor({
             </label>
           </div>
         )}
-        {(rule.action === "ban" || rule.action === "rate_limit") && (
-          <Field
-            label="Ban duration (0 = permanent / no rate ban)"
+        {rule.action === "rate_limit" && (
+          <div className="fw-enabled">
+            <span>Ban the client after the limit</span>
+            <Toggle
+              label="Ban the client after the limit"
+              checked={banAfterLimit}
+              onChange={() => {
+                if (!banAfterLimit && !ban) setBan(900);
+                setBanAfterLimit(!banAfterLimit);
+              }}
+            />
+          </div>
+        )}
+        {(rule.action === "ban" ||
+          (rule.action === "rate_limit" && banAfterLimit)) && (
+          <Duration
+            key={rule.action}
+            label="Ban duration"
             value={ban}
-            onChange={(e) => setBan(e.target.value)}
-            placeholder="15m"
+            permanent={rule.action === "ban"}
+            onChange={setBan}
           />
         )}
       </div>

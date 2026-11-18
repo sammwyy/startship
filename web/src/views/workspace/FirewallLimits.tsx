@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { AsyncForm, Field } from "../../components/ui";
-import { Picker } from "./FirewallControls";
-import { durationSeconds, durationText } from "../../services/firewall";
+import { Duration, Picker, Toggle } from "./FirewallControls";
 import type { Limits } from "../../services/firewall";
 
 function Size({
@@ -14,13 +13,7 @@ function Size({
   onChange: (value: number) => void;
 }) {
   const units = { B: 1, KB: 1000, MB: 1000000 };
-  const [unit, setUnit] = useState<keyof typeof units>(
-    value && value % 1000000 === 0
-      ? "MB"
-      : value && value % 1000 === 0
-        ? "KB"
-        : "B",
-  );
+  const [unit, setUnit] = useState<keyof typeof units>("MB");
   return (
     <label>
       {label}
@@ -57,14 +50,13 @@ export function FirewallLimits({
   onSave: (limits: Limits) => Promise<unknown>;
 }) {
   const [draft, setDraft] = useState(structuredClone(limits));
-  const [requests, setRequests] = useState(limits.rate?.requests || 0);
-  const [window, setWindow] = useState(
-    durationText(limits.rate?.window_seconds || 60),
-  );
+  const [enabled, setEnabled] = useState(!!limits.rate);
+  const [requests, setRequests] = useState(limits.rate?.requests || 100);
+  const [window, setWindow] = useState(limits.rate?.window_seconds || 60);
   const [action, setAction] = useState<"block" | "ban">(
     limits.rate?.action || "block",
   );
-  const [ban, setBan] = useState(durationText(limits.rate?.ban_seconds || 900));
+  const [ban, setBan] = useState(limits.rate?.ban_seconds ?? 900);
   return (
     <AsyncForm
       className="fw-stack"
@@ -80,12 +72,12 @@ export function FirewallLimits({
           throw new Error("Sizes must be whole bytes.");
         await onSave({
           ...draft,
-          rate: requests
+          rate: enabled
             ? {
                 requests,
-                window_seconds: durationSeconds(window),
+                window_seconds: window,
                 action,
-                ban_seconds: action === "ban" ? durationSeconds(ban) : 0,
+                ban_seconds: action === "ban" ? ban : 0,
               }
             : null,
         });
@@ -97,23 +89,23 @@ export function FirewallLimits({
             <h2>Request rate</h2>
             <p>Per client IP, across every route in this workspace.</p>
           </div>
-          <span className="fw-meta">0 requests = disabled</span>
+          <Toggle
+            label="Enable request rate limit"
+            checked={enabled}
+            onChange={() => setEnabled(!enabled)}
+            disabled={!canManage}
+          />
         </div>
-        <div className="fw-form-grid">
+        <fieldset className="fw-form-grid" disabled={!enabled || !canManage}>
           <Field
             label="Requests"
             type="number"
-            min={0}
+            min={1}
             required
             value={requests}
             onChange={(e) => setRequests(Number(e.target.value))}
           />
-          <Field
-            label="Per window"
-            required
-            value={window}
-            onChange={(e) => setWindow(e.target.value)}
-          />
+          <Duration label="Per window" value={window} onChange={setWindow} />
           <label>
             When exceeded
             <Picker
@@ -124,14 +116,14 @@ export function FirewallLimits({
             />
           </label>
           {action === "ban" && (
-            <Field
+            <Duration
               label="Ban duration"
               value={ban}
-              required
-              onChange={(e) => setBan(e.target.value)}
+              permanent
+              onChange={setBan}
             />
           )}
-        </div>
+        </fieldset>
       </section>
       <section className="panel fw-panel">
         <div className="fw-section-head">

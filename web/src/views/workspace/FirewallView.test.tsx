@@ -124,7 +124,12 @@ function mount(
   data: FirewallSnapshot | undefined = structuredClone(snapshot),
 ) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    defaultOptions: {
+      queries: {
+        retry: false,
+        queryFn: ({ queryKey }) => request(String(queryKey[0])),
+      },
+    },
   });
   if (data) client.setQueryData(["workspaces/w/firewall"], data);
   const result = render(
@@ -201,6 +206,27 @@ describe("workspace firewall", () => {
       "Policy update failed",
     );
   });
+  it("renders only populated chart buckets and compact labeled event cells", () => {
+    const data = structuredClone(snapshot);
+    data.stats.minutes.unshift({
+      at: 1795003140,
+      total: 0,
+      blocked: 0,
+      by_action: {},
+    });
+    const { container } = mount("overview", data);
+    expect(container.querySelectorAll(".traffic-bar")).toHaveLength(1);
+    expect(container.querySelector(".traffic-bar-track")).toBeNull();
+    expect(container.querySelector('[data-label="Client"]')).toHaveTextContent(
+      "203.0.113.5 · US",
+    );
+    expect(container.querySelector('[data-label="Action"]')).toHaveTextContent(
+      "Block",
+    );
+    expect(
+      container.querySelectorAll("tbody td:not([data-label])"),
+    ).toHaveLength(0);
+  });
   it("resolves the top rule ID to its name", () => {
     const data = structuredClone(snapshot);
     data.stats.top_rules = [{ value: "custom-id", count: 12 }];
@@ -267,7 +293,7 @@ describe("workspace firewall", () => {
       within(op)
         .getAllByRole("option")
         .map((o) => o.textContent),
-    ).toEqual(["eq", "in"]);
+    ).toEqual(["Equals", "In"]);
     await userEvent.type(
       screen.getByRole("textbox", { name: "Condition values" }),
       "US,CA{Enter}",
@@ -291,15 +317,92 @@ describe("workspace firewall", () => {
       "rules[0]: invalid country",
     );
   });
+  it("uses method and polarity pickers and can disable a rate-limit ban", async () => {
+    const { container } = mount("rules");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Protect login endpoint" }),
+    );
+    expect(
+      container.querySelector('input[type="checkbox"]:not([role="switch"])'),
+    ).toBeNull();
+    await pick("Condition 1 value", "PUT");
+    await pick("Condition 1 polarity", "Is not");
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Ban the client after the limit" }),
+    );
+    expect(screen.queryByLabelText("Ban duration")).not.toBeInTheDocument();
+    await userEvent.clear(screen.getByLabelText("Window"));
+    await userEvent.type(screen.getByLabelText("Window"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    expect(request).toHaveBeenLastCalledWith(
+      "workspaces/w/firewall/rules",
+      expect.objectContaining({
+        conditions: [
+          { field: "method", op: "eq", value: "PUT", negate: true },
+          { field: "path", op: "prefix", value: "/login" },
+        ],
+        rate: { requests: 10, window_seconds: 120, by: "ip" },
+        ban_seconds: 0,
+      }),
+      "POST",
+    );
+  });
+  it("offers permanent direct bans and numeric finite rate-ban durations", async () => {
+    mount("rules");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Protect login endpoint" }),
+    );
+    expect(screen.getByLabelText("Ban duration")).toHaveValue(15);
+    await pick("Ban duration unit", "Hours");
+    await pick("Rule action", "Ban");
+    await pick("Ban duration unit", "Permanent");
+    expect(
+      screen.queryByRole("spinbutton", { name: "Ban duration" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    expect(request).toHaveBeenLastCalledWith(
+      "workspaces/w/firewall/rules",
+      expect.objectContaining({ action: "ban", ban_seconds: 0 }),
+      "POST",
+    );
+  });
+  it("uses chips for a single country and rejects fractional seconds", async () => {
+    mount("rules");
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Block countries" }),
+    );
+    await pick("Condition 1 operator", "Equals");
+    await userEvent.type(
+      screen.getByLabelText("Condition values"),
+      "ca{Enter}",
+    );
+    await pick("Rule action", "Ban");
+    await pick("Ban duration unit", "Seconds");
+    await userEvent.clear(screen.getByLabelText("Ban duration"));
+    await userEvent.type(screen.getByLabelText("Ban duration"), "0.1");
+    expect(screen.getByLabelText("Ban duration")).toBeInvalid();
+    await userEvent.clear(screen.getByLabelText("Ban duration"));
+    await userEvent.type(screen.getByLabelText("Ban duration"), "30");
+    expect(screen.getByLabelText("Ban duration")).toBeValid();
+    await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
+    expect(request).toHaveBeenLastCalledWith(
+      "workspaces/w/firewall/rules",
+      expect.objectContaining({
+        conditions: [{ field: "country", op: "eq", value: "CA" }],
+        ban_seconds: 30,
+      }),
+      "POST",
+    );
+  });
   it("uses enum pickers and creates a custom rule from the condition builder", async () => {
     mount("rules");
     await userEvent.click(
       await screen.findByRole("button", { name: "Add rule" }),
     );
     await userEvent.type(screen.getByLabelText("Rule name"), "Bots");
-    await pick("Condition 1 field", "ua class");
-    await pick("Condition 1 value", "bot");
-    await pick("Rule action", "log");
+    await pick("Condition 1 field", "UA class");
+    await pick("Condition 1 value", "Bot");
+    await pick("Rule action", "Log");
     await userEvent.click(screen.getByRole("button", { name: "Save rule" }));
     expect(request).toHaveBeenLastCalledWith(
       "workspaces/w/firewall/rules",
@@ -313,6 +416,10 @@ describe("workspace firewall", () => {
   });
   it("saves limits using byte units and duration parsing", async () => {
     mount("limits");
+    expect(screen.getByLabelText("Requests")).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Enable request rate limit" }),
+    );
     await userEvent.clear(screen.getByLabelText("Requests"));
     await userEvent.type(screen.getByLabelText("Requests"), "25");
     await pick("Max body unit", "MB");
@@ -353,6 +460,21 @@ describe("workspace firewall", () => {
     expect(request).toHaveBeenLastCalledWith(
       "workspaces/w/firewall/lists/banned/entries",
       { value: "203.0.113.8", ttl_seconds: 900, note: "" },
+    );
+  });
+  it("defaults sizes to MB and saves a disabled rate as null", async () => {
+    mount("limits");
+    expect(
+      screen.getByRole("button", { name: "Max URL unit" }),
+    ).toHaveTextContent("MB");
+    expect(screen.getByLabelText("Max URL")).toHaveValue(0.008192);
+    await userEvent.click(screen.getByRole("button", { name: "Save limits" }));
+    expect(request).toHaveBeenLastCalledWith(
+      "workspaces/w/firewall",
+      expect.objectContaining({
+        limits: expect.objectContaining({ rate: null, max_url_bytes: 8192 }),
+      }),
+      "PUT",
     );
   });
 });

@@ -10,7 +10,7 @@ import {
   durationSeconds,
 } from "../../services/firewall";
 import type { IPList } from "../../services/firewall";
-import { Picker, Expiry } from "./FirewallControls";
+import { Picker, Expiry, optionLabel } from "./FirewallControls";
 
 function CreateList() {
   const [kind, setKind] = useState<IPList["kind"]>("block");
@@ -87,7 +87,9 @@ export function FirewallLists({
                   <Icon name="shield" />
                   {list.name}
                   <span className={`fw-action fw-action-${list.kind}`}>
-                    {list.id === "banned" ? "automatic bans" : list.kind}
+                    {list.id === "banned"
+                      ? "Automatic bans"
+                      : optionLabel(list.kind)}
                   </span>
                 </h3>
                 <p>
@@ -191,14 +193,16 @@ export function FirewallLists({
                   <tbody>
                     {list.entries.map((entry) => (
                       <tr key={entry.value}>
-                        <td>
+                        <td data-label="IP / network">
                           <code>{entry.value}</code>
                         </td>
-                        <td>
+                        <td data-label="Expires">
                           <Expiry value={entry.expires_at} />
                         </td>
-                        <td className="fw-wrap">{entry.note || "—"}</td>
-                        <td>
+                        <td data-label="Note" className="fw-wrap">
+                          {entry.note || "—"}
+                        </td>
+                        <td data-label="Actions">
                           {canManage && (
                             <button
                               className="fw-text-button danger"
