@@ -67,7 +67,7 @@ Both application router ports need to be available on the configured bind addres
 Back up the daemon data and any service or application volumes you rely on before upgrading. A service backup alone does not cover the daemon database or unrelated volumes.
 
 - **Systemd install:** Run `startship update check` to check versions and `sudo startship update` to verify and install the latest release. The updater restarts the daemon. To select a release, run `sudo startship update v0.8.0` (replace the tag with the version you want); selecting an older release is a downgrade.
-- **Dashboard or remote CLI:** A Platform Admin can use **Updates** or `startship update daemon` on a systemd install with the installer's updater running. If an older installation does not have the updater, rerun the installer first.
+- **Dashboard or remote CLI:** A Platform Admin can use **Updates** or `startship update daemon` on a systemd install with the installer's updater running.
 - **Compose:** Update the checkout to the revision you want to run and rerun `docker compose up --build -d`. Keep the named data volume.
 - **Source:** Update the checkout, rerun `make build`, and restart using the same settings and data directory.
 

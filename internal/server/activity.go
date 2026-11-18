@@ -10,35 +10,6 @@ import (
 
 const scopeAccount = "account"
 
-func migrateActivity(s *Store) error {
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var migrated int
-	if err = tx.QueryRow("SELECT count(*) FROM settings WHERE key='audit_activity_v1'").Scan(&migrated); err != nil || migrated != 0 {
-		return err
-	}
-	_, err = tx.Exec(`
-		ALTER TABLE audit_log ADD COLUMN workspace_id TEXT NOT NULL DEFAULT '';
-		ALTER TABLE audit_log ADD COLUMN session_id TEXT NOT NULL DEFAULT '';
-		ALTER TABLE audit_log ADD COLUMN source TEXT NOT NULL DEFAULT '';
-		UPDATE audit_log SET workspace_id=scope_id WHERE scope='workspace';
-		UPDATE audit_log SET workspace_id=coalesce(
-			(SELECT coalesce(nullif(json_extract(body,'$.workspace_id'),''),parent)
-			 FROM records WHERE kind='projects' AND id=audit_log.scope_id),'') WHERE scope='project';
-		CREATE INDEX audit_activity_actor ON audit_log(actor_id,id DESC);
-		CREATE INDEX audit_activity_workspace ON audit_log(workspace_id,id DESC);
-		CREATE INDEX audit_activity_scope ON audit_log(scope,scope_id,id DESC);
-		INSERT INTO settings VALUES('audit_activity_v1','1');
-	`)
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 type activityScope struct {
 	kind, id, workspace string
 }

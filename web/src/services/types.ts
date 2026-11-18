@@ -146,8 +146,6 @@ export interface Project extends Workspace {
   auto_deploy?: boolean;
   env?: Record<string, string>;
   active_deployment?: string;
-  config_conflict?: boolean;
-  source_conflict?: boolean;
 }
 export interface Container {
   id: string;

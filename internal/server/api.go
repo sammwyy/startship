@@ -641,11 +641,6 @@ func (a *Server) api() http.Handler {
 				fail(w, 400, "invalid project configuration")
 				return
 			}
-			v.ConfigVersion = 1
-			if v.ConfigConfirmed {
-				v.ConfigConflict = false
-			}
-			v.ConfigConfirmed = false
 			if v.GitURL != "" {
 				if e := detect.ValidateGit(v.GitURL); e != nil {
 					fail(w, 400, e.Error())
@@ -657,7 +652,6 @@ func (a *Server) api() http.Handler {
 				if v.WebhookSecret == "" {
 					v.WebhookSecret = randomID()
 				}
-				v.SourceConflict = false
 			} else if old.GitURL != "" {
 				fail(w, 400, "project source cannot be empty")
 				return
@@ -749,12 +743,6 @@ func (a *Server) api() http.Handler {
 				tx.Commit()
 			}
 		}
-		if kind == "projects" {
-			if e := migrateProjectSources(a.store); e != nil {
-				fail(w, 500, "source migration failed")
-				return
-			}
-		}
 		verb := "update"
 		if old.ID == "" {
 			verb = "create"
@@ -782,13 +770,13 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 		fail(w, 405, "method not allowed")
 		return
 	}
-	target, e := a.store.Get(id)
-	if e != nil || (target.Kind != "apps" && target.Kind != "projects") {
+	project, e := a.store.Get(id)
+	if e != nil || project.Kind != "projects" {
 		fail(w, 404, "not found")
 		return
 	}
 	body, e := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
-	if e != nil || target.WebhookSecret == "" || !verifySignature(target.WebhookSecret, body, r.Header.Get("X-Hub-Signature-256")) {
+	if e != nil || project.WebhookSecret == "" || !verifySignature(project.WebhookSecret, body, r.Header.Get("X-Hub-Signature-256")) {
 		fail(w, 401, "invalid signature")
 		return
 	}
@@ -799,69 +787,17 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 		fail(w, 400, "invalid JSON")
 		return
 	}
-	project := target
-	if target.Kind == "apps" {
-		project, e = a.projectSource(target)
-		if e != nil {
-			fail(w, 400, e.Error())
-			return
-		}
-	}
-	if project.ConfigVersion > 0 {
-		if r.Header.Get("X-GitHub-Event") != "push" || event.Ref != "refs/heads/"+project.Branch || !project.AutoDeploy {
-			reply(w, 200, map[string]bool{"ignored": true})
-			return
-		}
-		d, err := a.enqueueProject(project, Record{})
-		if err != nil {
-			fail(w, 409, err.Error())
-			return
-		}
-		a.audit(r.Context(), "", "project.autodeploy", project.Name, scopeProject, project.ID, map[string]string{"release_id": d.ID})
-		reply(w, 202, publicRecord(d))
-		return
-	}
-	apps := []Record{}
-	if target.Kind == "apps" {
-		project, e = a.projectSource(target)
-		if e != nil {
-			fail(w, 400, e.Error())
-			return
-		}
-		apps = append(apps, target)
-	} else {
-		for _, app := range a.store.List("apps", target.Owner) {
-			if app.ProjectID == target.ID {
-				apps = append(apps, app)
-			}
-		}
-	}
-	if r.Header.Get("X-GitHub-Event") != "push" || event.Ref != "refs/heads/"+project.Branch {
+	if r.Header.Get("X-GitHub-Event") != "push" || event.Ref != "refs/heads/"+project.Branch || !project.AutoDeploy {
 		reply(w, 200, map[string]bool{"ignored": true})
 		return
 	}
-	deployments := []Record{}
-	for _, app := range apps {
-		if !app.AutoDeploy {
-			continue
-		}
-		d, err := a.enqueue(app)
-		if err != nil {
-			fail(w, 500, err.Error())
-			return
-		}
-		deployments = append(deployments, d)
-	}
-	if len(deployments) != 0 {
-		a.audit(r.Context(), "", "project.autodeploy", project.Name, scopeProject, project.ID, nil)
-		if target.Kind == "apps" {
-			reply(w, 202, deployments[0])
-		} else {
-			reply(w, 202, deployments)
-		}
+	d, err := a.enqueueProject(project, Record{})
+	if err != nil {
+		fail(w, 409, err.Error())
 		return
 	}
-	reply(w, 200, map[string]bool{"ignored": true})
+	a.audit(r.Context(), "", "project.autodeploy", project.Name, scopeProject, project.ID, map[string]string{"release_id": d.ID})
+	reply(w, 202, publicRecord(d))
 }
 func safeRoot(root string) bool {
 	return !filepath.IsAbs(root) && root != ".." && !strings.HasPrefix(filepath.Clean(root), ".."+string(filepath.Separator))

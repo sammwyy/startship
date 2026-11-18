@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { reloadDashboard } from "../lib/dashboardReload";
 import { UIProvider } from "../providers/UIProvider";
-import { ApiError, request } from "../services/api";
+import { request } from "../services/api";
 import { SystemView } from "./SystemView";
 import type { UpdateInfo } from "../services/types";
 
@@ -138,14 +138,6 @@ describe("system updates", () => {
     expect(
       vi.mocked(request).mock.calls.filter(([, body]) => body),
     ).toHaveLength(0);
-  });
-  it("handles a daemon without the update API", async () => {
-    vi.mocked(request).mockRejectedValue(new ApiError("not found", 404));
-    renderView();
-    expect(
-      await screen.findByText(/not supported by this daemon/),
-    ).toBeInTheDocument();
-    expect(screen.queryByText("Update daemon and CLI")).not.toBeInTheDocument();
   });
   it("keeps a failed update visible and rejects unsafe release URLs", async () => {
     info.release_url = "javascript:alert('unsafe')";

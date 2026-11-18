@@ -19,37 +19,6 @@ import (
 	"time"
 )
 
-func migrateProjectConfig(s *Store) error {
-	for _, p := range s.List("projects", "") {
-		if p.ConfigVersion != 0 {
-			continue
-		}
-		var containers []Record
-		for _, c := range s.List("apps", p.Owner) {
-			if c.ProjectID == p.ID {
-				containers = append(containers, c)
-			}
-		}
-		p.RootDir, p.BuildType, p.ConfigVersion = ".", "auto", 1
-		if len(containers) > 0 {
-			p.Env, p.TestCommand = maps.Clone(containers[0].Env), containers[0].TestCommand
-			for _, c := range containers {
-				p.AutoDeploy = p.AutoDeploy || c.AutoDeploy
-				if !maps.Equal(p.Env, c.Env) || p.TestCommand != c.TestCommand || containers[0].AutoDeploy != c.AutoDeploy {
-					p.ConfigConflict = true
-				}
-			}
-			if len(containers) == 1 {
-				p.RootDir, p.BuildType, p.Port = containers[0].RootDir, containers[0].BuildType, containers[0].Port
-			}
-		}
-		if err := s.Save(p); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 var exposedPort = regexp.MustCompile(`(?im)^\s*EXPOSE\s+(\d+)`)
 
 func runnable(dir, kind string) bool {
@@ -168,10 +137,7 @@ func projectCandidates(checkout string, p Record) ([]pipelineCandidate, error) {
 }
 
 func (a *Server) enqueueProject(p Record, next Record) (Record, error) {
-	if p.ConfigConflict {
-		return Record{}, fmt.Errorf("confirm shared project settings and environment before deploying; existing container settings differ")
-	}
-	if next.RedeployOf == "" && (p.GitURL == "" || p.SourceConflict) {
+	if next.RedeployOf == "" && p.GitURL == "" {
 		return Record{}, fmt.Errorf("configure the project's source before deploying")
 	}
 	next.ID, next.Kind, next.Owner, next.Parent, next.ProjectID = randomID(), "releases", p.Owner, p.ID, p.ID

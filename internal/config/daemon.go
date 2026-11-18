@@ -101,7 +101,7 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 		f.Var((*listenFlag)(p), strings.ReplaceAll(key, "_", "-"), "listen host:port or interface:port; comma-separated/repeatable ("+environment[key]+")")
 	}
 	f.Usage = func() {
-		fmt.Fprintln(out, "Usage: startshipd [flags]\nPrecedence: flags > environment > TOML file > defaults.\nDefaults: dashboard :8080; HTTP :80; HTTPS :443; data ./_data (legacy ./data if present).\n--version prints the build version.")
+		fmt.Fprintln(out, "Usage: startshipd [flags]\nPrecedence: flags > environment > TOML file > defaults.\nDefaults: dashboard :8080; HTTP :80; HTTPS :443; data ./_data.\n--version prints the build version.")
 		f.PrintDefaults()
 	}
 	if err := f.Parse(args); err != nil {

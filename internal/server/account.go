@@ -22,42 +22,6 @@ const (
 	sessionTTL    = 7 * 24 * time.Hour
 )
 
-func migrateAccount(s *Store) error {
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var migrated int
-	if err = tx.QueryRow("SELECT count(*) FROM settings WHERE key='account_sessions_v2'").Scan(&migrated); err != nil || migrated != 0 {
-		return err
-	}
-	// Old session IDs were credentials, so they cannot become public IDs.
-	_, err = tx.Exec(`
-		ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
-		ALTER TABLE users ADD COLUMN email TEXT NOT NULL DEFAULT '';
-		DELETE FROM sessions;
-		ALTER TABLE sessions ADD COLUMN refresh_digest TEXT;
-		ALTER TABLE sessions ADD COLUMN logged_at INTEGER NOT NULL DEFAULT 0;
-		ALTER TABLE sessions ADD COLUMN last_activity_at INTEGER NOT NULL DEFAULT 0;
-		ALTER TABLE sessions ADD COLUMN ip TEXT NOT NULL DEFAULT '';
-		ALTER TABLE sessions ADD COLUMN user_agent TEXT NOT NULL DEFAULT '';
-		CREATE UNIQUE INDEX session_refresh ON sessions(refresh_digest);
-		CREATE INDEX sessions_user ON sessions(user_id,expires);
-		CREATE TABLE session_access(digest TEXT PRIMARY KEY, session_id TEXT NOT NULL, expires INTEGER NOT NULL);
-		CREATE INDEX session_access_session ON session_access(session_id);
-		CREATE INDEX session_access_expiry ON session_access(expires);
-		CREATE TRIGGER session_access_cleanup AFTER DELETE ON sessions BEGIN
-			DELETE FROM session_access WHERE session_id=OLD.id;
-		END;
-		INSERT INTO settings VALUES('account_sessions_v2', '1');
-	`)
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 type sessionIdentity struct {
 	userID, sessionID, digest string
 	expires                   int64

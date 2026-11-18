@@ -1,9 +1,6 @@
 package config
 
-import (
-	"log"
-	"os"
-)
+import "os"
 
 func Env(k, d string) string {
 	if v := os.Getenv(k); v != "" {
@@ -14,10 +11,6 @@ func Env(k, d string) string {
 func DataDirectory() string {
 	if configured := os.Getenv("STARTSHIP_DATA"); configured != "" {
 		return configured
-	}
-	if _, err := os.Stat("./data"); !os.IsNotExist(err) {
-		log.Print("Using existing ./data; consider renaming it to ./_data so Go tooling skips it")
-		return "./data"
 	}
 	return "./_data"
 }

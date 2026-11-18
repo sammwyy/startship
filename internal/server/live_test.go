@@ -38,7 +38,7 @@ func TestLiveStaleAccessCookie(t *testing.T) {
 		name, cookie, origin string
 		status               int
 	}{
-		{"legacy browser", cookie, origin, http.StatusSwitchingProtocols},
+		{"stale cookie", cookie, origin, http.StatusSwitchingProtocols},
 		{"no cookie", "", origin, http.StatusUnauthorized},
 		{"can refresh", cookie + "; startship_refresh=" + randomID(), origin, http.StatusUnauthorized},
 		{"cross-origin", cookie, "https://other.example", http.StatusForbidden},
@@ -500,7 +500,7 @@ func TestLiveProjectActivation(t *testing.T) {
 }
 
 func TestRuntimeTransactionNotifications(t *testing.T) {
-	for _, name := range []string{"legacy activation", "project source", "personal workspace"} {
+	for _, name := range []string{"legacy activation", "personal workspace"} {
 		t.Run(name, func(t *testing.T) {
 			a := testServer(t)
 			var run func() error
@@ -514,14 +514,6 @@ func TestRuntimeTransactionNotifications(t *testing.T) {
 				}
 				run = func() error { return a.activate(Record{ID: "app"}, "new") }
 				expected = []string{"app", "new", "old"}
-			case "project source":
-				for _, r := range []Record{{ID: "project", Kind: "projects", Owner: "owner"}, {ID: "app", Kind: "apps", Owner: "owner", ProjectID: "project", GitURL: "https://example.com/repo"}} {
-					if err := a.store.Save(r); err != nil {
-						t.Fatal(err)
-					}
-				}
-				run = func() error { return migrateProjectSources(a.store) }
-				expected = []string{"project", "app"}
 			case "personal workspace":
 				run = func() error { _, err := a.createUser("alice", "password123"); return err }
 			}

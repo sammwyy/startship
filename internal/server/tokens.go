@@ -56,34 +56,6 @@ type accessToken struct {
 	LastUserAgent string   `json:"last_user_agent,omitempty"`
 }
 
-func migrateTokens(s *Store) error {
-	tx, err := s.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var migrated int
-	if err = tx.QueryRow("SELECT count(*) FROM settings WHERE key='access_tokens_v1'").Scan(&migrated); err != nil || migrated != 0 {
-		return err
-	}
-	_, err = tx.Exec(`
-		CREATE TABLE IF NOT EXISTS access_tokens(
-			id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, digest TEXT NOT NULL UNIQUE, prefix TEXT NOT NULL,
-			all_workspaces INTEGER NOT NULL DEFAULT 0, workspaces TEXT NOT NULL DEFAULT '[]', access TEXT NOT NULL DEFAULT 'operate',
-			api INTEGER NOT NULL DEFAULT 1, mcp INTEGER NOT NULL DEFAULT 1, created INTEGER NOT NULL, expires INTEGER NOT NULL DEFAULT 0,
-			last_used_at INTEGER NOT NULL DEFAULT 0, last_used_ip TEXT NOT NULL DEFAULT '', last_user_agent TEXT NOT NULL DEFAULT '');
-		CREATE INDEX IF NOT EXISTS access_tokens_user ON access_tokens(user_id,created DESC);
-		CREATE TRIGGER IF NOT EXISTS access_tokens_owner AFTER DELETE ON users BEGIN DELETE FROM access_tokens WHERE user_id=OLD.id; END;
-		ALTER TABLE audit_log ADD COLUMN token_id TEXT NOT NULL DEFAULT '';
-		ALTER TABLE audit_log ADD COLUMN token_name TEXT NOT NULL DEFAULT '';
-		INSERT INTO settings VALUES('access_tokens_v1','1');
-	`)
-	if err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 func peerIP(r *http.Request) string {
 	// The peer address is trusted; user-controlled forwarding headers are not.
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)

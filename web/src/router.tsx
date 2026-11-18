@@ -3,10 +3,8 @@ import {
   createHashRouter,
   Navigate,
   Outlet,
-  useParams,
   useRouteError,
 } from "react-router-dom";
-import { useSuspenseQuery } from "@tanstack/react-query";
 import { useSession } from "./providers/SessionProvider";
 import { useDashboard, DashboardLayout } from "./layouts/DashboardLayout";
 import { ProjectLayout } from "./layouts/ProjectLayout";
@@ -14,8 +12,6 @@ import { SystemLayout } from "./layouts/SystemLayout";
 import { AuthView } from "./views/AuthView";
 import { LiveProvider } from "./providers/LiveProvider";
 import { ErrorMessage, Loading } from "./components/ui";
-import { request } from "./services/api";
-import type { Container } from "./services/types";
 
 function SessionGate() {
   const session = useSession();
@@ -55,19 +51,6 @@ function RouteError() {
       </a>
       <button onClick={() => location.reload()}>Try again</button>
     </div>
-  );
-}
-function LegacyContainer() {
-  const { containerId, section } = useParams();
-  const { data } = useSuspenseQuery({
-    queryKey: ["container", containerId],
-    queryFn: () => request<Container>(`containers/${containerId}`),
-  });
-  return (
-    <Navigate
-      replace
-      to={`/project/${data.project_id}/${section === "settings" ? "overview" : section === "domains" ? "domains" : `logs/${data.id}`}`}
-    />
   );
 }
 
@@ -226,7 +209,6 @@ export const router = createHashRouter([
                 .ActivityView,
             }),
           },
-          { path: "app/:containerId/:section?", element: <LegacyContainer /> },
           {
             path: "project/:projectId",
             element: <ProjectLayout />,
