@@ -128,8 +128,12 @@ describe("workspace map", () => {
 
 describe("map label placement", () => {
   const label = { x: 175, y: 80, width: 74, left: 100, right: 240 };
-  it("keeps labels near their target and separates colliding boxes", () => {
-    const placed = placeMapLabels([label, label], [], 200);
+  it("uses another curve point rather than displacing colliding labels", () => {
+    const placed = placeMapLabels(
+      [label, { ...label, alternatives: [{ x: 175, y: 56 }] }],
+      [],
+      200,
+    );
     expect(placed[0]).toEqual({ x: 175, y: 80, width: 74 });
     expect(placed[1]).toEqual({ x: 175, y: 56, width: 74 });
   });
@@ -175,13 +179,13 @@ describe("map label placement", () => {
       ),
     ).toEqual([{ x: 150, y: 320, width: 74 }]);
   });
-  it("clamps labels to the gutter and avoids cards", () => {
+  it("hides labels rather than moving their centers away from the curve to fit the gutter", () => {
     const [placed] = placeMapLabels(
       [{ ...label, x: 235 }],
       [{ x: 140, y: 70, width: 80, height: 20 }],
       200,
     );
-    expect(placed).toEqual({ x: 197, y: 56, width: 74 });
+    expect(placed).toBeNull();
   });
   it("hides labels with insufficient space or no collision-free position", () => {
     expect(
@@ -194,18 +198,23 @@ describe("map label placement", () => {
     expect(placeMapLabels([label], [], 10)).toEqual([null]);
     expect(placeMapLabels([], [], 200)).toEqual([]);
   });
-  it("separates vertical-layout labels along x within the row gap", () => {
+  it("uses an alternative curve point for colliding vertical-layout labels", () => {
     const vertical = { ...label, x: 150, y: 240, top: 200, bottom: 264 };
-    expect(placeMapLabels([vertical, vertical], [], 500, 390)).toEqual([
+    expect(
+      placeMapLabels(
+        [vertical, { ...vertical, alternatives: [{ x: 70, y: 240 }] }],
+        [],
+        500,
+        390,
+      ),
+    ).toEqual([
       { x: 150, y: 240, width: 74 },
       { x: 70, y: 240, width: 74 },
     ]);
   });
   it("keeps vertical labels in the board and hides labels in blocked or undersized gaps", () => {
     const vertical = { ...label, x: 380, y: 260, top: 200, bottom: 264 };
-    expect(placeMapLabels([vertical], [], 500, 390)).toEqual([
-      { x: 347, y: 248, width: 74 },
-    ]);
+    expect(placeMapLabels([vertical], [], 500, 390)).toEqual([null]);
     expect(
       placeMapLabels(
         [vertical],
@@ -218,6 +227,22 @@ describe("map label placement", () => {
       placeMapLabels([{ ...vertical, bottom: 220 }], [], 500, 390),
     ).toEqual([null]);
     expect(placeMapLabels([vertical], [], 500, 60)).toEqual([null]);
+  });
+  it("never nudges a label more than six pixels off its own curve", () => {
+    const cards = [{ x: 100, y: 60, width: 140, height: 40 }];
+    expect(placeMapLabels([label], cards, 300)).toEqual([null]);
+    const vertical = { ...label, x: 150, y: 240, top: 200, bottom: 264 };
+    expect(
+      placeMapLabels(
+        [vertical],
+        [{ x: 140, y: 200, width: 20, height: 64 }],
+        500,
+        390,
+      ),
+    ).toEqual([null]);
+    expect(
+      placeMapLabels([label], [{ x: 100, y: 91, width: 140, height: 10 }], 300),
+    ).toEqual([{ x: 175, y: 74, width: 74 }]);
   });
 });
 

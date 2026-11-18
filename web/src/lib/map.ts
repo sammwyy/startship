@@ -168,22 +168,10 @@ export function placeMapLabels(
         : label.right - label.left < label.width + 12
     )
       return null;
-    for (const candidate of [label, ...(label.alternatives || [])]) {
-      const baseX = vertical
-        ? Math.max(
-            6 + label.width / 2,
-            Math.min(candidate.x, verticalWidth - 6 - label.width / 2),
-          )
-        : Math.max(
-            label.left + 6 + label.width / 2,
-            Math.min(candidate.x, label.right - 6 - label.width / 2),
-          );
-      const baseY = vertical
-        ? Math.max(label.top! + 16, Math.min(candidate.y, label.bottom! - 16))
-        : candidate.y;
-      for (const offset of [0, -24, 24, -48, 48, -72, 72, -96, 96]) {
-        const x = baseX + (vertical ? (offset / 24) * (label.width + 6) : 0);
-        const y = baseY + (vertical ? 0 : offset);
+    for (const offset of [0, -6, 6]) {
+      for (const candidate of [label, ...(label.alternatives || [])]) {
+        const x = candidate.x + (vertical ? offset : 0);
+        const y = candidate.y + (vertical ? 0 : offset);
         const box = {
           x: x - label.width / 2,
           y: y - 10,
@@ -193,7 +181,12 @@ export function placeMapLabels(
         if (
           box.y < 0 ||
           box.y + box.height > height ||
-          (vertical && (box.x < 6 || box.x + box.width > verticalWidth - 6)) ||
+          (vertical
+            ? box.x < 6 ||
+              box.x + box.width > verticalWidth - 6 ||
+              box.y < label.top! + 6 ||
+              box.y + box.height > label.bottom! - 6
+            : box.x < label.left + 6 || box.x + box.width > label.right - 6) ||
           [...cards, ...placed].some((other) => overlaps(box, other))
         )
           continue;
