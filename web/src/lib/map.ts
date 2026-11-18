@@ -42,6 +42,23 @@ export function buildWorkspaceMap(
           .flatMap((s) => s.attachments.map((x) => x.project_id)),
       ]),
   );
+  const connections = [
+    ...orderedServices.map((s) => ({
+      kind: "services" as const,
+      id: s.id,
+      position: mean(s.attachments.map((a) => a.project_id)),
+    })),
+    ...orderedVolumes
+      .filter((v) => v.project_id)
+      .map((v) => ({
+        kind: "volumes" as const,
+        id: v.id,
+        position: mean([v.project_id]),
+      })),
+  ]
+    .sort((a, b) => a.position - b.position)
+    .map(({ kind, id }) => ({ kind, id }));
+  const storage = orderedVolumes.filter((v) => !v.project_id);
   const edges: MapEdge[] = [];
   for (const service of orderedServices) {
     for (const attachment of service.attachments) {
@@ -52,7 +69,7 @@ export function buildWorkspaceMap(
           label: attachment.alias,
         });
     }
-    if (volumes.some((v) => v.id === service.volume_id))
+    if (storage.some((v) => v.id === service.volume_id))
       edges.push({
         from: mapKey("services", service.id),
         to: mapKey("volumes", service.volume_id),
@@ -70,8 +87,61 @@ export function buildWorkspaceMap(
     projects: [...projects],
     services: orderedServices,
     volumes: orderedVolumes,
+    connections,
+    storage,
     edges,
   };
+}
+
+export interface MapBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+export interface MapLabel {
+  x: number;
+  y: number;
+  width: number;
+  left: number;
+  right: number;
+}
+export function placeMapLabels(
+  labels: (MapLabel | null)[],
+  cards: MapBox[],
+  height: number,
+) {
+  const placed: MapBox[] = [];
+  const overlaps = (a: MapBox, b: MapBox) =>
+    a.x < b.x + b.width + 4 &&
+    a.x + a.width + 4 > b.x &&
+    a.y < b.y + b.height + 4 &&
+    a.y + a.height + 4 > b.y;
+  return labels.map((label) => {
+    if (!label || label.right - label.left < label.width + 12) return null;
+    const x = Math.max(
+      label.left + 6 + label.width / 2,
+      Math.min(label.x, label.right - 6 - label.width / 2),
+    );
+    for (const offset of [0, -24, 24, -48, 48, -72, 72, -96, 96]) {
+      const y = label.y + offset;
+      const box = {
+        x: x - label.width / 2,
+        y: y - 10,
+        width: label.width,
+        height: 20,
+      };
+      if (
+        box.y < 0 ||
+        box.y + box.height > height ||
+        [...cards, ...placed].some((other) => overlaps(box, other))
+      )
+        continue;
+      placed.push(box);
+      return { x, y, width: label.width };
+    }
+    return null;
+  });
 }
 
 export function connectedMapNodes(start: string, edges: MapEdge[]) {

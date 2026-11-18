@@ -10,8 +10,12 @@ import {
   useLiveSubscription,
 } from "../../providers/LiveProvider";
 import { sortReleases } from "../../lib/project";
-import { buildWorkspaceMap, connectedMapNodes, mapKey } from "../../lib/map";
-import type { MapKind } from "../../lib/map";
+import {
+  buildWorkspaceMap,
+  connectedMapNodes,
+  mapKey,
+  placeMapLabels,
+} from "../../lib/map";
 import { Heading } from "../../components/Heading";
 import { Empty, ErrorMessage, Loading } from "../../components/ui";
 import { Icon } from "../../components/Icon";
@@ -32,9 +36,7 @@ type Curve = {
   to: string;
   label?: string;
   d: string;
-  x: number;
-  y: number;
-  room: boolean;
+  placement: { x: number; y: number; width: number } | null;
 };
 const tone = (status: string) =>
   ["running", "success", "active"].includes(status)
@@ -123,8 +125,14 @@ export function WorkspaceMapView() {
     });
     return {
       projects: projectNodes,
-      services: serviceNodes,
-      volumes: volumeNodes,
+      connections: graph.connections.map((resource) =>
+        [...serviceNodes, ...volumeNodes].find(
+          (node) => node.key === mapKey(resource.kind, resource.id),
+        )!,
+      ),
+      storage: graph.storage.map((volume) =>
+        volumeNodes.find((node) => node.key === mapKey("volumes", volume.id))!,
+      ),
     };
   }, [graph, containers.data, releases.data, id]);
   const root = useRef<HTMLDivElement>(null);
@@ -144,26 +152,51 @@ export function WorkspaceMapView() {
           (node) => [node.dataset.mapKey!, node.getBoundingClientRect()],
         ),
       );
+      const measured = graph.edges.flatMap((edge) => {
+        const a = anchors.get(edge.from),
+          b = anchors.get(edge.to);
+        if (!a || !b) return [];
+        const x1 = a.right - bounds.left,
+          x2 = b.left - bounds.left,
+          y1 = a.top + a.height / 2 - bounds.top,
+          y2 = b.top + b.height / 2 - bounds.top;
+        const bend = (x2 - x1) * 0.5;
+        return [
+          {
+            ...edge,
+            d: `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
+            labelBox: edge.label
+              ? {
+                  x:
+                    x1 * 0.015625 +
+                    (x1 + bend) * 0.140625 +
+                    (x2 - bend) * 0.421875 +
+                    x2 * 0.421875,
+                  y: y1 * 0.15625 + y2 * 0.84375,
+                  width: Math.min(edge.label.length, 19) * 7 + 18,
+                  left: x1,
+                  right: x2,
+                }
+              : null,
+          },
+        ];
+      });
+      const cards = [...anchors.values()].map((rect) => ({
+        x: rect.left - bounds.left,
+        y: rect.top - bounds.top,
+        width: rect.width,
+        height: rect.height,
+      }));
+      const placements = placeMapLabels(
+        measured.map((edge) => edge.labelBox),
+        cards,
+        bounds.height,
+      );
       setCurves(
-        graph.edges.flatMap((edge) => {
-          const a = anchors.get(edge.from),
-            b = anchors.get(edge.to);
-          if (!a || !b) return [];
-          const x1 = a.right - bounds.left,
-            x2 = b.left - bounds.left,
-            y1 = a.top + a.height / 2 - bounds.top,
-            y2 = b.top + b.height / 2 - bounds.top;
-          const bend = (x2 - x1) * 0.5;
-          return [
-            {
-              ...edge,
-              d: `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
-              x: (x1 + x2) / 2,
-              y: (y1 + y2) / 2,
-              room: x2 - x1 > 100,
-            },
-          ];
-        }),
+        measured.map((edge, index) => ({
+          ...edge,
+          placement: placements[index],
+        })),
       );
     };
     measure();
@@ -238,15 +271,15 @@ export function WorkspaceMapView() {
                       className={`${live ? "is-live" : ""} ${dim ? "is-dimmed" : ""}`}
                     >
                       <path d={edge.d} />
-                      {edge.label && edge.room && (
+                      {edge.label && edge.placement && (
                         <g
                           className="map-edge-label"
-                          transform={`translate(${edge.x},${edge.y})`}
+                          transform={`translate(${edge.placement.x},${edge.placement.y})`}
                         >
                           <rect
-                            x={-Math.min(edge.label.length * 3 + 9, 67)}
+                            x={-edge.placement.width / 2}
                             y="-10"
-                            width={Math.min(edge.label.length * 6 + 18, 134)}
+                            width={edge.placement.width}
                             height="20"
                             rx="10"
                           />
@@ -262,7 +295,7 @@ export function WorkspaceMapView() {
                 })}
               </g>
             </svg>
-            {(["projects", "services", "volumes"] as MapKind[]).map((kind) => (
+            {(["projects", "connections", "storage"] as const).map((kind) => (
               <section className="map-column" key={kind} aria-label={kind}>
                 <h2>
                   {kind}
@@ -286,7 +319,11 @@ export function WorkspaceMapView() {
                       ) : (
                         <span className="map-node-icon">
                           <Icon
-                            name={kind === "projects" ? "grid" : "hard-drive"}
+                            name={
+                              node.key.startsWith("projects:")
+                                ? "grid"
+                                : "hard-drive"
+                            }
                           />
                         </span>
                       )}

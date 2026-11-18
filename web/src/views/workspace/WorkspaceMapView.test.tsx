@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -85,6 +85,14 @@ vi.mock("../../services/services", () => {
                 size_bytes: 1024,
                 size_updated: "2026-01-01",
               },
+              {
+                id: "mount",
+                name: "Uploads",
+                project_id: "p",
+                mount_path: "/uploads",
+                size_bytes: 2048,
+                size_updated: "2026-01-01",
+              },
             ],
       },
     }),
@@ -126,6 +134,25 @@ function setup() {
   return userEvent.setup();
 }
 describe("workspace map view", () => {
+  it("puts project mounts beside services and service data in storage", () => {
+    setup();
+    const connections = within(
+      screen.getByRole("region", { name: "connections" }),
+    );
+    expect(
+      connections.getByRole("link", { name: /Uploads/ }),
+    ).toBeInTheDocument();
+    expect(
+      connections.getByRole("link", { name: /^Database postgresql/ }),
+    ).toBeInTheDocument();
+    const storage = within(screen.getByRole("region", { name: "storage" }));
+    expect(
+      storage.getByRole("link", { name: /Database data/ }),
+    ).toBeInTheDocument();
+    expect(
+      storage.queryByRole("link", { name: /Uploads/ }),
+    ).not.toBeInTheDocument();
+  });
   it("renders resource links and traces connected nodes on keyboard focus", async () => {
     const user = setup();
     const project = screen.getByRole("link", { name: /Website/ });
