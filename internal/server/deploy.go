@@ -290,7 +290,7 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 				return
 			}
 		}
-		args := appRunArgs(app, network, true)
+		args := a.projectRunArgs(app, network, true)
 		args = append(args, image, "sh", "-c", "set -e\n"+strings.Join(p.Test.Commands, "\n"))
 		var output strings.Builder
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
@@ -384,7 +384,7 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 			command("", logger, "docker", "rm", "-f", container)
 		}
 	}()
-	args := append(appRunArgs(app, network, false), "--name", container)
+	args := append(a.projectRunArgs(app, network, false), "--name", container)
 	args = append(args, image)
 	if e = command("", logger, "docker", args...); e != nil {
 		return

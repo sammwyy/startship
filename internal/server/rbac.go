@@ -27,6 +27,7 @@ const (
 )
 
 var permissionCatalog = []Permission{
+	{"services.manage", "Manage services", "Deploy services from the catalog, manage volumes and their credentials.", "Workspace", scopeWorkspace},
 	{"workspaces.create", "Create workspaces", "Create new workspaces and administer them.", "Platform", scopePlatform},
 	{"users.manage", "Manage users", "Create users, reset passwords, delete accounts and assign platform roles.", "Platform", scopePlatform},
 	{"roles.manage", "Manage roles", "Create, edit and delete custom roles. Platform permissions stay reserved to Platform Admins.", "Platform", scopePlatform},
@@ -102,8 +103,8 @@ var (
 	projectPermissions = []string{"project.view", "logs.view", "traffic.view", "deploy", "project.settings", "project.environment", "project.source", "domains.manage"}
 	builtinRoles       = []Role{
 		{ID: platformAdminRole, Name: "Platform Admin", Color: "#f5a524", Icon: "crown", Permissions: allPermissionKeys(), Fixed: true},
-		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
-		{ID: "contributor", Name: "Contributor", Color: "#3e63dd", Icon: "wrench", Permissions: append([]string{"projects.create"}, projectPermissions...)},
+		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"services.manage", "workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
+		{ID: "contributor", Name: "Contributor", Color: "#3e63dd", Icon: "wrench", Permissions: append([]string{"services.manage", "projects.create"}, projectPermissions...)},
 		{ID: "member", Name: "Member", Color: "#30a46c", Icon: "eye", Permissions: []string{"project.view", "logs.view", "traffic.view"}},
 		{ID: "guest", Name: "Guest", Color: "#8b8d98", Icon: "user", Permissions: []string{}},
 	}
