@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { useProject } from "../../layouts/ProjectLayout";
 import { useSession } from "../../providers/SessionProvider";
@@ -8,6 +9,9 @@ import type { DomainRoute, WorkspaceDomain } from "../../services/types";
 import { ProjectHeading } from "../../components/ProjectHeading";
 import { RouteEditor } from "../../components/RouteEditor";
 import { Icon } from "../../components/Icon";
+import { useDashboard } from "../../layouts/DashboardLayout";
+import { useCertificates } from "../../services/certificates";
+import { ErrorMessage } from "../../components/ui";
 
 export function DomainsView() {
   const { project, containers, routes, refresh } = useProject(),
@@ -18,6 +22,18 @@ export function DomainsView() {
     domains: WorkspaceDomain[];
   }>();
   const [loading, setLoading] = useState(false);
+  const { workspace } = useDashboard();
+  const certificateAccess =
+    !!user?.platform_admin ||
+    (!!workspace && can("workspace.domains", workspace));
+  const certificates = useCertificates(project.workspace_id, certificateAccess);
+  const client = useQueryClient();
+  useEffect(() => {
+    if (certificates.data)
+      void client.invalidateQueries({
+        queryKey: [`routes?project_id=${project.id}`],
+      });
+  }, [certificates.data, client, project.id]);
   const editable = can("domains.manage", project);
   async function edit(route?: DomainRoute) {
     setLoading(true);
@@ -45,6 +61,7 @@ export function DomainsView() {
           </button>
         }
       />
+      <ErrorMessage error={certificates.error || certificates.liveError} />
       {editor && (
         <>
           {!editor.domains.length && !user?.platform_admin && (
@@ -62,6 +79,10 @@ export function DomainsView() {
             domains={editor.domains}
             route={editor.route}
             admin={user?.platform_admin}
+            certificates={certificates.data?.certificates}
+            certificatesAvailable={
+              certificateAccess && !!certificates.data && !certificates.error
+            }
             onCancel={() => setEditor(undefined)}
             onSave={async (data) => {
               await request(
@@ -90,7 +111,11 @@ export function DomainsView() {
               <div className="domain-route" key={route.id}>
                 <div className="domain-route-address">
                   <span className="card-icon">
-                    <Icon name="globe" />
+                    <Icon
+                      name={
+                        route.url?.startsWith("https://") ? "lock" : "globe"
+                      }
+                    />
                   </span>
                   <div>
                     <a
@@ -102,6 +127,9 @@ export function DomainsView() {
                       target="_blank"
                       rel="noopener noreferrer"
                     >
+                      {route.url?.startsWith("https://") && (
+                        <span className="small muted">https://</span>
+                      )}
                       {route.host}
                       <span className="muted">{route.path_prefix}</span>
                       <Icon name="arrow" />

@@ -10,6 +10,7 @@ import type {
 } from "./types";
 
 export type LiveSubscription =
+  | { topic: "certificates"; workspace_id: string }
   | { topic: "project"; project_id: string }
   | { topic: "workspace"; workspace_id: string }
   | { topic: "release_log"; release_id: string }
@@ -159,7 +160,11 @@ export function applyLiveMessage(
   event: LiveMessage,
 ) {
   if (event.type === "error") return;
-  if (spec.topic === "project") {
+  if (spec.topic === "certificates" && event.type === "snapshot") {
+    const queryKey = [`workspaces/${spec.workspace_id}/certificates`];
+    void client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData(queryKey, event.data);
+  } else if (spec.topic === "project") {
     const key = {
       project: queries.project(spec.project_id).queryKey,
       container: queries.containers(spec.project_id).queryKey,

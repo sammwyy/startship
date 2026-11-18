@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RouteEditor } from "./RouteEditor";
 import type {
   Container,
+  Certificate,
   DomainRoute,
   WorkspaceDomain,
 } from "../services/types";
@@ -42,6 +43,8 @@ function setup(
     domains?: WorkspaceDomain[];
     route?: DomainRoute;
     admin?: boolean;
+    certificates?: Certificate[];
+    certificatesAvailable?: boolean;
     onSave?: () => Promise<void>;
   } = {},
 ) {
@@ -59,6 +62,44 @@ function setup(
 }
 
 describe("domain routing editor", () => {
+  it("selects only covering certificates, previews HTTPS and saves the explicit binding and redirect", async () => {
+    const certificate: Certificate = {
+      id: "cert",
+      workspace_id: "w",
+      domains: ["example.com"],
+      source: "upload",
+      issuer: "Test issuer",
+      not_before: "2020-01-01T00:00:00Z",
+      not_after: "2099-01-01T00:00:00Z",
+      status: "active",
+      auto_renew: false,
+      cert_pem: "PEM",
+    };
+    const { user, onSave } = setup({
+      certificates: [
+        certificate,
+        { ...certificate, id: "other", domains: ["other.test"] },
+      ],
+    });
+    expect(screen.getByText("https://")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /other.test/ }),
+    ).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Certificate"), "cert");
+    await user.click(screen.getByLabelText("Force HTTPS"));
+    await user.click(screen.getByRole("button", { name: "Connect domain" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ certificate_id: "cert", force_https: true }),
+    );
+  });
+  it("preserves inaccessible certificate bindings without offering selection", () => {
+    setup({
+      route: { ...route, certificate_id: "hidden" },
+      certificatesAvailable: false,
+    });
+    expect(screen.getByLabelText("Certificate")).toBeDisabled();
+    expect(screen.getByLabelText("Certificate")).toHaveValue("hidden");
+  });
   it("lets contributors retain an existing external host without a misleading preview", async () => {
     const { user, onSave } = setup({
       route: { ...route, container_id: "web", host: "legacy.test", port: 0 },
@@ -105,6 +146,8 @@ describe("domain routing editor", () => {
       path_prefix: "/",
       port: 0,
       strip_prefix: false,
+      certificate_id: "",
+      force_https: false,
     });
   });
   it("updates the destination port when choosing a container and saves a custom port and wildcard path", async () => {
@@ -129,6 +172,8 @@ describe("domain routing editor", () => {
       path_prefix: "/api",
       port: 9000,
       strip_prefix: true,
+      certificate_id: "",
+      force_https: false,
     });
   });
   it("preserves the target, host, port and path behavior when editing", async () => {
@@ -146,6 +191,8 @@ describe("domain routing editor", () => {
       path_prefix: "/api",
       port: 9000,
       strip_prefix: true,
+      certificate_id: "",
+      force_https: false,
     });
   });
   it("requires a registered domain for ordinary users but allows a custom host for Platform Admins", async () => {

@@ -262,6 +262,11 @@ export function DashboardLayout() {
               {workspace && (
                 <>
                   {navLink(`${url}/domains`, "Domains", "globe")}
+                  {navLink(
+                    `${url}/certificates`,
+                    "Certificates",
+                    "shield-check",
+                  )}
                   {navLink(`${url}/members`, "Members", "users")}
                   {navLink(`${url}/settings`, "Workspace settings", "settings")}
                 </>

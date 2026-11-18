@@ -53,6 +53,25 @@ export interface DomainRoute {
   container_id?: string;
   app_id?: string;
   url?: string;
+  certificate_id?: string;
+  force_https?: boolean;
+}
+export interface Certificate {
+  id: string;
+  workspace_id: string;
+  domains: string[];
+  source: "upload" | "acme";
+  cert_pem?: string;
+  issuer: string;
+  not_before: string;
+  not_after: string;
+  status: "pending" | "issuing" | "active" | "failed" | "expired";
+  last_error?: string;
+  auto_renew: boolean;
+}
+export interface ACMESettings {
+  email: string;
+  directory_url: string;
 }
 export interface WorkspaceDomain {
   id: string;

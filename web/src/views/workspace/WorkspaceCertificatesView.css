@@ -1,0 +1,94 @@
+.workspace-certificates {
+  display: grid;
+  gap: 16px;
+}
+.certificate-table {
+  overflow-x: auto;
+}
+.certificate-table table {
+  width: 100%;
+}
+.certificate-table td {
+  vertical-align: top;
+}
+.certificate-table td:first-child {
+  white-space: normal;
+  width: 30%;
+}
+.certificate-names {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.certificate-detail {
+  display: block;
+  margin-top: 4px;
+}
+.certificate-error {
+  display: block;
+  margin-top: 6px;
+  color: var(--error);
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.certificate-form-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.certificate-form-title h3 {
+  margin: 0;
+}
+.certificate-pem-grid,
+.certificate-account-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+.certificate-pem-grid textarea {
+  width: 100%;
+  resize: vertical;
+  font-family: monospace;
+  font-size: 11px;
+}
+.certificate-file {
+  margin-top: 8px;
+}
+.certificate-hosts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.certificate-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.certificate-settings summary span {
+  margin-left: 10px;
+  font-weight: 400;
+}
+.certificate-settings .form-fields {
+  margin-top: 16px;
+}
+.certificate-table .badge.active {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.certificate-table .badge:is(.failed, .expired) {
+  color: var(--error);
+  background: var(--error-bg);
+}
+.certificate-table .badge:is(.issuing, .pending) {
+  color: var(--warning);
+  background: var(--warning-bg);
+}
+@media (max-width: 760px) {
+  .certificate-pem-grid,
+  .certificate-account-grid {
+    grid-template-columns: 1fr;
+  }
+}
