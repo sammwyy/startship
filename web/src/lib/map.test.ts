@@ -5,6 +5,7 @@ import {
   placeMapLabels,
   orderMapRow,
   mapLabelPositions,
+  sampleMapCurve,
 } from "./map";
 import type { Project, Service, Volume } from "../services/types";
 
@@ -143,13 +144,55 @@ describe("map label placement", () => {
       { x: 200, y: 100 },
       false,
     );
-    expect(horizontal[0]).toEqual({ x: 140.625, y: 84.375 });
-    expect(horizontal[1]).toEqual({ x: 100, y: 50 });
-    expect(horizontal[2]).toEqual({ x: 59.375, y: 15.625 });
-    expect(horizontal).toHaveLength(4);
+    expect(horizontal[0]).toEqual({ x: 100, y: 50 });
+    expect(horizontal[1].x).toBeCloseTo(76.825);
+    expect(horizontal[1].y).toBeCloseTo(28.175);
+    expect(horizontal[2].x).toBeCloseTo(123.175);
+    expect(horizontal[2].y).toBeCloseTo(71.825);
+    expect(horizontal[3]).toEqual({ x: 59.375, y: 15.625 });
+    expect(horizontal[4]).toEqual({ x: 140.625, y: 84.375 });
     expect(mapLabelPositions({ x: 0, y: 0 }, { x: 100, y: 200 }, true)).toEqual(
       horizontal.map(({ x, y }) => ({ x: y, y: x })),
     );
+  });
+  it("rejects pills intersecting another curve but allows their own curve", () => {
+    const own = sampleMapCurve({ x: 100, y: 80 }, { x: 240, y: 80 }, false);
+    const other = sampleMapCurve({ x: 175, y: 0 }, { x: 175, y: 200 }, true);
+    expect(placeMapLabels([label], [], 200, undefined, [own])).toEqual([
+      { x: 175, y: 80, width: 74 },
+    ]);
+    expect(placeMapLabels([label], [], 200, undefined, [own, other])).toEqual([
+      null,
+    ]);
+  });
+  it("tries a safe candidate on its own curve when another edge crosses the preferred pill", () => {
+    const positions = mapLabelPositions(
+      { x: 0, y: 50 },
+      { x: 400, y: 50 },
+      false,
+    );
+    const [preferred, ...alternatives] = positions;
+    const own = sampleMapCurve({ x: 0, y: 50 }, { x: 400, y: 50 }, false);
+    const other = sampleMapCurve({ x: 200, y: 0 }, { x: 200, y: 100 }, true);
+    expect(
+      placeMapLabels(
+        [{ ...label, ...preferred, left: 0, right: 400, alternatives }],
+        [],
+        200,
+        undefined,
+        [own, other],
+      ),
+    ).toEqual([{ ...alternatives[0], width: 74 }]);
+  });
+  it("samples full curves including their endpoints, also for a zero-length curve", () => {
+    const points = sampleMapCurve({ x: 0, y: 0 }, { x: 400, y: 100 }, false);
+    expect(points[0]).toEqual({ x: 0, y: 0 });
+    expect(points.at(-1)).toEqual({ x: 400, y: 100 });
+    expect(points.length).toBeGreaterThan(200);
+    expect(sampleMapCurve({ x: 1, y: 2 }, { x: 1, y: 2 }, true)).toEqual([
+      { x: 1, y: 2 },
+      { x: 1, y: 2 },
+    ]);
   });
   it("retries alternate curve points after the preferred desktop region is exhausted", () => {
     const retry = { ...label, y: 120, alternatives: [{ x: 175, y: 360 }] };

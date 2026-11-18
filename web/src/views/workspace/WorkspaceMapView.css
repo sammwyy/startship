@@ -227,7 +227,9 @@
     min-height: 76px;
     padding: 10px 8px;
     gap: 7px;
-    align-items: flex-start;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
     border-radius: 8px;
   }
   .map-node-copy strong {
@@ -236,8 +238,27 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     white-space: normal;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
+    word-break: normal;
     overflow: hidden;
+  }
+  .map-node-copy {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+  }
+  .map-name-part {
+    display: inline-block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: bottom;
+  }
+  .map-node > .map-dot {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
   }
   .map-node-copy small {
     white-space: nowrap;

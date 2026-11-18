@@ -120,10 +120,11 @@ export interface MapLabel {
   bottom?: number;
   alternatives?: { x: number; y: number }[];
 }
-export function mapLabelPositions(
+function mapCurvePoint(
   from: { x: number; y: number },
   to: { x: number; y: number },
   vertical: boolean,
+  t: number,
 ) {
   const bend = (vertical ? to.y - from.y : to.x - from.x) / 2;
   const a = {
@@ -139,16 +140,36 @@ export function mapLabelPositions(
     3 * (1 - t) ** 2 * t * a[axis] +
     3 * (1 - t) * t ** 2 * b[axis] +
     t ** 3 * to[axis];
-  return [0.75, 0.5, 0.25, 0.85].map((t) => ({
-    x: point(t, "x"),
-    y: point(t, "y"),
-  }));
+  return { x: point(t, "x"), y: point(t, "y") };
+}
+export function mapLabelPositions(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  vertical: boolean,
+) {
+  return [0.5, 0.35, 0.65, 0.25, 0.75].map((t) =>
+    mapCurvePoint(from, to, vertical, t),
+  );
+}
+export function sampleMapCurve(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  vertical: boolean,
+) {
+  const steps = Math.max(
+    1,
+    Math.ceil((Math.abs(to.x - from.x) + Math.abs(to.y - from.y)) / 2),
+  );
+  return Array.from({ length: steps + 1 }, (_, i) =>
+    mapCurvePoint(from, to, vertical, i / steps),
+  );
 }
 export function placeMapLabels(
   labels: (MapLabel | null)[],
   cards: MapBox[],
   height: number,
   verticalWidth?: number,
+  curves: { x: number; y: number }[][] = [],
 ) {
   const placed: MapBox[] = [];
   const overlaps = (a: MapBox, b: MapBox) =>
@@ -156,7 +177,7 @@ export function placeMapLabels(
     a.x + a.width + 4 > b.x &&
     a.y < b.y + b.height + 4 &&
     a.y + a.height + 4 > b.y;
-  return labels.map((label) => {
+  return labels.map((label, index) => {
     if (!label) return null;
     const vertical = verticalWidth !== undefined;
     if (
@@ -187,7 +208,18 @@ export function placeMapLabels(
               box.y < label.top! + 6 ||
               box.y + box.height > label.bottom! - 6
             : box.x < label.left + 6 || box.x + box.width > label.right - 6) ||
-          [...cards, ...placed].some((other) => overlaps(box, other))
+          [...cards, ...placed].some((other) => overlaps(box, other)) ||
+          curves.some(
+            (points, other) =>
+              other !== index &&
+              points.some(
+                (point) =>
+                  point.x >= box.x - 2 &&
+                  point.x <= box.x + box.width + 2 &&
+                  point.y >= box.y - 2 &&
+                  point.y <= box.y + box.height + 2,
+              ),
+          )
         )
           continue;
         placed.push(box);

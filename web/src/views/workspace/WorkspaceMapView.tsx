@@ -18,6 +18,7 @@ import {
   placeMapLabels,
   orderMapRow,
   mapLabelPositions,
+  sampleMapCurve,
 } from "../../lib/map";
 import { Heading } from "../../components/Heading";
 import { Empty, ErrorMessage, Loading } from "../../components/ui";
@@ -216,6 +217,11 @@ export function WorkspaceMapView() {
         return [
           {
             ...edge,
+            samples: sampleMapCurve(
+              { x: x1, y: y1 },
+              { x: x2, y: y2 },
+              vertical,
+            ),
             d: vertical
               ? `M${x1},${y1} C${x1},${y1 + bend} ${x2},${y2 - bend} ${x2},${y2}`
               : `M${x1},${y1} C${x1 + bend},${y1} ${x2 - bend},${y2} ${x2},${y2}`,
@@ -244,6 +250,7 @@ export function WorkspaceMapView() {
         cards,
         bounds.height,
         vertical ? bounds.width : undefined,
+        measured.map((edge) => edge.samples),
       );
       setCurves(
         measured.map((edge, index) => ({
@@ -392,7 +399,20 @@ export function WorkspaceMapView() {
                         </span>
                       )}
                       <span className="map-node-copy">
-                        <strong>{node.name}</strong>
+                        <strong>
+                          {verticalLayout
+                            ? node.name
+                                .split(/(?<=-)|\s+/)
+                                .map((part, index) => (
+                                  <span key={index}>
+                                    <span className="map-name-part">
+                                      {part}
+                                    </span>
+                                    {part.endsWith("-") ? null : " "}
+                                  </span>
+                                ))
+                            : node.name}
+                        </strong>
                         <small>{node.detail}</small>
                       </span>
                       <i
