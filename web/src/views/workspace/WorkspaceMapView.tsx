@@ -162,6 +162,22 @@ export function WorkspaceMapView() {
   const active = focused || hovered;
   const connected = active ? connectedMapNodes(active, graph.edges) : null;
   const nodes = Object.values(columns).flat();
+  const connectionLabels = useMemo(() => {
+    const labels = new Map<string, Set<string>>();
+    for (const edge of graph.edges) {
+      if (!edge.label) continue;
+      for (const key of [edge.from, edge.to]) {
+        if (!labels.has(key)) labels.set(key, new Set());
+        labels.get(key)!.add(edge.label);
+      }
+    }
+    return new Map(
+      [...labels].map(([key, values]) => [
+        key,
+        ` · Connections: ${[...values].join(", ")}`,
+      ]),
+    );
+  }, [graph.edges]);
   useLayoutEffect(() => {
     const element = root.current;
     if (!element) return;
@@ -359,7 +375,8 @@ export function WorkspaceMapView() {
                       onMouseLeave={() => setHovered(null)}
                       onFocus={() => setFocused(node.key)}
                       onBlur={() => setFocused(null)}
-                      title={`${node.name} · ${node.detail} · ${node.status}`}
+                      title={`${node.name} · ${node.detail} · ${node.status}${connectionLabels.get(node.key) || ""}`}
+                      aria-label={`${node.name} ${node.detail} ${node.status}${connectionLabels.get(node.key) || ""}`}
                     >
                       {node.engine ? (
                         <EngineIcon engine={node.engine} />

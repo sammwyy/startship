@@ -135,6 +135,23 @@ function setup() {
   return userEvent.setup();
 }
 describe("workspace map view", () => {
+  it("includes connection aliases and mounts in card tooltips and accessible names", () => {
+    setup();
+    const project = screen.getByRole("link", { name: /Website/ });
+    expect(project).toHaveAttribute(
+      "title",
+      expect.stringContaining("Connections: db, /uploads"),
+    );
+    expect(project).toHaveAccessibleName(
+      expect.stringContaining("Connections: db, /uploads"),
+    );
+    expect(
+      screen.getByRole("link", { name: /^Database postgresql/ }),
+    ).toHaveAttribute("title", expect.stringContaining("Connections: db"));
+    expect(
+      screen.getByRole("link", { name: /Unattached/ }),
+    ).not.toHaveAttribute("title", expect.stringContaining("Connections:"));
+  });
   it("puts project mounts beside services and service data in storage", () => {
     setup();
     const connections = within(

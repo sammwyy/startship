@@ -249,7 +249,7 @@
     grid-template-columns: repeat(var(--map-card-columns), minmax(0, 1fr));
     gap: 8px;
   }
-  .map-hint {
+  .workspace-map .map-legend > .map-hint {
     display: none;
   }
   .map-node-icon,
@@ -288,7 +288,7 @@
   }
 }
 @media (hover: none) {
-  .map-hint {
+  .workspace-map .map-legend > .map-hint {
     display: none;
   }
 }
