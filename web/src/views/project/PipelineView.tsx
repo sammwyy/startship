@@ -284,7 +284,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
           <div
             role="tablist"
             aria-label="Pipeline stages"
-            className="pipeline-tabs"
+            className="settings-navigation pipeline-tabs"
           >
             {tabs.map((value, index) => {
               const configured =
@@ -319,10 +319,12 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                   <span>{index + 1}</span> {tabNames[index]}{" "}
                   {configured && (
                     <span
-                      className="pipeline-tab-dot"
+                      className="pipeline-tab-modified"
                       aria-label="Differs from template defaults"
                       title="Differs from template defaults"
-                    />
+                    >
+                      Modified
+                    </span>
                   )}
                 </button>
               );

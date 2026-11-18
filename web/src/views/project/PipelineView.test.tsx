@@ -143,6 +143,9 @@ describe("project pipeline", () => {
     expect(
       screen.getAllByLabelText("Differs from template defaults"),
     ).toHaveLength(1);
+    expect(
+      screen.getByLabelText("Differs from template defaults"),
+    ).toHaveTextContent("Modified");
     fireEvent.change(screen.getByLabelText("Build image"), {
       target: { value: "node:22-alpine" },
     });
