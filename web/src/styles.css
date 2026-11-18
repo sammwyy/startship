@@ -220,6 +220,15 @@
 .pipeline-detections button {
   margin-left: auto;
 }
+.pipeline-in-use {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+}
+.pipeline-in-use .icon {
+  width: 14px;
+}
 .pipeline-page .configuration-actions {
   margin-top: 20px;
 }

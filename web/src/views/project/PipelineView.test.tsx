@@ -307,6 +307,38 @@ describe("project pipeline", () => {
       "pnpm install\npnpm run build",
     );
   });
+  it.each(["vite", "go", "auto"])(
+    "marks a detected template in use only when the saved strategy is %s",
+    async (strategy) => {
+      state.project.build_type = strategy;
+      state.request.mockImplementation(async (path: string) =>
+        path === "pipeline/templates"
+          ? templates
+          : [
+              {
+                root_dir: ".",
+                template: "vite",
+                pipeline: templates[0].pipeline,
+              },
+            ],
+      );
+      show();
+      fireEvent.click(await screen.findByRole("button", { name: "Detect" }));
+      await screen.findByText("Repository root");
+      if (strategy === "vite") {
+        expect(screen.getByText("In use")).toBeVisible();
+        expect(
+          screen.queryByRole("button", { name: "Apply Vite" }),
+        ).not.toBeInTheDocument();
+      } else {
+        expect(screen.queryByText("In use")).not.toBeInTheDocument();
+        fireEvent.click(screen.getByRole("button", { name: "Apply Vite" }));
+        expect(screen.getByLabelText("Build image")).toHaveValue(
+          "node:22-alpine",
+        );
+      }
+    },
+  );
   it.each([
     [".", "Repository root"],
     ["", "Repository root"],
