@@ -5,6 +5,8 @@ export const projectSections = [
   ["deployments", "Deployments", "activity"],
   ["logs", "Logs", "terminal"],
   ["containers", "Containers", "box"],
+  ["connections", "Connections", "plug"],
+  ["volumes", "Volumes", "hard-drive"],
   ["traffic", "Traffic", "activity"],
   ["domains", "Domains", "globe"],
   ["source", "Source", "branch"],

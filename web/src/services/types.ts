@@ -1,6 +1,60 @@
 export interface Scoped {
   permissions?: string[];
 }
+export interface ServiceField {
+  key: string;
+  label: string;
+  type: "text" | "password" | "number";
+  default: string;
+  generate: boolean;
+  required: boolean;
+  help: string;
+}
+export interface ServiceEngine {
+  id: string;
+  icon: string;
+  name: string;
+  category: string;
+  description: string;
+  image: string;
+  versions: string[];
+  port: number;
+  data_path: string;
+  fields: ServiceField[] | null;
+}
+export interface Service {
+  id: string;
+  workspace_id: string;
+  name: string;
+  engine: string;
+  version: string;
+  config: Record<string, string>;
+  external_port: number;
+  volume_id: string;
+  attachments: { project_id: string; alias: string }[];
+  status: string;
+  last_error: string;
+  container: string;
+  created: string;
+  updated: string;
+  created_by: string;
+}
+export interface Volume {
+  id: string;
+  workspace_id: string;
+  name: string;
+  project_id: string;
+  mount_path: string;
+  service_id: string;
+  size_bytes: number;
+  size_updated: string;
+  created: string;
+  created_by: string;
+}
+export interface ProjectServices {
+  attached: { service: Service; alias: string; env: Record<string, string> }[];
+  available: Service[];
+}
 export interface Pipeline {
   build: { image?: string; commands?: string[]; dockerfile?: string };
   test: {

@@ -16,6 +16,8 @@ describe("project configuration", () => {
       "deployments",
       "logs",
       "containers",
+      "connections",
+      "volumes",
       "traffic",
       "domains",
       "source",

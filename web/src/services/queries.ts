@@ -13,6 +13,10 @@ import type {
   UpdateInfo,
   SystemVersion,
   PipelineTemplate,
+  ServiceEngine,
+  Service,
+  Volume,
+  ProjectServices,
 } from "./types";
 
 function resource<T>(path: string) {
@@ -22,6 +26,14 @@ function resource<T>(path: string) {
   });
 }
 export const queries = {
+  catalog: () => resource<ServiceEngine[]>("catalog"),
+  services: (id: string) =>
+    resource<{ services: Service[] }>(`workspaces/${id}/services`),
+  service: (id: string) => resource<Service>(`services/${id}`),
+  volumes: (id: string) =>
+    resource<{ volumes: Volume[] }>(`workspaces/${id}/volumes`),
+  projectServices: (id: string) =>
+    resource<ProjectServices>(`projects/${id}/services`),
   pipelineTemplates: () => resource<PipelineTemplate[]>("pipeline/templates"),
   updates: () => ({
     ...resource<UpdateInfo>("system/update"),
