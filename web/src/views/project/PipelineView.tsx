@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { useProject } from "../../layouts/ProjectLayout";
 import { useSession } from "../../providers/SessionProvider";
 import { useUI } from "../../providers/UIProvider";
@@ -31,6 +32,42 @@ const autoTemplate: PipelineTemplate = {
   pipeline: emptyPipeline(),
 };
 const lines = (value: string) => value.split("\n");
+const tabs = ["build", "test", "deploy", "health"] as const;
+const tabNames = ["Build", "Test", "Deploy", "Health check"];
+type ValidatableField =
+  HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+function stageValues(p: Pipeline, tab: (typeof tabs)[number], auto: boolean) {
+  const { build, test, deploy } = clean(p);
+  switch (tab) {
+    case "build":
+      return auto
+        ? []
+        : [build.image || "", build.dockerfile || "", build.commands || []];
+    case "test":
+      return [
+        test.image || "",
+        test.commands || [],
+        test.expect_exit_code || 0,
+        test.expect_output || "",
+      ];
+    case "deploy":
+      return auto
+        ? [deploy.port || 0]
+        : [
+            deploy.image || "",
+            deploy.artifact || "",
+            !!deploy.static,
+            deploy.command || "",
+            deploy.port || 0,
+          ];
+    case "health":
+      return [
+        deploy.health_path || "",
+        deploy.expect_status || 0,
+        deploy.health_timeout || 0,
+      ];
+  }
+}
 const clean = (p: Pipeline): Pipeline => ({
   ...p,
   build: { ...p.build, commands: p.build.commands?.filter((s) => s.trim()) },
@@ -69,6 +106,28 @@ export function PipelineView() {
   );
 }
 function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
+  const [params, setParams] = useSearchParams();
+  const tab = tabs.find((value) => value === params.get("tab")) || "build";
+  const [invalidField, setInvalidField] = useState<ValidatableField>();
+  useEffect(() => {
+    if (
+      !invalidField ||
+      invalidField.closest<HTMLElement>('[role="tabpanel"]')?.hidden
+    )
+      return;
+    invalidField.focus();
+    invalidField.reportValidity();
+    setInvalidField(undefined);
+  }, [invalidField, tab]);
+  function selectTab(value: string) {
+    setParams(
+      (previous) => {
+        previous.set("tab", value);
+        return previous;
+      },
+      { replace: true },
+    );
+  }
   const { project, refresh } = useProject(),
     { can } = useSession(),
     ui = useUI();
@@ -104,6 +163,14 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
   const detectedPort = detected.find((d) => auto || d.template === strategy)
     ?.pipeline?.deploy.port;
   const portHint = detectedPort || current?.pipeline.deploy.port;
+  const defaults =
+    detected.find(
+      (d) =>
+        d.template === strategy && d.root_dir === (project.root_dir || "."),
+    )?.pipeline ||
+    detected.find((d) => d.template === strategy)?.pipeline ||
+    current?.pipeline ||
+    emptyPipeline();
   function stage<K extends keyof Pipeline>(
     key: K,
     patch: Partial<Pipeline[K]>,
@@ -142,15 +209,35 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
     }
   }
   return (
-    <div className="pipeline-page">
+    <div
+      className="pipeline-page"
+      onInvalidCapture={(event) => {
+        const field = event.target as ValidatableField;
+        const panel = field.closest<HTMLElement>('[role="tabpanel"]');
+        const value = panel?.id.replace("pipeline-panel-", "");
+        if (!value || !panel?.hidden) return;
+        event.preventDefault();
+        const firstInvalid = Array.from(field.form?.elements || []).find(
+          (control) =>
+            (control instanceof HTMLInputElement ||
+              control instanceof HTMLTextAreaElement ||
+              control instanceof HTMLSelectElement) &&
+            control.willValidate &&
+            !control.validity.valid,
+        );
+        if (firstInvalid !== field) return;
+        setInvalidField(field);
+        selectTab(value);
+      }}
+    >
       {!editable && (
         <p className="note locked-note">
           You can view this section, but your roles do not let you change it.
         </p>
       )}
       <AsyncForm
-        disabled={!editable}
         onSubmit={async () => {
+          if (!editable) return;
           await request(
             `projects/${project.id}`,
             { build_type: strategy, pipeline: clean(pipeline) },
@@ -161,78 +248,129 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
         }}
       >
         <section className="panel panel-pad pipeline-strategy">
-          <div className="section-head">
-            <h2>Strategy</h2>
-            <div className="pipeline-buttons">
-              <button type="button" onClick={() => setModal(true)}>
-                Change template
-              </button>
-              <button type="button" disabled={detecting} onClick={detect}>
-                <Icon name="bolt" />
-                {detecting ? "Detecting…" : "Detect"}
-              </button>
-            </div>
-          </div>
-          <div className="pipeline-current">
-            <TemplateIcon slug={current?.icon || "custom"} />
-            <div>
-              <strong>{current?.name || strategy}</strong>
-              <p className="small muted">{current?.description}</p>
-            </div>
-            {auto && <span className="pipeline-recommended">Recommended</span>}
-          </div>
-          <ErrorMessage error={detectError} />
-          {hasDetected && !detected.length && (
-            <p className="small muted">
-              No supported templates detected in this repository.
-            </p>
-          )}
-          {!!detected.length && (
-            <div className="pipeline-detections" aria-live="polite">
-              <span className="small muted">Detected in your repository</span>
-              {detected.map((d) => {
-                const t = templates.find((t) => t.id === d.template);
-                return (
-                  <div key={d.root_dir}>
-                    <TemplateIcon slug={t?.icon || "custom"} />
-                    <span>
-                      <strong>{t?.name || d.template}</strong>
-                      <code>
-                        {!d.root_dir || d.root_dir === "."
-                          ? "Repository root"
-                          : d.root_dir}
-                      </code>
-                    </span>
-                    {project.build_type === d.template ? (
-                      <div className="pipeline-in-use small muted">
-                        <Icon name="check" />
-                        In use
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => t && apply(t, d.pipeline)}
-                      >
-                        Apply {t?.name || d.template}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-        <div className="pipeline-stage-list">
-          <section className="panel pipeline-stage">
-            <header>
-              <span className="pipeline-step">1</span>
-              <div>
-                <h2>Build</h2>
-                <p>Prepare your application</p>
+          <fieldset disabled={!editable} className="pipeline-strategy-controls">
+            <div className="section-head">
+              <h2>Strategy</h2>
+              <div className="pipeline-buttons">
+                <button type="button" onClick={() => setModal(true)}>
+                  Change template
+                </button>
+                <button type="button" disabled={detecting} onClick={detect}>
+                  <Icon name="bolt" />
+                  {detecting ? "Detecting…" : "Detect"}
+                </button>
               </div>
-              <Icon name="code" />
-            </header>
-            <div className="pipeline-stage-body">
+            </div>
+            <div className="pipeline-current">
+              <TemplateIcon slug={current?.icon || "custom"} />
+              <div>
+                <strong>{current?.name || strategy}</strong>
+                <p className="small muted">{current?.description}</p>
+              </div>
+              {auto && (
+                <span className="pipeline-recommended">Recommended</span>
+              )}
+            </div>
+            <ErrorMessage error={detectError} />
+            {hasDetected && !detected.length && (
+              <p className="small muted">
+                No supported templates detected in this repository.
+              </p>
+            )}
+            {!!detected.length && (
+              <div className="pipeline-detections" aria-live="polite">
+                <span className="small muted">Detected in your repository</span>
+                {detected.map((d) => {
+                  const t = templates.find((t) => t.id === d.template);
+                  return (
+                    <div key={d.root_dir}>
+                      <TemplateIcon slug={t?.icon || "custom"} />
+                      <span>
+                        <strong>{t?.name || d.template}</strong>
+                        <code>
+                          {!d.root_dir || d.root_dir === "."
+                            ? "Repository root"
+                            : d.root_dir}
+                        </code>
+                      </span>
+                      {project.build_type === d.template ? (
+                        <div className="pipeline-in-use small muted">
+                          <Icon name="check" />
+                          In use
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => t && apply(t, d.pipeline)}
+                        >
+                          Apply {t?.name || d.template}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </fieldset>
+        </section>
+        <div className="panel pipeline-editor-tabs">
+          <div
+            role="tablist"
+            aria-label="Pipeline stages"
+            className="settings-navigation pipeline-tabs"
+          >
+            {tabs.map((value, index) => {
+              const configured =
+                JSON.stringify(stageValues(pipeline, value, auto)) !==
+                JSON.stringify(stageValues(defaults, value, auto));
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  id={`pipeline-tab-${value}`}
+                  aria-controls={`pipeline-panel-${value}`}
+                  aria-selected={tab === value}
+                  tabIndex={tab === value ? 0 : -1}
+                  onClick={() => selectTab(value)}
+                  onKeyDown={(event) => {
+                    let next = index;
+                    if (event.key === "ArrowRight")
+                      next = (index + 1) % tabs.length;
+                    else if (event.key === "ArrowLeft")
+                      next = (index + tabs.length - 1) % tabs.length;
+                    else if (event.key === "Home") next = 0;
+                    else if (event.key === "End") next = tabs.length - 1;
+                    else return;
+                    event.preventDefault();
+                    selectTab(tabs[next]);
+                    document
+                      .getElementById(`pipeline-tab-${tabs[next]}`)
+                      ?.focus();
+                  }}
+                >
+                  <span>{index + 1}</span> {tabNames[index]}{" "}
+                  {configured && (
+                    <span
+                      className="pipeline-tab-modified"
+                      aria-label="Differs from template defaults"
+                      title="Differs from template defaults"
+                    >
+                      Modified
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <section
+            hidden={tab !== "build"}
+            role="tabpanel"
+            id="pipeline-panel-build"
+            aria-labelledby="pipeline-tab-build"
+            className="pipeline-stage"
+          >
+            <fieldset disabled={!editable} className="pipeline-stage-body">
               {auto ? (
                 <DetectedNote />
               ) : (
@@ -253,6 +391,9 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                       }
                     />
                   ) : (
+                    <Field label="Working directory" value="/app" readOnly />
+                  )}
+                  {!pipeline.build.dockerfile && strategy !== "dockerfile" && (
                     <label>
                       Build commands
                       <textarea
@@ -270,18 +411,16 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                   </p>
                 </>
               )}
-            </div>
+            </fieldset>
           </section>
-          <section className="panel pipeline-stage">
-            <header>
-              <span className="pipeline-step">2</span>
-              <div>
-                <h2>Test</h2>
-                <p>Verify before going live</p>
-              </div>
-              <Icon name="check" />
-            </header>
-            <div className="pipeline-stage-body">
+          <section
+            hidden={tab !== "test"}
+            role="tabpanel"
+            id="pipeline-panel-test"
+            aria-labelledby="pipeline-tab-test"
+            className="pipeline-stage"
+          >
+            <fieldset disabled={!editable} className="pipeline-stage-body">
               {pipeline.build.dockerfile && !auto ? (
                 <p className="small muted">
                   Tests run in the Dockerfile’s final image.
@@ -324,18 +463,16 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                   }
                 />
               </div>
-            </div>
+            </fieldset>
           </section>
-          <section className="panel pipeline-stage">
-            <header>
-              <span className="pipeline-step">3</span>
-              <div>
-                <h2>Deploy</h2>
-                <p>Serve & check your application</p>
-              </div>
-              <Icon name="rocket" />
-            </header>
-            <div className="pipeline-stage-body">
+          <section
+            hidden={tab !== "deploy"}
+            role="tabpanel"
+            id="pipeline-panel-deploy"
+            aria-labelledby="pipeline-tab-deploy"
+            className="pipeline-stage"
+          >
+            <fieldset disabled={!editable} className="pipeline-stage-body">
               {auto ? (
                 <DetectedNote />
               ) : pipeline.build.dockerfile ? (
@@ -400,6 +537,25 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                     stage("deploy", { port: Number(e.target.value) })
                   }
                 />
+              </div>
+            </fieldset>
+          </section>
+          <section
+            hidden={tab !== "health"}
+            role="tabpanel"
+            id="pipeline-panel-health"
+            aria-labelledby="pipeline-tab-health"
+            className="pipeline-stage"
+          >
+            <fieldset disabled={!editable} className="pipeline-stage-body">
+              <p className="small muted">
+                {staticServing
+                  ? "Static files are served directly by Startship; container health checks do not apply."
+                  : pipeline.deploy.health_path
+                    ? `HTTP GET ${pipeline.deploy.health_path} — expect status ${pipeline.deploy.expect_status || 200}`
+                    : `TCP connection on port ${pipeline.deploy.port || portHint || "auto-detected at deployment"}`}
+              </p>
+              <div className="split">
                 <Field
                   label="Health check path"
                   disabled={staticServing}
@@ -424,14 +580,28 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                   }
                 />
               </div>
-            </div>
+              <Field
+                label="Readiness timeout (seconds)"
+                type="number"
+                min={0}
+                max={600}
+                disabled={staticServing}
+                placeholder="60 (default)"
+                value={pipeline.deploy.health_timeout || ""}
+                onChange={(e) =>
+                  stage("deploy", { health_timeout: Number(e.target.value) })
+                }
+              />
+            </fieldset>
           </section>
         </div>
         <div className="configuration-actions">
           <span>
             One pipeline for every container. Applies on the next deployment.
           </span>
-          <button className="primary">Save pipeline</button>
+          <button className="primary" disabled={!editable}>
+            Save pipeline
+          </button>
         </div>
       </AsyncForm>
       {modal && (

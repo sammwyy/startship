@@ -81,6 +81,48 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
+.settings-navigation.pipeline-tabs {
+  padding-top: 18px;
+  margin: 0 18px;
+}
+.pipeline-tab-modified {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 8px;
+  line-height: 1;
+  color: var(--muted);
+}
+.pipeline-editor-tabs .pipeline-stage[hidden] {
+  display: none;
+}
+.pipeline-editor-tabs .pipeline-stage > header::after {
+  display: none;
+}
+.pipeline-editor-tabs .pipeline-stage-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.pipeline-editor-tabs .pipeline-stage-body > label:has(textarea),
+.pipeline-editor-tabs .pipeline-stage-body > .inline-check,
+.pipeline-editor-tabs .pipeline-stage-body > p,
+.pipeline-editor-tabs .pipeline-stage-body > .pipeline-auto-note {
+  grid-column: 1 / -1;
+}
+.pipeline-editor-tabs .pipeline-health-grid,
+.pipeline-editor-tabs .pipeline-stage-body > .split {
+  display: contents;
+}
+@media (max-width: 600px) {
+  .settings-navigation.pipeline-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .pipeline-editor-tabs .pipeline-stage-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .pipeline-stage {
   min-width: 0;
   overflow: visible;
@@ -127,6 +169,12 @@
 }
 .pipeline-stage-body {
   padding: 18px;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+.pipeline-strategy-controls {
+  display: contents;
 }
 .pipeline-stage:first-child {
   display: flex;
@@ -783,7 +831,7 @@
   border-bottom: 1px solid var(--line);
   margin-bottom: 24px;
 }
-.settings-navigation a {
+.settings-navigation :is(a, [role="tab"]) {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -792,7 +840,14 @@
   border-bottom: 2px solid transparent;
   font-size: 11px;
 }
-.settings-navigation a[aria-current="page"] {
+.settings-navigation [role="tab"] {
+  border-radius: 0;
+  border-width: 0 0 2px;
+  background: transparent;
+  box-shadow: none;
+  white-space: nowrap;
+}
+.settings-navigation :is(a[aria-current="page"], [aria-selected="true"]) {
   border-color: var(--success);
   color: var(--text);
 }

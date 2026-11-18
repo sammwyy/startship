@@ -18,7 +18,7 @@ type Candidate struct {
 }
 
 func ValidBuildType(t string) bool {
-	for _, v := range []string{"auto", "custom", "dockerfile", "static", "node", "bun", "nextjs", "vite", "astro", "nuxt", "sveltekit", "python", "django", "fastapi", "flask", "go", "rust"} {
+	for _, v := range []string{"auto", "custom", "dockerfile", "static", "node", "bun", "nextjs", "vite", "astro", "nuxt", "sveltekit", "python", "django", "fastapi", "flask", "go", "rust", "spring", "php", "laravel", "ruby", "rails", "dotnet", "phoenix", "deno", "angular", "remix", "nestjs", "hugo"} {
 		if t == v {
 			return true
 		}

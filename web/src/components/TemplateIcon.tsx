@@ -15,6 +15,18 @@ import {
   siRust,
   siDocker,
   siHtml5,
+  siSpringboot,
+  siPhp,
+  siLaravel,
+  siRuby,
+  siRubyonrails,
+  siDotnet,
+  siPhoenixframework,
+  siDeno,
+  siAngular,
+  siReactrouter,
+  siNestjs,
+  siHugo,
 } from "simple-icons";
 import { Icon } from "./Icon";
 
@@ -34,6 +46,18 @@ const brands = {
   rust: siRust,
   docker: siDocker,
   html5: siHtml5,
+  springboot: siSpringboot,
+  php: siPhp,
+  laravel: siLaravel,
+  ruby: siRuby,
+  rubyonrails: siRubyonrails,
+  dotnet: siDotnet,
+  phoenixframework: siPhoenixframework,
+  deno: siDeno,
+  angular: siAngular,
+  reactrouter: siReactrouter,
+  nestjs: siNestjs,
+  hugo: siHugo,
 };
 export function TemplateIcon({ slug }: { slug: string }) {
   const brand = brands[slug as keyof typeof brands];

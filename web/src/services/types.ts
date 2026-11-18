@@ -17,6 +17,7 @@ export interface Pipeline {
     port?: number;
     health_path?: string;
     expect_status?: number;
+    health_timeout?: number;
   };
 }
 export interface PipelineTemplate {

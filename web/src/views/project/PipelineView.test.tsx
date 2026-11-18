@@ -68,14 +68,14 @@ const staticDeploy = {
   health_path: "",
   expect_status: 0,
 };
-function show() {
+function show(entry = "/") {
   return render(
     <QueryClientProvider
       client={
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[entry]}>
         <PipelineView />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -122,6 +122,36 @@ describe("project pipeline", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Use Vite" }));
     expect(screen.getByLabelText("Build image")).toHaveValue("node:22-alpine");
+    expect(screen.getByLabelText("Working directory")).toHaveValue("/app");
+    expect(screen.getByLabelText("Working directory")).toHaveAttribute(
+      "readonly",
+    );
+    expect(
+      screen.queryByRole("heading", { name: "Build" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(0);
+    fireEvent.change(screen.getByLabelText("Build image"), {
+      target: { value: "node:24-alpine" },
+    });
+    expect(
+      within(screen.getByRole("tab", { name: /1 Build/ })).getByLabelText(
+        "Differs from template defaults",
+      ),
+    ).toHaveAttribute("title", "Differs from template defaults");
+    expect(
+      screen.getAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(1);
+    expect(
+      screen.getByLabelText("Differs from template defaults"),
+    ).toHaveTextContent("Modified");
+    fireEvent.change(screen.getByLabelText("Build image"), {
+      target: { value: "node:22-alpine" },
+    });
+    expect(
+      screen.queryAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(0);
     expect(screen.getByLabelText("Build commands")).toHaveValue(
       "npm ci\nnpm run build",
     );
@@ -165,6 +195,7 @@ describe("project pipeline", () => {
       },
     };
     show();
+    fireEvent.click(await screen.findByRole("tab", { name: /3 Deploy/ }));
     expect(
       await screen.findByText("Served directly by Startship"),
     ).toBeVisible();
@@ -200,6 +231,169 @@ describe("project pipeline", () => {
     expect(screen.getByLabelText("HTTP port")).toBeEnabled();
     expect(screen.getByLabelText("Start command")).toHaveValue("npm start");
   });
+  it("keeps unsaved edits across tabs and supports keyboard navigation", async () => {
+    state.project.build_type = "go";
+    show("/?tab=health");
+    const health = await screen.findByRole("tab", { name: /4 Health check/ });
+    expect(health).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText(/TCP connection on port/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Health check path"), {
+      target: { value: "/ready" },
+    });
+    fireEvent.change(screen.getByLabelText("Readiness timeout (seconds)"), {
+      target: { value: "90" },
+    });
+    expect(
+      screen.getByText("HTTP GET /ready — expect status 200"),
+    ).toBeVisible();
+    fireEvent.keyDown(health, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: /1 Build/ })).toHaveFocus();
+    expect(screen.getByRole("tabpanel", { name: /1 Build/ })).toBeVisible();
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(screen.getByLabelText("Health check path")).toHaveValue("/ready");
+    expect(screen.getByLabelText("Readiness timeout (seconds)")).toHaveValue(
+      90,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({
+          pipeline: expect.objectContaining({
+            deploy: expect.objectContaining({
+              health_path: "/ready",
+              health_timeout: 90,
+            }),
+          }),
+        }),
+        "PATCH",
+      ),
+    );
+  });
+  it.each([601, -1])(
+    "opens the tab holding an invalid field when saving (timeout %s)",
+    async (value) => {
+      state.project.build_type = "go";
+      show("/?tab=health");
+      const timeout = await screen.findByLabelText(
+        "Readiness timeout (seconds)",
+      );
+      const reportValidity = vi.spyOn(
+        timeout as HTMLInputElement,
+        "reportValidity",
+      );
+      fireEvent.change(timeout, { target: { value: String(value) } });
+      fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+      await waitFor(() =>
+        expect(
+          screen.getByRole("tab", { name: /4 Health check/ }),
+        ).toHaveAttribute("aria-selected", "true"),
+      );
+      expect(timeout).toBeVisible();
+      expect(timeout).toHaveFocus();
+      expect(reportValidity).toHaveBeenCalledTimes(1);
+      expect(state.request).not.toHaveBeenCalledWith(
+        "projects/p1",
+        expect.anything(),
+        "PATCH",
+      );
+      fireEvent.change(timeout, { target: { value: "90" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+      await waitFor(() =>
+        expect(state.request).toHaveBeenCalledWith(
+          "projects/p1",
+          expect.objectContaining({
+            pipeline: expect.objectContaining({
+              deploy: expect.objectContaining({ health_timeout: 90 }),
+            }),
+          }),
+          "PATCH",
+        ),
+      );
+    },
+  );
+
+  it("reports only the first invalid field across tabs", async () => {
+    state.project.build_type = "go";
+    show("/?tab=deploy");
+    const port = await screen.findByLabelText("HTTP port");
+    fireEvent.change(port, { target: { value: "65536" } });
+    fireEvent.click(screen.getByRole("tab", { name: /4 Health check/ }));
+    const timeout = screen.getByLabelText("Readiness timeout (seconds)");
+    fireEvent.change(timeout, { target: { value: "601" } });
+    const reportPort = vi.spyOn(port as HTMLInputElement, "reportValidity");
+    const reportTimeout = vi.spyOn(
+      timeout as HTMLInputElement,
+      "reportValidity",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() => expect(port).toHaveFocus());
+    expect(screen.getByRole("tab", { name: /3 Deploy/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(reportPort).toHaveBeenCalledTimes(1);
+    expect(reportTimeout).not.toHaveBeenCalled();
+    expect(state.request).not.toHaveBeenCalledWith(
+      "projects/p1",
+      expect.anything(),
+      "PATCH",
+    );
+  });
+
+  it("keeps the current tab when its invalid field precedes a hidden invalid field", async () => {
+    state.project.build_type = "go";
+    show("/?tab=health");
+    fireEvent.change(
+      await screen.findByLabelText("Readiness timeout (seconds)"),
+      { target: { value: "601" } },
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /3 Deploy/ }));
+    fireEvent.change(screen.getByLabelText("HTTP port"), {
+      target: { value: "65536" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    expect(screen.getByRole("tab", { name: /3 Deploy/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(state.request).not.toHaveBeenCalledWith(
+      "projects/p1",
+      expect.anything(),
+      "PATCH",
+    );
+  });
+
+  it.each(["", "0", "600"])(
+    "saves a valid timeout %j from another tab",
+    async (value) => {
+      state.project.build_type = "go";
+      show("/?tab=health");
+      const timeout = await screen.findByLabelText(
+        "Readiness timeout (seconds)",
+      );
+      fireEvent.change(timeout, { target: { value: "90" } });
+      fireEvent.change(timeout, { target: { value } });
+      fireEvent.click(screen.getByRole("tab", { name: /2 Test/ }));
+      fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+      await waitFor(() =>
+        expect(state.request).toHaveBeenCalledWith(
+          "projects/p1",
+          expect.objectContaining({
+            pipeline: expect.objectContaining({
+              deploy: expect.objectContaining({
+                health_timeout: Number(value),
+              }),
+            }),
+          }),
+          "PATCH",
+        ),
+      );
+    },
+  );
+
   it("filters templates by search and category", async () => {
     show();
     fireEvent.click(
@@ -306,6 +500,9 @@ describe("project pipeline", () => {
     expect(screen.getByLabelText("Build commands")).toHaveValue(
       "pnpm install\npnpm run build",
     );
+    expect(
+      screen.queryAllByLabelText("Differs from template defaults"),
+    ).toHaveLength(0);
   });
   it.each(["vite", "go", "auto"])(
     "marks a detected template in use only when the saved strategy is %s",
@@ -381,5 +578,10 @@ describe("project pipeline", () => {
     expect(
       screen.getByText(/your roles do not let you change it/),
     ).toBeVisible();
+    const testTab = screen.getByRole("tab", { name: /2 Test/ });
+    expect(testTab).toBeEnabled();
+    fireEvent.click(testTab);
+    expect(screen.getByRole("tabpanel", { name: /2 Test/ })).toBeVisible();
+    expect(screen.getByLabelText("Test image")).toBeDisabled();
   });
 });
