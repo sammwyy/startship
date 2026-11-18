@@ -2,9 +2,7 @@
   min-width: 0;
 }
 .service-modal .form-fields {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
+  display: contents;
 }
 .service-modal :is(input, textarea):focus,
 .services-page :is(input, textarea):focus {
@@ -213,6 +211,11 @@ a.attachment-chip:hover {
   width: min(760px, calc(100vw - 40px));
   padding: 0;
   max-height: calc(100dvh - 64px);
+  overflow: hidden;
+}
+.service-modal[open] {
+  display: flex;
+  flex-direction: column;
 }
 .service-modal-head {
   display: flex;
@@ -242,6 +245,11 @@ a.attachment-chip:hover {
 }
 .service-modal form {
   margin: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 .catalog-modal {
   width: min(860px, calc(100vw - 48px));
@@ -382,6 +390,7 @@ a.attachment-chip:hover {
   padding: 24px 30px 28px;
   overflow: auto;
   min-height: 0;
+  flex: 1 1 auto;
 }
 .service-config-body > * + * {
   margin-top: 18px;

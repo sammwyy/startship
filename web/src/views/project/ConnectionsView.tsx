@@ -5,7 +5,7 @@ import { useDashboard } from "../../layouts/DashboardLayout";
 import { useSession } from "../../providers/SessionProvider";
 import { useUI } from "../../providers/UIProvider";
 import { queries } from "../../services/queries";
-import { useServices } from "../../services/services";
+import { useResourceDeployNeeded, useServices } from "../../services/services";
 import { remove } from "../../services/api";
 import { ProjectHeading } from "../../components/ProjectHeading";
 import { Icon } from "../../components/Icon";
@@ -24,11 +24,10 @@ export function ConnectionsView() {
     catalog = useQuery(queries.catalog()),
     projects = useQuery(queries.projects(project.workspace_id));
   const [open, setOpen] = useState(false),
-    [changed, setChanged] = useState(false),
+    changed = useResourceDeployNeeded(project),
     allowed =
       can("services.manage", workspace) && can("project.settings", project);
   async function refresh() {
-    setChanged(true);
     await client.invalidateQueries();
   }
   return (

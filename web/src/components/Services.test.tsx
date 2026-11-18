@@ -7,7 +7,7 @@ import { request } from "../services/api";
 import type { Service, ServiceEngine, Project } from "../services/types";
 import { NewServiceModal } from "./NewServiceModal";
 import { ConnectServiceModal } from "./ConnectServiceModal";
-import { EnvPreview } from "./ServiceUI";
+import { EnvPreview, ServicePicker } from "./ServiceUI";
 import { EngineIcon } from "./EngineIcon";
 vi.mock("../services/api", () => ({ request: vi.fn() }));
 vi.mock("../providers/UIProvider", () => ({
@@ -61,7 +61,7 @@ beforeAll(() => {
       this.setAttribute("open", "");
     },
   });
-  for (const method of ["showPopover", "hidePopover"])
+  for (const method of ["showPopover", "hidePopover", "scrollIntoView"])
     Object.defineProperty(HTMLElement.prototype, method, {
       configurable: true,
       value: vi.fn(),
@@ -211,6 +211,49 @@ function connect(services: Service[] = [service]) {
   );
 }
 describe("connect picker", () => {
+  it.each(["Version", "Service"])(
+    "navigates the %s listbox with arrows, Home/End, Enter and Escape",
+    async (label) => {
+      const user = userEvent.setup(),
+        onChange = vi.fn();
+      render(
+        <ServicePicker
+          label={label}
+          value="first"
+          options={[
+            { value: "first", label: "First" },
+            { value: "second", label: "Second" },
+            { value: "last", label: "Last" },
+          ]}
+          onChange={onChange}
+        />,
+      );
+      const trigger = screen.getByRole("button", { name: label });
+      trigger.focus();
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByRole("option", { name: "First" })).toHaveFocus();
+      await user.keyboard("{ArrowDown}");
+      expect(screen.getByRole("option", { name: "Second" })).toHaveFocus();
+      await user.keyboard("{End}");
+      expect(screen.getByRole("option", { name: "Last" })).toHaveFocus();
+      await user.keyboard("{Home}{ArrowDown}{ArrowUp}");
+      expect(screen.getByRole("option", { name: "First" })).toHaveFocus();
+      await user.keyboard("{ArrowDown}{Enter}");
+      expect(onChange).toHaveBeenCalledWith("second");
+      expect(trigger).toHaveFocus();
+      await user.keyboard("{ArrowUp}");
+      expect(screen.getByRole("option", { name: "Last" })).toHaveFocus();
+      const escape = new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+        cancelable: true,
+      });
+      document.activeElement!.dispatchEvent(escape);
+      expect(escape.defaultPrevented).toBe(true);
+      expect(trigger).toHaveFocus();
+      expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
+    },
+  );
   it("shows attachments before selection and previews the exact alias host", async () => {
     vi.mocked(request).mockResolvedValue({});
     const user = userEvent.setup(),

@@ -493,9 +493,8 @@ func (a *Server) mountConflict(v Volume) bool {
 }
 func (a *Server) notifyProject(id string) {
 	if id != "" {
-		if p, err := a.store.Get(id); err == nil {
-			a.store.Notify(p)
-		}
+		now := time.Now().UTC()
+		a.store.Update(id, func(p *Record) { p.ResourcesUpdated = &now })
 	}
 }
 func (a *Server) deleteResource(table, id, ws string) {

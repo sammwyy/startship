@@ -5,9 +5,37 @@ import { queries } from "./queries";
 import {
   connectionEnv,
   orderedConnectionEnv,
+  resourceDeployNeeded,
   validServiceName,
 } from "./services";
-import type { Service, ServiceEngine } from "./types";
+import type { Project, Release, Service, ServiceEngine } from "./types";
+describe("persistent resource deployment state", () => {
+  const project = {
+    id: "p",
+    resources_updated: "2026-02-02T00:00:00Z",
+    active_deployment: "old",
+  } as Project;
+  it("retains pending changes until the active release was created after them", () => {
+    const releases = [
+      { id: "old", created: "2026-02-01T00:00:00Z" },
+      { id: "new", created: "2026-02-03T00:00:00Z" },
+    ] as Release[];
+    expect(resourceDeployNeeded(project, releases)).toBe(true);
+    expect(
+      resourceDeployNeeded({ ...project, active_deployment: "new" }, releases),
+    ).toBe(false);
+    expect(
+      resourceDeployNeeded({ ...project, active_deployment: "" }, []),
+    ).toBe(true);
+    expect(
+      resourceDeployNeeded(
+        { ...project, resources_updated: undefined },
+        releases,
+      ),
+    ).toBe(false);
+    expect(resourceDeployNeeded(project, [])).toBe(false);
+  });
+});
 describe("service and volume live snapshots", () => {
   it("replaces workspace snapshots, updates open details and isolates workspaces", () => {
     const client = new QueryClient(),

@@ -1,7 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLiveSubscription } from "../providers/LiveProvider";
 import { queries } from "./queries";
-import type { Service, ServiceEngine } from "./types";
+import type { Project, Release, Service, ServiceEngine } from "./types";
+
+export function resourceDeployNeeded(project: Project, releases: Release[]) {
+  if (!project.resources_updated) return false;
+  if (!project.active_deployment) return true;
+  const active = releases.find((r) => r.id === project.active_deployment);
+  return (
+    !!active &&
+    new Date(project.resources_updated).getTime() >
+      new Date(active.created).getTime()
+  );
+}
+export function useResourceDeployNeeded(project?: Project) {
+  const releases = useQuery({
+    ...queries.releases(project?.id),
+    enabled: !!project?.active_deployment && !!project.resources_updated,
+  });
+  return !!project && resourceDeployNeeded(project, releases.data || []);
+}
 
 export function useServices(workspaceId: string) {
   const liveError = useLiveSubscription({

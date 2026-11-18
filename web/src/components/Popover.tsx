@@ -42,6 +42,8 @@ export function Popover({
   }, []);
   function keyboard(event: KeyboardEvent) {
     if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
       menu.current?.hidePopover?.();
       button.current?.focus();
       return;

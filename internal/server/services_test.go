@@ -142,6 +142,23 @@ func TestServiceNetworkNames(t *testing.T) {
 		t.Fatal("missing connect error", err)
 	}
 }
+func TestProjectResourceChangeTimestamp(t *testing.T) {
+	f := newRBACFixture(t)
+	f.a.dockerService = func(args ...string) (string, error) { return "ok", nil }
+	r := accountRequest(t, f.h, "POST", "workspaces/"+f.workspace.ID+"/volumes", `{"name":"files","project_id":"`+f.project.ID+`","mount_path":"/data"}`, f.alice, 201)
+	var v Volume
+	json.Unmarshal(r.Body.Bytes(), &v)
+	p, _ := f.a.store.Get(f.project.ID)
+	if p.ResourcesUpdated == nil {
+		t.Fatal("volume attachment did not mark project changed")
+	}
+	first := *p.ResourcesUpdated
+	accountRequest(t, f.h, "PATCH", "volumes/"+v.ID, `{"project_id":"","mount_path":""}`, f.alice, 200)
+	p, _ = f.a.store.Get(f.project.ID)
+	if p.ResourcesUpdated == nil || !p.ResourcesUpdated.After(first) {
+		t.Fatal("volume detach did not persist a newer resource timestamp")
+	}
+}
 func TestServiceProjectArgs(t *testing.T) {
 	f := newRBACFixture(t)
 	e, _ := catalog.Lookup("postgresql")

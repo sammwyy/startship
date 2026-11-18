@@ -100,6 +100,7 @@ export interface Workspace extends Scoped {
   created?: string;
 }
 export interface Project extends Workspace {
+  resources_updated?: string;
   workspace_id: string;
   git_url?: string;
   branch?: string;

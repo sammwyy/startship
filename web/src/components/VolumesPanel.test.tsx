@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, it, expect, vi } from "vitest";
 import { request } from "../services/api";
 import { VolumesPanel } from "./VolumesPanel";
-import type { Project, Volume } from "../services/types";
+import type { Project, Release, Volume } from "../services/types";
 vi.mock("../services/api", () => ({ request: vi.fn(), remove: vi.fn() }));
 vi.mock("../layouts/DashboardLayout", () => ({
   useDashboard: () => ({ workspace: { id: "w", name: "Workspace" } }),
@@ -33,6 +33,7 @@ vi.mock("../providers/UIProvider", () => ({
 }));
 const project: Project = { id: "p", name: "App", workspace_id: "w" };
 let rows: Volume[] = [];
+let releases: Release[] = [];
 beforeAll(() => {
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
     configurable: true,
@@ -49,6 +50,7 @@ beforeAll(() => {
 beforeEach(() => {
   state.allowed = true;
   rows = [];
+  releases = [];
   vi.mocked(request).mockReset();
   vi.mocked(request).mockImplementation(async (path, body) => {
     if (body !== undefined) return {};
@@ -57,6 +59,7 @@ beforeEach(() => {
       return { services: [{ id: "s", name: "db", engine: "postgresql" }] };
     if (path === "catalog")
       return [{ id: "postgresql", data_path: "/var/lib/postgresql/data" }];
+    if (path === "releases?project_id=p&logs=false") return releases;
     return [];
   });
 });
@@ -139,8 +142,43 @@ describe("volume management", () => {
         "PATCH",
       ),
     );
-    expect(await screen.findByText("Redeploy to apply")).toBeInTheDocument();
     expect(container.querySelector("select")).toBeNull();
+  });
+  it("keeps the server-derived redeploy banner after route remount until a successful new deployment", async () => {
+    const pending = {
+      ...project,
+      resources_updated: "2026-02-02T00:00:00Z",
+      active_deployment: "old",
+    };
+    releases = [
+      {
+        id: "old",
+        project_id: "p",
+        status: "running",
+        created: "2026-02-01T00:00:00Z",
+      },
+      {
+        id: "failed",
+        project_id: "p",
+        status: "failed",
+        created: "2026-02-03T00:00:00Z",
+      },
+    ];
+    const first = view(pending);
+    expect(await screen.findByText("Redeploy to apply")).toBeInTheDocument();
+    first.unmount();
+    const remounted = view(pending);
+    expect(await screen.findByText("Redeploy to apply")).toBeInTheDocument();
+    remounted.unmount();
+    releases.push({
+      id: "new",
+      project_id: "p",
+      status: "running",
+      created: "2026-02-04T00:00:00Z",
+    });
+    view({ ...pending, active_deployment: "new" });
+    await screen.findByText("Give your files a permanent home");
+    expect(screen.queryByText("Redeploy to apply")).toBeNull();
   });
   it("shows query errors", async () => {
     vi.mocked(request).mockRejectedValue(new Error("Storage unavailable"));

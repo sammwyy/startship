@@ -5,6 +5,7 @@ import type { Project, Volume } from "../services/types";
 import { queries } from "../services/queries";
 import {
   useServices,
+  useResourceDeployNeeded,
   useVolumes,
   validServiceName,
 } from "../services/services";
@@ -191,7 +192,7 @@ export function VolumesPanel({
     projects = useQuery(queries.projects(workspaceId)),
     catalog = useQuery(queries.catalog());
   const [open, setOpen] = useState(false),
-    [changed, setChanged] = useState(false),
+    changed = useResourceDeployNeeded(project),
     allowed =
       can("services.manage", workspace) &&
       (!project || can("project.settings", project));
@@ -199,7 +200,6 @@ export function VolumesPanel({
     (v) => !project || v.project_id === project.id,
   );
   async function refresh() {
-    if (project) setChanged(true);
     await client.invalidateQueries();
   }
   const actions = allowed && (
