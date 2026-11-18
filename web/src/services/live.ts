@@ -9,6 +9,7 @@ import type {
   SystemVersion,
   UpdateInfo,
   Service,
+  Workspace,
 } from "./types";
 
 export type LiveSubscription =
@@ -23,7 +24,8 @@ export type LiveSubscription =
   | { topic: "account_sessions" | "account_activity" | "audit_activity" }
   | { topic: "workspace_activity"; workspace_id: string }
   | { topic: "project_activity"; project_id: string }
-  | { topic: "system_update" };
+  | { topic: "system_update" }
+  | { topic: "workspaces" };
 export interface LiveMessage {
   type: "snapshot" | "upsert" | "delete" | "log" | "error";
   id: string;
@@ -199,6 +201,12 @@ export function applyLiveMessage(
   event: LiveMessage,
 ) {
   if (event.type === "error") return;
+  if (spec.topic === "workspaces" && event.type === "snapshot") {
+    const queryKey = queries.workspaces().queryKey;
+    void client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData<Workspace[]>(queryKey, event.data as Workspace[]);
+    return;
+  }
   if (
     (spec.topic === "services" ||
       spec.topic === "volumes" ||

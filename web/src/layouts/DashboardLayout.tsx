@@ -47,6 +47,7 @@ export function DashboardLayout() {
       : null,
   );
   useLiveSubscription({ topic: "system_update" });
+  useLiveSubscription({ topic: "workspaces" });
   const liveStatus = useLiveStatus();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("startship-sidebar-collapsed") === "true",
