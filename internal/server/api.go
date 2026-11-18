@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"github.com/sammwyy/startship/internal/detect"
 	"github.com/sammwyy/startship/internal/pipeline"
+	"github.com/sammwyy/startship/internal/router"
 	"github.com/sammwyy/startship/internal/routing"
 	"golang.org/x/crypto/bcrypt"
 	"io"
@@ -31,8 +32,11 @@ type Server struct {
 	data                 string
 	mu                   sync.Mutex
 	queues               map[string]chan string
-	routeMu              sync.RWMutex
-	targets              []Target
+	routerOnce           sync.Once
+	routerRefresh        sync.Mutex
+	router               *router.Router
+	routerOptions        router.Options
+	firewall             firewallRuntime
 	traffic              trafficMetrics
 	// https preserves the legacy dashboard HTTP redirect when autocert is enabled.
 	dashboardDomain     string

@@ -1,12 +1,10 @@
 package server
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"math"
-	"net"
 	"net/http"
 	"os/exec"
 	"strconv"
@@ -205,45 +203,6 @@ func (a *Server) trafficData(project Record, seconds int) any {
 }
 
 // trafficWriter preserves streaming and protocol upgrades used by ReverseProxy.
-type trafficWriter struct {
-	http.ResponseWriter
-	status int
-}
-
-func (w *trafficWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
-func (w *trafficWriter) statusCode() int {
-	if w.status == 0 {
-		return 200
-	}
-	return w.status
-}
-func (w *trafficWriter) WriteHeader(status int) {
-	if status >= 100 && status < 200 && status != 101 {
-		w.ResponseWriter.WriteHeader(status)
-		return
-	}
-	if w.status != 0 {
-		return
-	}
-	w.status = status
-	w.ResponseWriter.WriteHeader(status)
-}
-func (w *trafficWriter) Write(b []byte) (int, error) {
-	if w.status == 0 {
-		w.WriteHeader(200)
-	}
-	return w.ResponseWriter.Write(b)
-}
-func (w *trafficWriter) Flush() {
-	if w.status == 0 {
-		w.WriteHeader(200)
-	}
-	_ = http.NewResponseController(w.ResponseWriter).Flush()
-}
-func (w *trafficWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	return http.NewResponseController(w.ResponseWriter).Hijack()
-}
-
 func memoryBytes(s string) (float64, error) {
 	s = strings.TrimSpace(s)
 	i := 0

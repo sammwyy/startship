@@ -93,7 +93,7 @@ func TestStaticCacheRevalidation(t *testing.T) {
 				}
 				releases[i] = Record{ID: release, Status: "running", StaticDir: dir}
 			}
-			a.targets = []Target{{Route: Record{Host: "test.local", PathPrefix: prefix, StripPrefix: true}}}
+			targets := []Target{{Route: Record{Host: "test.local", PathPrefix: prefix, StripPrefix: true}}}
 			request := func(method, path, etag, lastModified string) *httptest.ResponseRecorder {
 				t.Helper()
 				r := httptest.NewRequest(method, "http://test.local"+prefix+path, nil)
@@ -104,19 +104,20 @@ func TestStaticCacheRevalidation(t *testing.T) {
 					r.Header.Set("If-Modified-Since", lastModified)
 				}
 				w := httptest.NewRecorder()
+				setTestTargets(a, targets)
 				a.ServeHTTP(w, r)
 				if got := w.Header().Get("Cache-Control"); got != "no-cache" {
 					t.Fatalf("%s: Cache-Control = %q, want no-cache", path, got)
 				}
 				return w
 			}
-			a.targets[0].Deployment = releases[0]
+			targets[0].Deployment = releases[0]
 			if redirect := request(http.MethodGet, "index.html", "", ""); redirect.Code != http.StatusMovedPermanently || redirect.Header().Get("Location") != "./" {
 				t.Fatalf("index redirect: %d %v", redirect.Code, redirect.Header())
 			}
 			for _, path := range []string{"", "deep/link", "app.js", "style.css"} {
 				t.Run(path, func(t *testing.T) {
-					a.targets[0].Deployment = releases[0]
+					targets[0].Deployment = releases[0]
 					first := request(http.MethodGet, path, "", "")
 					etag, lastModified := first.Header().Get("ETag"), first.Header().Get("Last-Modified")
 					if first.Code != http.StatusOK || !strings.Contains(first.Body.String(), "release A") || etag == "" || lastModified == "" {
@@ -128,7 +129,7 @@ func TestStaticCacheRevalidation(t *testing.T) {
 							t.Fatalf("unchanged %s: %d %v %s", method, cached.Code, cached.Header(), cached.Body.String())
 						}
 					}
-					a.targets[0].Deployment = releases[1]
+					targets[0].Deployment = releases[1]
 					updated := request(http.MethodGet, path, etag, lastModified)
 					if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), "release B") {
 						t.Fatalf("redeployed response: %d %s", updated.Code, updated.Body.String())

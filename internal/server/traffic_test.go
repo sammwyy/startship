@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -39,7 +38,8 @@ func TestTrafficProxyAndOwnership(t *testing.T) {
 	defer upstream.Close()
 	u, _ := url.Parse(upstream.URL)
 	port, _ := strconv.Atoi(u.Port())
-	a.targets = []Target{{Route: Record{ID: "r", ProjectID: project.ID, Host: "traffic.local", PathPrefix: "/"}, Deployment: Record{Status: "running", IP: u.Hostname()}, Port: port}}
+	targets := []Target{{Route: Record{ID: "r", ProjectID: project.ID, Host: "traffic.local", PathPrefix: "/"}, Deployment: Record{Status: "running", IP: u.Hostname()}, Port: port}}
+	setTestTargets(a, targets)
 	for _, path := range []string{"/ok?token=never-store-this", "/fail", "/missing"} {
 		r := httptest.NewRequest("GET", "http://traffic.local"+path, nil)
 		w := httptest.NewRecorder()
@@ -49,7 +49,8 @@ func TestTrafficProxyAndOwnership(t *testing.T) {
 		}
 	}
 	// Router-generated 502s are also errors, not just upstream failures.
-	a.targets[0].Deployment.Status = "failed"
+	targets[0].Deployment.Status = "failed"
+	setTestTargets(a, targets)
 	a.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "http://traffic.local/unavailable", nil))
 	// Unmatched hosts cannot be attributed to this project.
 	a.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", "http://other.local/", nil))
@@ -114,7 +115,7 @@ func TestTrafficStaticAndConcurrentRetention(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("static"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	a.targets = []Target{{Route: Record{ProjectID: "static", Host: "static.local", PathPrefix: "/"}, Deployment: Record{ID: "static-release", Status: "running", StaticDir: dir}}}
+	setTestTargets(a, []Target{{Route: Record{ProjectID: "static", Host: "static.local", PathPrefix: "/"}, Deployment: Record{ID: "static-release", Status: "running", StaticDir: dir}}})
 	w := httptest.NewRecorder()
 	a.ServeHTTP(w, httptest.NewRequest("GET", "http://static.local/", nil))
 	if w.Code != 200 || w.Body.String() != "static" {
@@ -140,7 +141,7 @@ func TestTrafficStaticAndConcurrentRetention(t *testing.T) {
 	}
 }
 
-func TestTrafficMemorySamplesAndWriter(t *testing.T) {
+func TestTrafficMemorySamples(t *testing.T) {
 	for _, tc := range []struct {
 		input string
 		want  float64
@@ -158,40 +159,5 @@ func TestTrafficMemorySamplesAndWriter(t *testing.T) {
 		if _, _, err := parseContainerUsage([]byte(raw)); err == nil {
 			t.Fatal("accepted invalid sample", raw)
 		}
-	}
-	r := httptest.NewRecorder()
-	w := &trafficWriter{ResponseWriter: r}
-	w.WriteHeader(103)
-	w.WriteHeader(201)
-	w.WriteHeader(500)
-	if w.statusCode() != 201 {
-		t.Fatal("informational or duplicate status corrupted final status")
-	}
-	if w.Unwrap() != r {
-		t.Fatal("response controller cannot unwrap")
-	}
-	if _, _, err := w.Hijack(); err == nil {
-		t.Fatal("unsupported hijack must return an error")
-	}
-	stream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		observed := &trafficWriter{ResponseWriter: w}
-		conn, rw, err := observed.Hijack()
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		defer conn.Close()
-		fmt.Fprint(rw, "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n")
-		rw.Flush()
-	}))
-	defer stream.Close()
-	resp, err := http.Get(stream.URL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer resp.Body.Close()
-	io.Copy(io.Discard, resp.Body)
-	if resp.StatusCode != 101 {
-		t.Fatal("protocol upgrade lost", resp.StatusCode)
 	}
 }

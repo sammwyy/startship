@@ -165,3 +165,50 @@ func TestEditPreservesOtherContent(t *testing.T) {
 		t.Fatal("unknown key accepted")
 	}
 }
+
+func TestFirewallIdentitySettings(t *testing.T) {
+	cleanEnvironment(t)
+	path := configFile(t, "trusted_proxies = ['10.0.0.0/8', '2001:db8::/32']\ngeoip_database = '/file/Country.mmdb'\n")
+	d, err := Load([]string{"--config", path}, io.Discard)
+	if err != nil || len(d.TrustedProxies) != 2 || d.GeoIPDatabase != "/file/Country.mmdb" {
+		t.Fatal(d, err)
+	}
+	t.Setenv("STARTSHIP_TRUSTED_PROXIES", " 192.0.2.0/24 ,198.51.100.0/24")
+	t.Setenv("STARTSHIP_GEOIP_DB", "/env/Country.mmdb")
+	d, err = Load([]string{"--config", path}, io.Discard)
+	if err != nil || d.TrustedProxies[0] != "192.0.2.0/24" || d.GeoIPDatabase != "/env/Country.mmdb" {
+		t.Fatal(d, err)
+	}
+	d, err = Load([]string{"--config", path, "--trusted-proxies", "127.0.0.0/8", "--trusted-proxies", "::1/128", "--geoip-database="}, io.Discard)
+	if err != nil || !reflect.DeepEqual(d.TrustedProxies, []string{"127.0.0.0/8", "::1/128"}) || d.GeoIPDatabase != "" {
+		t.Fatal(d, err)
+	}
+	if err = d.Export(); err != nil {
+		t.Fatal(err)
+	}
+	if os.Getenv("STARTSHIP_TRUSTED_PROXIES") != "127.0.0.0/8,::1/128" || os.Getenv("STARTSHIP_GEOIP_DB") != "" {
+		t.Fatal("export lost identity settings")
+	}
+	for _, bad := range []string{"not-a-cidr", "192.0.2.1", "10.0.0.0/99"} {
+		d := Defaults()
+		d.TrustedProxies = []string{bad}
+		if err := d.Validate(); err == nil || !strings.Contains(err.Error(), "trusted_proxies[0]") {
+			t.Fatalf("accepted %s: %v", bad, err)
+		}
+	}
+	d = Defaults()
+	if err = d.Export(); err != nil || os.Getenv("STARTSHIP_TRUSTED_PROXIES") != "" {
+		t.Fatal("empty proxies export", err)
+	}
+	if err = Edit(path, "trusted_proxies", []string{"127.0.0.0/8,::1/128"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err = Edit(path, "geoip_database", []string{"/new/Country.mmdb"}, false); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	d = Defaults()
+	if err = Parse(b, &d); err != nil || len(d.TrustedProxies) != 2 || d.GeoIPDatabase != "/new/Country.mmdb" {
+		t.Fatal(d, err)
+	}
+}

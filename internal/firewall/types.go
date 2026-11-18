@@ -97,6 +97,7 @@ type Request struct {
 	Headers                                               http.Header
 	BodySample                                            []byte
 	ContentLength                                         int64
+	URLBytes                                              int
 	WorkspaceID, ProjectID, RouteHost                     string
 }
 type Decision struct {
@@ -105,6 +106,17 @@ type Decision struct {
 	StatusCode, BanSeconds int
 	Monitored              bool
 	Events                 []Event
+	RetryAfter             int
+}
+
+func (e *Engine) Mode() string { return e.policy.Mode }
+func (e *Engine) Limits() Limits {
+	l := e.policy.Limits
+	if l.Rate != nil {
+		rate := *l.Rate
+		l.Rate = &rate
+	}
+	return l
 }
 
 func DefaultPolicy() Policy {

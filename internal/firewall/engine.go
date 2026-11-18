@@ -243,7 +243,7 @@ func (e *Engine) Evaluate(r *Request) Decision {
 		if monitor || a == Log {
 			status = 0
 		}
-		return Decision{a, id, name, status, seconds, monitor, events}
+		return Decision{Action: a, RuleID: id, RuleName: name, StatusCode: status, BanSeconds: seconds, Monitored: monitor, Events: events}
 	}
 	if b, ok := e.state.banned(r.IP); ok {
 		return result(Block, "banned", b.name, 403, 0)
@@ -292,9 +292,13 @@ func (e *Engine) Evaluate(r *Request) Decision {
 				continue
 			}
 			if rul.BanSeconds > 0 {
-				return result(Ban, rul.ID, rul.Name, 429, rul.BanSeconds)
+				d := result(Ban, rul.ID, rul.Name, 429, rul.BanSeconds)
+				d.RetryAfter = rul.BanSeconds
+				return d
 			}
-			return result(RateLimit, rul.ID, rul.Name, 429, 0)
+			d := result(RateLimit, rul.ID, rul.Name, 429, 0)
+			d.RetryAfter = rul.Rate.WindowSeconds
+			return d
 		case Ban:
 			return result(Ban, rul.ID, rul.Name, 403, rul.BanSeconds)
 		default:
@@ -324,6 +328,9 @@ func (e *Engine) Evaluate(r *Request) Decision {
 	if r.RawQuery != "" {
 		urlSize += 1 + len(r.RawQuery)
 	}
+	if r.URLBytes > urlSize {
+		urlSize = r.URLBytes
+	}
 	if l.MaxURLBytes > 0 && urlSize > l.MaxURLBytes {
 		return result(Block, "__url", "URL size limit", 414, 0)
 	}
@@ -337,7 +344,12 @@ func (e *Engine) Evaluate(r *Request) Decision {
 		return result(Block, "__headers", "Header size limit", 431, 0)
 	}
 	if rate := l.Rate; rate != nil && e.state.over(rateKey{rule: "__workspace", ip: r.IP}, rate.Requests, rate.WindowSeconds) {
-		return result(rate.Action, "__workspace", "Workspace rate limit", 429, rate.BanSeconds)
+		d := result(rate.Action, "__workspace", "Workspace rate limit", 429, rate.BanSeconds)
+		d.RetryAfter = rate.WindowSeconds
+		if rate.Action == Ban && rate.BanSeconds > 0 {
+			d.RetryAfter = rate.BanSeconds
+		}
+		return d
 	}
 	return Decision{Action: Allow, Events: events}
 }
