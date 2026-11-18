@@ -5,6 +5,7 @@
 <p align="center">
   <a href="https://github.com/sammwyy/startship/releases/latest"><img src="https://img.shields.io/github/v/release/sammwyy/startship" alt="Latest release"></a>
   <a href="https://github.com/sammwyy/startship/actions/workflows/ci.yml"><img src="https://github.com/sammwyy/startship/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License: Apache 2.0"></a>
 </p>
 
 <p align="center">
@@ -56,3 +57,7 @@ Find the temporary administrator credentials in the logs. Open `http://localhost
 | Configure WAF rules or the optional network firewall | [Firewall and WAF](docs/firewall.md) |
 | Integrate with dashboard live updates | [Live API](docs/live-api.md) |
 | Build and test a change locally | [Development](docs/development.md) |
+
+## License
+
+Startship is licensed under the [Apache License 2.0](LICENSE).
