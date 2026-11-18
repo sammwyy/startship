@@ -114,12 +114,72 @@
 .pipeline-editor-tabs .pipeline-stage-body > .split {
   display: contents;
 }
+.pipeline-editor-tabs .pipeline-engine-picker {
+  grid-column: 1 / -1;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.pipeline-engine-picker legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.pipeline-engine-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+.pipeline-engine-options .pipeline-engine-option {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--raised);
+  cursor: pointer;
+}
+.pipeline-engine-option input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.pipeline-engine-option:has(input:checked) {
+  border-color: var(--success);
+  background: var(--accent-soft);
+}
+.pipeline-engine-option:has(input:focus-visible) {
+  outline: 2px solid var(--success);
+  outline-offset: 2px;
+}
+.pipeline-engine-option:has(input:disabled) {
+  cursor: default;
+}
+.pipeline-engine-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text);
+  font-weight: 500;
+}
 @media (max-width: 600px) {
   .settings-navigation.pipeline-tabs {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .pipeline-editor-tabs .pipeline-stage-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pipeline-engine-options {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -214,7 +274,8 @@
   grid-row: 2;
 }
 .pipeline-stage-body input,
-.pipeline-stage-body textarea {
+.pipeline-stage-body textarea,
+.pipeline-stage-body select {
   min-width: 0;
   font-size: 12px;
 }

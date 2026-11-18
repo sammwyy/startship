@@ -34,15 +34,38 @@ const autoTemplate: PipelineTemplate = {
 const lines = (value: string) => value.split("\n");
 const tabs = ["build", "test", "deploy", "health"] as const;
 const tabNames = ["Build", "Test", "Deploy", "Health check"];
+const engines = [
+  {
+    id: "docker",
+    name: "Dockerfile",
+    icon: "docker",
+    hint: "Dockerfile or commands.",
+  },
+  {
+    id: "nixpacks",
+    name: "Nixpacks",
+    icon: "nixos",
+    hint: "Nix app detection.",
+  },
+  {
+    id: "buildpacks",
+    name: "Buildpacks",
+    icon: "box",
+    hint: "Paketo app detection.",
+  },
+] as const;
 type ValidatableField =
   HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 function stageValues(p: Pipeline, tab: (typeof tabs)[number], auto: boolean) {
   const { build, test, deploy } = clean(p);
   switch (tab) {
     case "build":
-      return auto
-        ? []
-        : [build.image || "", build.dockerfile || "", build.commands || []];
+      return [
+        build.engine || "docker",
+        ...(!auto && (!build.engine || build.engine === "docker")
+          ? [build.image || "", build.dockerfile || "", build.commands || []]
+          : []),
+      ];
     case "test":
       return [
         test.image || "",
@@ -155,6 +178,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
     [hasDetected, setHasDetected] = useState(false),
     [detectError, setDetectError] = useState<unknown>();
   const auto = strategy === "auto",
+    engine = pipeline.build.engine || "docker",
     staticServing = !auto && !!pipeline.deploy.static,
     current =
       strategy === "auto"
@@ -371,7 +395,38 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             className="pipeline-stage"
           >
             <fieldset disabled={!editable} className="pipeline-stage-body">
-              {auto ? (
+              <fieldset className="pipeline-engine-picker">
+                <legend>Engine</legend>
+                <div className="pipeline-engine-options">
+                  {engines.map((option) => (
+                    <label className="pipeline-engine-option" key={option.id}>
+                      <input
+                        type="radio"
+                        name="build-engine"
+                        value={option.id}
+                        checked={engine === option.id}
+                        aria-labelledby={`engine-name-${option.id}`}
+                        aria-describedby={`engine-hint-${option.id}`}
+                        onChange={() => stage("build", { engine: option.id })}
+                      />
+                      <span
+                        className="pipeline-engine-name"
+                        id={`engine-name-${option.id}`}
+                      >
+                        <TemplateIcon slug={option.icon} />
+                        {option.name}
+                      </span>
+                      <span
+                        className="small muted"
+                        id={`engine-hint-${option.id}`}
+                      >
+                        {option.hint}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              {engine !== "docker" ? null : auto ? (
                 <DetectedNote />
               ) : (
                 <>
@@ -421,7 +476,13 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             className="pipeline-stage"
           >
             <fieldset disabled={!editable} className="pipeline-stage-body">
-              {pipeline.build.dockerfile && !auto ? (
+              {engine !== "docker" ? (
+                <p className="small muted">
+                  Tests run in the built container by default. A separate test
+                  image receives the application files.
+                </p>
+              ) : null}
+              {engine === "docker" && pipeline.build.dockerfile && !auto ? (
                 <p className="small muted">
                   Tests run in the Dockerfile’s final image.
                 </p>
@@ -475,7 +536,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
             <fieldset disabled={!editable} className="pipeline-stage-body">
               {auto ? (
                 <DetectedNote />
-              ) : pipeline.build.dockerfile ? (
+              ) : engine === "docker" && pipeline.build.dockerfile ? (
                 <p className="small muted">
                   Runtime image and start command come from your Dockerfile.
                 </p>

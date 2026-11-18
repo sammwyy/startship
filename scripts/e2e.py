@@ -5,6 +5,7 @@ import os
 import re
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import tempfile
 import time
@@ -15,6 +16,8 @@ root = Path(__file__).resolve().parent.parent
 work = Path(tempfile.mkdtemp(prefix="startship-e2e-", dir=Path.home()))
 app_ids = []
 project_ids = []
+service_ids = []
+volume_ids = []
 build_limits_seen = False
 deployments = {}
 apps_by_name = {}
@@ -56,7 +59,7 @@ def wait_deploy(app, options=None, action="deploy"):
             assert config["CapDrop"] == ["ALL"] and "no-new-privileges" in config["SecurityOpt"], config
             assert config["NetworkMode"] == "startship-" + app["project_id"], config
             test_limits_seen.add(app["name"])
-        builders = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-"], text=True).split()
+        builders = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-" + app["project_id"]], text=True).split()
         if builders and not build_limits_seen:
             config = json.loads(subprocess.check_output(["docker", "inspect", builders[0]], text=True))[0]["HostConfig"]
             assert config["Memory"] == 1073741824, config
@@ -109,6 +112,7 @@ fn main() {
                  ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "fixture"]):
         subprocess.run(["git", "-C", str(repo)] + args, check=True, stdout=subprocess.DEVNULL)
     environment = dict(os.environ, STARTSHIP_DATA=str(work / "data"), STARTSHIP_DASHBOARD_ADDR="127.0.0.1:" + dashboard_port,
+                       STARTSHIP_SOCKET=str(work / "startship.sock"),
                        STARTSHIP_HTTP_ADDR="127.0.0.1:" + proxy_port, STARTSHIP_HTTPS_ADDR="127.0.0.1:" + https_port, STARTSHIP_ADMIN_USER="admin",
                        STARTSHIP_ADMIN_PASSWORD="test-password", STARTSHIP_ACME_EMAIL="", STARTSHIP_DASHBOARD_DOMAIN="")
     process = subprocess.Popen([str(root / "startshipd")], env=environment, stdout=log, stderr=log)
@@ -345,6 +349,29 @@ fn main() {
                 return release
             time.sleep(0.5)
         raise TimeoutError("project release did not complete")
+    with socket.socket() as port_probe:
+        port_probe.bind(("127.0.0.1", 0))
+        service_port = port_probe.getsockname()[1]
+    service = request("workspaces/" + ws["id"] + "/services",
+                      {"name": "e2e-cache", "engine": "redis", "external_port": service_port})
+    service_ids.append(service["id"])
+    volume_ids.append(service["volume_id"])
+    for _ in range(180):
+        service = request("services/" + service["id"])
+        if service["status"] == "running":
+            break
+        assert service["status"] != "failed", service.get("last_error")
+        time.sleep(1)
+    else:
+        raise TimeoutError("Redis service did not start: " + service.get("last_error", ""))
+    with socket.create_connection(("127.0.0.1", service_port), timeout=5) as redis:
+        redis.sendall(b"*1\r\n$4\r\nPING\r\n")
+        assert redis.recv(1024) == b"+PONG\r\n"
+    print("Redis service running via API and external host-port PING: +PONG")
+    request("services/" + service["id"] + "/attachments", {"project_id": grouped["id"], "alias": "shared-cache"})
+    project_volume = request("workspaces/" + ws["id"] + "/volumes",
+                             {"name": "e2e-data", "project_id": grouped["id"], "mount_path": "/e2e-data"})
+    volume_ids.append(project_volume["id"])
     first_group = deploy_project()
     containers = request("containers?project_id=" + grouped["id"])
     app_ids.extend(c["id"] for c in containers)
@@ -356,6 +383,15 @@ fn main() {
         assert revision["release_id"] == first_group["id"] and revision["commit"] == first_group["commit"]
         info = inspect_if_present(revision["container"])
         assert "SHARED=project" in info["Config"]["Env"]
+        assert "SHARED_CACHE_HOST=shared-cache.local" in info["Config"]["Env"]
+        probe = ('import os,socket; host=os.environ["SHARED_CACHE_HOST"]; '
+                 'assert host=="shared-cache.local"; '
+                 'assert socket.gethostbyname(host)==socket.gethostbyname("e2e-cache.local"); '
+                 's=socket.create_connection((host,int(os.environ["SHARED_CACHE_PORT"])),5); '
+                 's.sendall(b"PING\\r\\n"); assert s.recv(1024)==b"+PONG\\r\\n"; s.close()')
+        subprocess.run(["docker", "exec", revision["container"], "python", "-c", probe], check=True)
+        assert any(mount["Name"] == "startship-vol-" + project_volume["id"] and mount["Destination"] == "/e2e-data"
+                   for mount in info["Mounts"]), info["Mounts"]
         assert set(info["NetworkSettings"]["Networks"]) == {"startship-" + grouped["id"]}
         route = request("routes", {"project_id": grouped["id"], "container_id": container["id"], "host": "grouped.local",
                                   "path_prefix": "/api" if container["root_dir"].endswith("api") else "/", "strip_prefix": container["root_dir"].endswith("api")})
@@ -366,6 +402,10 @@ fn main() {
     assert "grouped web /" in grouped_response("/")
     assert "grouped api /probe" in grouped_response("/api/probe")
     print("project deployment: one checkout, two detected HTTP containers, one shared release/env, selectable domain targets and runtime logs: OK")
+    first_revision = request("deployments/" + first_group["container_releases"][0])
+    subprocess.run(["docker", "exec", first_revision["container"], "python", "-c",
+                    'from pathlib import Path; Path("/e2e-data/probe").write_text("persistent-e2e-data")'], check=True)
+    print("project deployment injects service env, resolves alias/service DNS and reaches Redis: OK")
     failing_file = grouped_repo / "services" / "web" / "Dockerfile"
     healthy_file = failing_file.read_text()
     failing_file.write_text(healthy_file.replace('CMD ', 'RUN false\nCMD '))
@@ -383,7 +423,19 @@ fn main() {
     assert restarted_group["redeploy_of"] == first_group["id"] and "Cloning into" not in restarted_group["log"]
     for revision_id in restarted_group["container_releases"]:
         revision = request("deployments/" + revision_id)
+        assert revision["container"] != first_revision["container"]
+        subprocess.run(["docker", "exec", revision["container"], "python", "-c",
+                        'from pathlib import Path; assert Path("/e2e-data/probe").read_text()=="persistent-e2e-data"'], check=True)
         assert "SHARED=current" in inspect_if_present(revision["container"])["Config"]["Env"]
+    print("project volume file survives redeploy into replacement app containers: OK")
+    request("services/" + service["id"], method="DELETE")
+    assert inspect_if_present("startship-svc-" + service["id"]) is None
+    retained = next(v for v in request("workspaces/" + ws["id"] + "/volumes")["volumes"] if v["id"] == service["volume_id"])
+    assert not retained.get("service_id")
+    subprocess.run(["docker", "volume", "inspect", "startship-vol-" + service["volume_id"]], check=True, stdout=subprocess.DEVNULL)
+    print("deleting service removes container and retains its persistent Docker/API volume: OK")
+    request("volumes/" + service["volume_id"], method="DELETE")
+    request("volumes/" + project_volume["id"], {"project_id": "", "mount_path": ""}, "PATCH")
     process.terminate()
     process.wait(timeout=15)
     process = subprocess.Popen([str(root / "startshipd")], env=environment, stdout=log, stderr=log)
@@ -435,11 +487,77 @@ fn main() {
     ip = revision["ip"]
     assert subprocess.check_output(["curl", "-fsS", "http://" + ip + ":8080/health"], text=True)
     print("custom pipeline expected output fails then passes, HTTP health path succeeds: OK")
+    engine_selection = os.getenv("STARTSHIP_E2E_ENGINES")
+    engines = ("nixpacks", "buildpacks") if engine_selection == "1" else (engine_selection,) if engine_selection in ("nixpacks", "buildpacks") else ()
+    if engines:
+        engine_repo = work / "engine-source"
+        engine_repo.mkdir()
+        (engine_repo / "package.json").write_text(json.dumps({"name": "engine-fixture", "version": "1.0.0", "private": True,
+            "engines": {"node": "22.x"}, "scripts": {"start": "node server.js"}}))
+        (engine_repo / "server.js").write_text("require('http').createServer((req,res)=>res.end(process.argv.includes('--override')?'engine override':'engine default')).listen(process.env.PORT || 3000, '0.0.0.0');\n")
+        (engine_repo / "package-lock.json").write_text(json.dumps({"name": "engine-fixture", "version": "1.0.0", "lockfileVersion": 3,
+            "requires": True, "packages": {"": json.loads((engine_repo / "package.json").read_text())}}))
+        for args in (["init", "-b", "main"], ["add", "."], ["-c", "user.name=Startship E2E", "-c", "user.email=e2e@localhost", "commit", "-m", "engine fixture"]):
+            subprocess.run(["git", "-C", str(engine_repo)] + args, check=True, stdout=subprocess.DEVNULL)
+        def wait_engine_release(queued, status):
+            for _ in range(3600):
+                release = request("releases/" + queued["id"])
+                if release["status"] in ("running", "failed"):
+                    assert release["status"] == status, release.get("log")
+                    return release
+                time.sleep(0.5)
+            raise TimeoutError(engine + " did not complete:\n" + release.get("log", "")[-5000:])
+
+        for engine in engines:
+            engine_pipeline = {"build": {"engine": engine, "image": "ignored image", "commands": ["false"], "dockerfile": "../ignored"},
+                "test": {"commands": ["node -e \"console.log('engine-test')\""], "expect_exit_code": 0, "expect_output": "engine-test"},
+                "deploy": {"port": 3000, "health_path": "/health", "expect_status": 200}}
+            if engine == "nixpacks":
+                engine_pipeline["test"]["image"] = "mirror.gcr.io/library/node:22-alpine"
+            else:
+                engine_pipeline["test"]["commands"] = ["node -e \"console.log('engine-test ' + process.version); console.log(JSON.stringify(process.argv.slice(1)))\" 'a b' '' '$HOME' '$(exit 99)'"]
+                engine_pipeline["test"]["expect_output"] = '["a b","","$HOME","$(exit 99)"]'
+                engine_pipeline["deploy"]["command"] = "node -e \"require('./server.js')\" -- --override"
+            engine_project = request("projects", {"workspace_id": ws["id"], "name": "Engine " + engine,
+                "git_url": engine_repo.as_uri(), "branch": "main", "build_type": "custom", "pipeline": engine_pipeline})
+            project_ids.append(engine_project["id"])
+            queued = request("projects/" + engine_project["id"] + "/deploy", {})
+            engine_release = wait_engine_release(queued, "running")
+            engine_containers = request("containers?project_id=" + engine_project["id"])
+            app_ids.extend(c["id"] for c in engine_containers)
+            revision = request("deployments/" + engine_release["container_releases"][0])
+            assert revision["pipeline"]["build"]["engine"] == engine
+            assert all(header in revision["log"] for header in ("==> 1/3 Build (" + engine + ")", "==> 2/3 Test", "engine-test", "==> 3/3 Deploy")), revision["log"]
+            request("routes", {"project_id": engine_project["id"], "container_id": engine_containers[0]["id"], "host": engine + ".local"})
+            result = subprocess.check_output(["curl", "-fsS", "-H", "Host: " + engine + ".local", proxy_url + "/"], text=True)
+            assert result == ("engine default" if engine == "nixpacks" else "engine override"), result
+            workers = subprocess.check_output(["docker", "ps", "-q", "--filter", "name=buildx_buildkit_startship-build-" + engine_project["id"]], text=True).split()
+            assert len(workers) == 1, workers
+            config = inspect_if_present(workers[0])["HostConfig"]
+            assert (config["Memory"], config["CpuPeriod"], config["CpuQuota"]) == (805306368, 100000, 50000), config
+            print(engine + " deployment: Running; 3 stages, tests, snapshot and bounded builder OK; proxy curl: " + result)
+            if engine == "buildpacks":
+                assert "engine-test v" in revision["log"] and "syntax error" not in revision["log"], revision["log"]
+                print("buildpacks quoting-heavy Test and Deploy.Command executed verbatim: OK")
+                engine_pipeline["test"]["commands"].append("exit 3")
+                engine_pipeline["test"]["expect_output"] = "engine-test"
+                request("projects/" + engine_project["id"], {"pipeline": engine_pipeline}, "PATCH")
+                failed = wait_engine_release(request("projects/" + engine_project["id"] + "/deploy", {}), "failed")
+                failed_revision = request("deployments/" + failed["container_releases"][0])
+                assert "test expected exit code 0, got 3" in failed_revision["log"], failed_revision["log"]
+                assert "engine-test v" in failed_revision["log"] and "==> 3/3 Deploy" not in failed_revision["log"], failed_revision["log"]
+                assert request("projects/" + engine_project["id"])["active_deployment"] == engine_release["id"]
+                assert subprocess.check_output(["curl", "-fsS", "-H", "Host: buildpacks.local", proxy_url + "/"], text=True) == result
+                print("buildpacks exit 3: stage failed (test expected exit code 0, got 3), matching output did not mask failure; Deploy skipped and healthy release preserved: OK")
+    else:
+        print("engine deployments: SKIP (set STARTSHIP_E2E_ENGINES=1; pinned Nixpacks and large CNB downloads required)")
     print("E2E PASS")
 finally:
     if process and process.poll() is None:
         process.terminate()
         process.wait(timeout=15)
+    for service_id in service_ids:
+        subprocess.run(["docker", "rm", "-f", "startship-svc-" + service_id], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for app_id in app_ids:
         ids = subprocess.check_output(["docker", "ps", "-aq", "--filter", "label=startship.app=" + app_id], text=True).split()
         if ids:
@@ -447,6 +565,8 @@ finally:
         images = subprocess.check_output(["docker", "images", "-q", "startship/" + app_id], text=True).split()
         if images:
             subprocess.run(["docker", "rmi", "-f"] + images, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for volume_id in volume_ids:
+        subprocess.run(["docker", "volume", "rm", "startship-vol-" + volume_id], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for project_id in project_ids:
         builders = [json.loads(line)["Name"] for line in subprocess.check_output(["docker", "buildx", "ls", "--format", "json"], text=True).splitlines() if line.strip()]
         for builder in builders:

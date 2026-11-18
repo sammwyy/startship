@@ -27,6 +27,7 @@ import {
   siReactrouter,
   siNestjs,
   siHugo,
+  siNixos,
 } from "simple-icons";
 import { Icon } from "./Icon";
 
@@ -58,6 +59,7 @@ const brands = {
   reactrouter: siReactrouter,
   nestjs: siNestjs,
   hugo: siHugo,
+  nixos: siNixos,
 };
 export function TemplateIcon({ slug }: { slug: string }) {
   const brand = brands[slug as keyof typeof brands];
@@ -66,7 +68,7 @@ export function TemplateIcon({ slug }: { slug: string }) {
     Math.max(...brand.hex.match(/../g)!.map((v) => parseInt(v, 16))) < 110;
   return (
     <span
-      className={`template-icon${dark ? " template-icon-neutral" : ""}`}
+      className={`template-icon${dark || slug === "box" ? " template-icon-neutral" : ""}`}
       style={
         brand ? ({ "--brand": `#${brand.hex}` } as CSSProperties) : undefined
       }
@@ -76,7 +78,9 @@ export function TemplateIcon({ slug }: { slug: string }) {
           <path d={brand.path} />
         </svg>
       ) : (
-        <Icon name={slug === "auto" ? "bolt" : "wrench"} />
+        <Icon
+          name={slug === "auto" ? "bolt" : slug === "box" ? "box" : "wrench"}
+        />
       )}
     </span>
   );

@@ -56,7 +56,12 @@ export interface ProjectServices {
   available: Service[];
 }
 export interface Pipeline {
-  build: { image?: string; commands?: string[]; dockerfile?: string };
+  build: {
+    engine?: "docker" | "nixpacks" | "buildpacks";
+    image?: string;
+    commands?: string[];
+    dockerfile?: string;
+  };
   test: {
     image?: string;
     commands?: string[];
