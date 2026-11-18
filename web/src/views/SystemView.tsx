@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Heading } from "../components/Heading";
 import { ErrorMessage, Loading } from "../components/ui";
 import { useSession } from "../providers/SessionProvider";
 import { useUI } from "../providers/UIProvider";
@@ -112,11 +111,6 @@ export function SystemView() {
     status.error instanceof ApiError && status.error.status === 404;
   return (
     <>
-      <Heading
-        kicker="Platform"
-        title="System updates"
-        subtitle="Keep the Startship daemon and CLI up to date."
-      />
       {!info ? (
         missingAPI ? (
           <p className="panel panel-pad">

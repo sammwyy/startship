@@ -10,6 +10,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { useSession } from "./providers/SessionProvider";
 import { useDashboard, DashboardLayout } from "./layouts/DashboardLayout";
 import { ProjectLayout } from "./layouts/ProjectLayout";
+import { SystemLayout } from "./layouts/SystemLayout";
 import { AuthView } from "./views/AuthView";
 import { LiveProvider } from "./providers/LiveProvider";
 import { ErrorMessage, Loading } from "./components/ui";
@@ -82,9 +83,22 @@ export const router = createHashRouter([
           { path: "login", element: <Home /> },
           {
             path: "system",
-            lazy: async () => ({
-              Component: (await import("./views/SystemView")).SystemView,
-            }),
+            element: <SystemLayout />,
+            children: [
+              {
+                index: true,
+                lazy: async () => ({
+                  Component: (await import("./views/NodeSettingsView"))
+                    .NodeSettingsView,
+                }),
+              },
+              {
+                path: "updates",
+                lazy: async () => ({
+                  Component: (await import("./views/SystemView")).SystemView,
+                }),
+              },
+            ],
           },
           {
             path: "workspaces",
@@ -97,6 +111,13 @@ export const router = createHashRouter([
             path: "workspace/:workspaceId",
             lazy: async () => ({
               Component: (await import("./views/WorkspaceView")).WorkspaceView,
+            }),
+          },
+          {
+            path: "workspace/:workspaceId/domains",
+            lazy: async () => ({
+              Component: (await import("./views/WorkspaceDomainsView"))
+                .WorkspaceDomainsView,
             }),
           },
           {

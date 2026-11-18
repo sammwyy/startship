@@ -42,20 +42,42 @@ export function DeploymentsView() {
       <ProjectHeading
         title="Deployments"
         actions={
-          <button
-            className="primary"
-            disabled={
-              busy ||
-              !project.git_url ||
-              !!project.config_conflict ||
-              !!project.source_conflict ||
-              !can("deploy", project)
-            }
-            onClick={() => ui.run(() => deploy())}
-          >
-            <Icon name="plus" />
-            Deploy
-          </button>
+          <div className="deployment-actions">
+            <label
+              className="inline-check"
+              title="Applies to new builds. Redeploy reuses the selected deployment's image."
+            >
+              <input
+                type="checkbox"
+                checked={noCache}
+                disabled={busy || !can("deploy", project)}
+                onChange={(e) => setNoCache(e.target.checked)}
+              />
+              Build without cache
+            </label>
+            <button
+              disabled={
+                busy || !log.data?.redeployable || !can("deploy", project)
+              }
+              onClick={() => ui.run(() => deploy(true))}
+            >
+              Redeploy selected
+            </button>
+            <button
+              className="primary"
+              disabled={
+                busy ||
+                !project.git_url ||
+                !!project.config_conflict ||
+                !!project.source_conflict ||
+                !can("deploy", project)
+              }
+              onClick={() => ui.run(() => deploy())}
+            >
+              <Icon name="plus" />
+              Deploy
+            </button>
+          </div>
         }
       />
       <div className="project-deployments">
@@ -93,24 +115,6 @@ export function DeploymentsView() {
                 No project deployments yet.
               </p>
             )}
-          </div>
-          <div className="release-toolbar">
-            <label className="inline-check">
-              <input
-                type="checkbox"
-                checked={noCache}
-                onChange={(e) => setNoCache(e.target.checked)}
-              />
-              Build without cache
-            </label>
-            <button
-              disabled={
-                busy || !log.data?.redeployable || !can("deploy", project)
-              }
-              onClick={() => ui.run(() => deploy(true))}
-            >
-              Redeploy selected
-            </button>
           </div>
         </section>
         <LogPanel
