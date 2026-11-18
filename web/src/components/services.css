@@ -646,7 +646,7 @@ a.attachment-chip:hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 270px;
+  max-height: 340px;
   overflow: auto;
   padding: 3px;
   margin: -3px;
@@ -683,6 +683,10 @@ a.attachment-chip:hover {
 .connect-option.selected {
   border-color: var(--success);
   background: var(--accent-soft);
+}
+.connect-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 .connect-option > .icon {
   color: var(--success);

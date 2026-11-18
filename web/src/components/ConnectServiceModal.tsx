@@ -1,9 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import type { Project, Service } from "../services/types";
-import { envPrefix, validServiceName } from "../services/services";
+import type { Project, Service, ServiceEngine } from "../services/types";
+import {
+  connectionEnv,
+  envPrefix,
+  validServiceName,
+} from "../services/services";
 import { request } from "../services/api";
-import { ServiceModal, ServicePicker } from "./ServiceUI";
+import { EnvPreview, ServiceModal, ServicePicker } from "./ServiceUI";
 import { AsyncForm, Badge, Field } from "./ui";
 import { EngineIcon } from "./EngineIcon";
 import { Icon } from "./Icon";
@@ -11,6 +15,7 @@ import { Icon } from "./Icon";
 export function ConnectServiceModal({
   workspaceId,
   services,
+  engines,
   projects,
   project,
   service,
@@ -19,6 +24,7 @@ export function ConnectServiceModal({
 }: {
   workspaceId: string;
   services: Service[];
+  engines: ServiceEngine[];
   projects: Project[];
   project?: Project;
   service?: Service;
@@ -29,6 +35,7 @@ export function ConnectServiceModal({
     [projectId, setProjectId] = useState(project?.id || ""),
     [alias, setAlias] = useState(service?.name || "");
   const current = services.find((s) => s.id === selected),
+    engine = engines.find((e) => e.id === current?.engine),
     eligible = projects.filter(
       (p) => !current?.attachments.some((a) => a.project_id === p.id),
     );
@@ -66,49 +73,50 @@ export function ConnectServiceModal({
               role="group"
               aria-label="Available services"
             >
-              {services
-                .filter(
-                  (s) =>
-                    !project ||
-                    !s.attachments.some((a) => a.project_id === project.id),
-                )
-                .map((s) => (
-                  <button
-                    type="button"
-                    className={`connect-option ${selected === s.id ? "selected" : ""}`}
-                    key={s.id}
-                    onClick={() => {
-                      setSelected(s.id);
-                      setAlias(s.name);
-                    }}
-                  >
-                    <EngineIcon engine={s.engine} />
+              {services.map((s) => (
+                <button
+                  type="button"
+                  className={`connect-option ${selected === s.id ? "selected" : ""}`}
+                  key={s.id}
+                  disabled={
+                    !!project &&
+                    s.attachments.some((a) => a.project_id === project.id)
+                  }
+                  onClick={() => {
+                    setSelected(s.id);
+                    setAlias(s.name);
+                  }}
+                >
+                  <EngineIcon engine={s.engine} />
+                  <span>
+                    <strong>{s.name}</strong>
                     <span>
-                      <strong>{s.name}</strong>
-                      <span>
-                        {s.engine} · {s.version}
-                      </span>
-                      <span>
-                        Attached to:{" "}
-                        {s.attachments
-                          .map(
-                            (a) =>
-                              projects.find((p) => p.id === a.project_id)
-                                ?.name || a.project_id,
-                          )
-                          .join(", ") || "No projects yet"}
-                      </span>
+                      {s.engine} · {s.version}
                     </span>
-                    <Badge status={s.status} />
-                    {selected === s.id && <Icon name="check" />}
-                  </button>
-                ))}
-              {!services.some(
-                (s) =>
-                  !project ||
-                  !s.attachments.some((a) => a.project_id === project.id),
-              ) && (
-                <p>No unattached services are available for this project.</p>
+                    <span>
+                      Attached to:{" "}
+                      {s.attachments
+                        .map(
+                          (a) =>
+                            projects.find((p) => p.id === a.project_id)?.name ||
+                            a.project_id,
+                        )
+                        .join(", ") || "No projects yet"}
+                    </span>
+                    {project &&
+                      s.attachments.some(
+                        (a) => a.project_id === project.id,
+                      ) && <span>Connected to this project</span>}
+                  </span>
+                  <Badge status={s.status} />
+                  {selected === s.id && <Icon name="check" />}
+                </button>
+              ))}
+              {!services.length && (
+                <p>
+                  No workspace services are available. Deploy a new service to
+                  get started.
+                </p>
               )}
             </div>
           )}
@@ -143,6 +151,7 @@ export function ConnectServiceModal({
             label="Connection alias"
             name="alias"
             required
+            disabled={!current}
             value={alias}
             maxLength={63}
             onChange={(e) => setAlias(e.target.value)}
@@ -160,12 +169,15 @@ export function ConnectServiceModal({
                 : "Start with a lowercase letter. Use up to 63 lowercase letters, numbers, _ or -."}
             </span>
           )}
-          <div className="alias-preview">
-            <Icon name="plug" />
-            <code>
-              {envPrefix(alias || "alias")}_HOST={alias || "alias"}.local
-            </code>
-          </div>
+          {current && engine && alias ? (
+            <EnvPreview env={connectionEnv(current, engine, alias)} canReveal />
+          ) : (
+            <p className="small muted">
+              {current
+                ? "Enter an alias to preview its connection environment."
+                : "Choose a service to preview its connection environment."}
+            </p>
+          )}
           {!service && (
             <Link
               className="service-text-link"

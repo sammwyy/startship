@@ -59,7 +59,7 @@ export function connectionEnv(
   };
   for (const key of ["user", "password", "database"])
     if (config[key]) result[`${prefix}_${key.toUpperCase()}`] = config[key];
-  return result;
+  return Object.fromEntries(orderedConnectionEnv(result));
 }
 export const externalEndpoint = (service: Service) =>
   service.external_port
@@ -67,4 +67,14 @@ export const externalEndpoint = (service: Service) =>
     : "Internal only";
 export function secretValue(key: string) {
   return key.endsWith("_PASSWORD") || key.endsWith("_URL");
+}
+export function orderedConnectionEnv(env: Record<string, string>) {
+  const fields = ["HOST", "PORT", "USER", "PASSWORD", "DATABASE", "URL"];
+  const rank = (key: string) => {
+    const index = fields.indexOf(key.slice(key.lastIndexOf("_") + 1));
+    return index < 0 ? fields.length : index;
+  };
+  return Object.entries(env).sort(
+    ([a], [b]) => rank(a) - rank(b) || a.localeCompare(b),
+  );
 }

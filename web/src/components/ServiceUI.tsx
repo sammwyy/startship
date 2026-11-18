@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Icon } from "./Icon";
 import { Popover } from "./Popover";
 import { useUI } from "../providers/UIProvider";
-import { secretValue } from "../services/services";
+import { orderedConnectionEnv, secretValue } from "../services/services";
 import "./services.css";
 
 export function ServiceModal({
@@ -141,7 +141,7 @@ export function EnvPreview({
           </button>
         )}
       </div>
-      {Object.entries(env).map(([key, value]) => (
+      {orderedConnectionEnv(env).map(([key, value]) => (
         <div className="env-line" key={key}>
           <span>{key}</span>
           {secretValue(key) && !reveal ? (

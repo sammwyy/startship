@@ -43,7 +43,7 @@ const service: Service = {
   name: "primary",
   engine: "postgresql",
   version: "17",
-  config: { password: "private" },
+  config: { user: "app", password: "private", database: "app" },
   external_port: 0,
   volume_id: "v",
   attachments: [{ project_id: "a", alias: "db" }],
@@ -201,6 +201,7 @@ function connect(services: Service[] = [service]) {
       <ConnectServiceModal
         workspaceId="w"
         services={services}
+        engines={[engine]}
         projects={[projectA, projectB]}
         project={projectB}
         onClose={vi.fn()}
@@ -216,9 +217,29 @@ describe("connect picker", () => {
       { container } = connect();
     expect(screen.getByText("Attached to: Storefront")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /primary/ }));
+    expect(screen.getByLabelText("Connection alias")).toHaveValue("primary");
     await user.clear(screen.getByLabelText("Connection alias"));
     await user.type(screen.getByLabelText("Connection alias"), "app_db");
-    expect(screen.getByText("APP_DB_HOST=app_db.local")).toBeInTheDocument();
+    expect(container.querySelector(".env-line")).toHaveTextContent(
+      "app_db.local",
+    );
+    expect(
+      Array.from(
+        container.querySelectorAll(".env-line > span:first-child"),
+        (node) => node.textContent,
+      ),
+    ).toEqual([
+      "APP_DB_HOST",
+      "APP_DB_PORT",
+      "APP_DB_USER",
+      "APP_DB_PASSWORD",
+      "APP_DB_DATABASE",
+      "APP_DB_URL",
+    ]);
+    await user.click(screen.getByRole("button", { name: "Show secrets" }));
+    expect(container.querySelector(".env-line:last-child")).toHaveTextContent(
+      "postgres://app:private@app_db.local:5432/app",
+    );
     expect(container.querySelector("select")).toBeNull();
     await user.click(screen.getByRole("button", { name: "Connect service" }));
     await waitFor(() =>
@@ -230,13 +251,45 @@ describe("connect picker", () => {
   });
   it("handles an empty list with a deploy link", () => {
     connect([]);
-    expect(screen.getByText(/No unattached services/)).toBeInTheDocument();
+    expect(screen.getByText(/No workspace services/)).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Deploy a new service" }),
     ).toHaveAttribute("href", "/workspace/w/services");
     expect(
       screen.getByRole("button", { name: "Connect service" }),
     ).toBeDisabled();
+  });
+  it("keeps already-connected services visible and disabled", async () => {
+    const user = userEvent.setup();
+    connect([
+      service,
+      {
+        ...service,
+        id: "taken",
+        name: "cache",
+        attachments: [{ project_id: "b", alias: "cache" }],
+      },
+    ]);
+    const attached = screen.getByRole("button", {
+      name: /cache.*Connected to this project/,
+    });
+    expect(attached).toBeDisabled();
+    expect(attached).toHaveTextContent("Attached to: Workers");
+    expect(screen.getByLabelText("Connection alias")).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Choose a service to preview its connection environment.",
+      ),
+    ).toBeInTheDocument();
+    await user.click(attached);
+    expect(
+      screen.getByRole("button", { name: "Connect service" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: /primary/ }));
+    expect(screen.getByLabelText("Connection alias")).toHaveValue("primary");
+    expect(
+      screen.getByRole("button", { name: "Connect service" }),
+    ).toBeEnabled();
   });
   it("shows attach errors without closing", async () => {
     vi.mocked(request).mockRejectedValue(new Error("Alias already used"));

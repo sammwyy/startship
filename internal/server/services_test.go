@@ -110,6 +110,38 @@ func TestServiceLifecycle(t *testing.T) {
 		t.Fatal("deleted after docker failure")
 	}
 }
+
+func TestServiceNetworkNames(t *testing.T) {
+	f := newRBACFixture(t)
+	calls := []string{}
+	f.a.dockerService = func(args ...string) (string, error) {
+		calls = append(calls, strings.Join(args, " "))
+		return "ok", nil
+	}
+	s := Service{ID: "named", Name: "primary-db", Attachments: []Attachment{{ProjectID: "storefront", Alias: "db"}, {ProjectID: "worker", Alias: "jobs_db"}}}
+	if err := f.a.connectService(s); err != nil {
+		t.Fatal(err)
+	}
+	for _, at := range s.Attachments {
+		want := "network connect --alias " + at.Alias + " --alias " + at.Alias + ".local --alias primary-db --alias primary-db.local --alias startship-svc-named startship-" + at.ProjectID + " startship-svc-named"
+		if !strings.Contains(strings.Join(calls, "\n"), want) {
+			t.Fatal(want, calls)
+		}
+	}
+	calls = nil
+	if err := f.a.connectService(Service{}); err != nil || len(calls) != 0 {
+		t.Fatal("unattached service should not connect", err, calls)
+	}
+	f.a.dockerService = func(args ...string) (string, error) {
+		if len(args) > 1 && args[0] == "network" && args[1] == "connect" {
+			return "", fmt.Errorf("network unavailable")
+		}
+		return "ok", nil
+	}
+	if err := f.a.connectService(s); err == nil || err.Error() != "network unavailable" {
+		t.Fatal("missing connect error", err)
+	}
+}
 func TestServiceProjectArgs(t *testing.T) {
 	f := newRBACFixture(t)
 	e, _ := catalog.Lookup("postgresql")

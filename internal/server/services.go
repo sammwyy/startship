@@ -153,7 +153,7 @@ func (a *Server) connectService(s Service) error {
 			return err
 		}
 		a.serviceDocker("network", "disconnect", n, serviceContainer(s.ID))
-		if _, err := a.serviceDocker("network", "connect", "--alias", at.Alias, "--alias", at.Alias+".local", "--alias", serviceContainer(s.ID), n, serviceContainer(s.ID)); err != nil {
+		if _, err := a.serviceDocker("network", "connect", "--alias", at.Alias, "--alias", at.Alias+".local", "--alias", s.Name, "--alias", s.Name+".local", "--alias", serviceContainer(s.ID), n, serviceContainer(s.ID)); err != nil {
 			return err
 		}
 	}

@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import { applyLiveMessage } from "./live";
 import { queries } from "./queries";
-import { connectionEnv, validServiceName } from "./services";
+import {
+  connectionEnv,
+  orderedConnectionEnv,
+  validServiceName,
+} from "./services";
 import type { Service, ServiceEngine } from "./types";
 describe("service and volume live snapshots", () => {
   it("replaces workspace snapshots, updates open details and isolates workspaces", () => {
@@ -55,6 +59,37 @@ describe("service and volume live snapshots", () => {
   });
 });
 describe("connection previews", () => {
+  it("orders connection fields consistently, with extra variables last", () => {
+    expect(
+      orderedConnectionEnv({
+        DB_URL: "url",
+        DB_DATABASE: "db",
+        DB_ZZZ: "z",
+        DB_PASSWORD: "secret",
+        DB_PORT: "5432",
+        DB_USER: "app",
+        DB_HOST: "db.local",
+        DB_AAA: "a",
+      }).map(([key]) => key),
+    ).toEqual([
+      "DB_HOST",
+      "DB_PORT",
+      "DB_USER",
+      "DB_PASSWORD",
+      "DB_DATABASE",
+      "DB_URL",
+      "DB_AAA",
+      "DB_ZZZ",
+    ]);
+    expect(orderedConnectionEnv({})).toEqual([]);
+    expect(
+      orderedConnectionEnv({
+        CACHE_URL: "url",
+        CACHE_HOST: "cache.local",
+        CACHE_PORT: "6379",
+      }).map(([key]) => key),
+    ).toEqual(["CACHE_HOST", "CACHE_PORT", "CACHE_URL"]);
+  });
   it("matches backend environment names and connection URL", () => {
     const env = connectionEnv(
       {

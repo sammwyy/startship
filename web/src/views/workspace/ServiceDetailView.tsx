@@ -146,13 +146,13 @@ export function ServiceDetailView() {
                 </span>
               </div>
               <p>
-                Connect from an attached project using its alias. The service
-                name is its internal container hostname.
+                Reach this service from any attached project at {s.name}.local,
+                or use the alias each project chose.
               </p>
               <div className="connection-values">
                 <div>
-                  <span>Internal hostname</span>
-                  <CopyValue value={s.name} />
+                  <span>Hostname</span>
+                  <CopyValue value={`${s.name}.local`} />
                 </div>
                 <div>
                   <span>Port</span>
@@ -345,6 +345,7 @@ export function ServiceDetailView() {
       {open && (
         <ConnectServiceModal
           workspaceId={id!}
+          engines={catalog.data || []}
           services={list.data?.services || []}
           projects={editableProjects}
           service={s}

@@ -21,6 +21,7 @@ export function ConnectionsView() {
     client = useQueryClient();
   const connections = useQuery(queries.projectServices(project.id)),
     services = useServices(project.workspace_id),
+    catalog = useQuery(queries.catalog()),
     projects = useQuery(queries.projects(project.workspace_id));
   const [open, setOpen] = useState(false),
     [changed, setChanged] = useState(false),
@@ -49,7 +50,12 @@ export function ConnectionsView() {
       </p>
       {changed && <RedeployNote />}
       <ErrorMessage
-        error={connections.error || services.error || services.liveError}
+        error={
+          connections.error ||
+          services.error ||
+          services.liveError ||
+          catalog.error
+        }
       />
       {connections.isPending ? (
         <Loading />
@@ -111,6 +117,7 @@ export function ConnectionsView() {
       {open && (
         <ConnectServiceModal
           workspaceId={project.workspace_id}
+          engines={catalog.data || []}
           services={
             services.data?.services || connections.data?.available || []
           }
