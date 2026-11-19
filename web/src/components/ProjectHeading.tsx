@@ -23,7 +23,7 @@ export function ProjectHeading({
       title={title}
       project={title === project.name ? undefined : project.name}
       kicker={title === project.name ? "Project overview" : undefined}
-      subtitle={projectSummary(containers, routes)}
+      subtitle={projectSummary(containers, routes, project.sleeping)}
       actions={
         project.sleeping || actions ? (
           <>

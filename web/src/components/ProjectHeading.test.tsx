@@ -51,9 +51,27 @@ function show() {
     sleep_after: 15,
   };
   client.setQueryData(queries.project("p1").queryKey, project);
-  client.setQueryData(queries.containers("p1").queryKey, []);
-  client.setQueryData(queries.releases("p1").queryKey, []);
-  client.setQueryData(queries.routes("p1").queryKey, []);
+  client.setQueryData(queries.containers("p1").queryKey, [
+    {
+      id: "container",
+      name: "Demo",
+      port: 3000,
+      project_id: "p1",
+      status: "running",
+      active_deployment: "release",
+    },
+  ]);
+  client.setQueryData(queries.releases("p1").queryKey, [
+    {
+      id: "release",
+      project_id: "p1",
+      status: "running",
+      created: "2026-11-19T00:00:00Z",
+    },
+  ]);
+  client.setQueryData(queries.routes("p1").queryKey, [
+    { id: "route", host: "demo.test", path_prefix: "/", strip_prefix: false },
+  ]);
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={["/project/p1"]}>
@@ -85,17 +103,30 @@ function show() {
 it("re-renders sleep and wake from live project upserts without polling", async () => {
   const { update } = show();
   expect(screen.queryByRole("button", { name: "Wake now" })).toBeNull();
+  expect(
+    screen.getByText("1 container · 1 running · 1 domain route"),
+  ).toBeTruthy();
   update(true);
   fireEvent.click(await screen.findByRole("button", { name: "Wake now" }));
   await waitFor(() =>
     expect(state.request).toHaveBeenCalledWith("projects/p1/wake", {}, "POST"),
   );
-  expect(screen.getAllByText(/sleeping/i)).toHaveLength(2);
+  expect(screen.getAllByText(/^sleeping$/i)).toHaveLength(2);
+  expect(
+    screen.getByText("1 container · sleeping · 1 domain route"),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("1 container · 1 running · 1 domain route"),
+  ).toBeNull();
+  expect(screen.getByText("running")).toBeTruthy();
   update(false);
   await waitFor(() =>
     expect(screen.queryByRole("button", { name: "Wake now" })).toBeNull(),
   );
   expect(screen.getByText("After 15 min")).toBeTruthy();
+  expect(
+    screen.getByText("1 container · 1 running · 1 domain route"),
+  ).toBeTruthy();
   expect(state.request).toHaveBeenCalledTimes(1);
 });
 
@@ -103,7 +134,9 @@ it("shows sleeping state without offering wake to viewers", async () => {
   state.deploy = false;
   const { update } = show();
   update(true);
-  await waitFor(() => expect(screen.getAllByText(/sleeping/i)).toHaveLength(2));
+  await waitFor(() =>
+    expect(screen.getAllByText(/^sleeping$/i)).toHaveLength(2),
+  );
   expect(screen.queryByRole("button", { name: "Wake now" })).toBeNull();
 });
 
