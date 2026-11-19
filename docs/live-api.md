@@ -42,6 +42,13 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 
 Mutations stay on the REST API; their effects arrive over the socket.
 
+## Project sleep
+- Projects include `sleep_after` (idle minutes, 0 = disabled, maximum 10080) and the read-only `sleeping` flag. Zero/false values may be omitted.
+- PATCH `/api/projects/:id` with `{"sleep_after":10}` requires `project.settings`.
+- POST `/api/projects/:id/sleep` or `/wake` requires `deploy`, is audited as `project.sleep` / `project.wake`, and returns the project.
+- Sleeping stops all containers in the active release without deleting them; deployment status stays `running`. Static deployments are skipped. Incoming allowed traffic wakes the whole project before proxying; that response includes `X-Startship-Woke` in milliseconds.
+- Sleep/wake changes publish project upserts to existing subscriptions.
+
 ## Firewall
 - Subscribe with `{"type":"subscribe","id":"fw","topic":"firewall","workspace_id":"..."}`.
 - `policy` and `lists` match the workspace firewall REST responses. `events` contains the latest 100 of the workspace's 500 buffered match events, newest first. `can_manage` reflects `firewall.manage` for the current user.

@@ -488,7 +488,7 @@ func cleanName(name string) (string, error) {
 	return name, nil
 }
 
-var projectFieldPermissions = map[string]string{"env": "project.environment", "git_url": "project.source", "git_token": "project.source", "branch": "project.source"}
+var projectFieldPermissions = map[string]string{"env": "project.environment", "git_url": "project.source", "git_token": "project.source", "branch": "project.source", "sleep_after": "project.settings"}
 
 // canUpdate maps the fields a PATCH touches to the permissions that guard them.
 func (x *access) canUpdate(r Record, fields map[string]json.RawMessage) bool {

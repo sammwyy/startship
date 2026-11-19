@@ -8,6 +8,54 @@ import (
 	"time"
 )
 
+func TestProjectSleepSettings(t *testing.T) {
+	a := testServer(t)
+	uid, err := a.createUser("sleeper", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := a.api()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"sleeper","password":"password123"}`)))
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cookie := w.Result().Cookies()[0]
+	workspace := a.store.List("workspaces", uid)[0]
+	p := Record{ID: "sleep-project", Kind: "projects", Owner: uid, WorkspaceID: workspace.ID, Parent: workspace.ID, Name: "Sleep"}
+	if err := a.store.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		sleeping bool
+		body     string
+		status   int
+		after    int
+	}{
+		{false, `{"sleeping":true,"sleep_after":10}`, 200, 10},
+		{true, `{"sleeping":false,"sleep_after":0}`, 200, 0},
+		{true, `{}`, 200, 0},
+		{false, `{"sleep_after":10080}`, 200, 10080},
+		{false, `{"sleep_after":-1}`, 400, 10080},
+		{false, `{"sleep_after":10081}`, 400, 10080},
+	} {
+		if err := a.store.Update(p.ID, func(r *Record) { r.Sleeping = tc.sleeping }); err != nil {
+			t.Fatal(err)
+		}
+		r := httptest.NewRequest("PATCH", "/api/projects/"+p.ID, strings.NewReader(tc.body))
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != tc.status {
+			t.Fatal(tc.body, w.Code, w.Body.String())
+		}
+		current, err := a.store.Get(p.ID)
+		if err != nil || current.Sleeping != tc.sleeping || current.SleepAfter != tc.after {
+			t.Fatalf("%s: %+v %v", tc.body, current, err)
+		}
+	}
+}
+
 func TestRecordCreationTimes(t *testing.T) {
 	a := testServer(t)
 	start := time.Now()

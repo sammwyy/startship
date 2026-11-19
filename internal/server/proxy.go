@@ -60,7 +60,12 @@ func (a *Server) publicRouter() *router.Router {
 				}
 				return true
 			},
-			Traffic: func(t router.Traffic) { a.traffic.record(t.ProjectID, t.Method, t.Route, t.Status, t.Duration, t.Time) },
+			Wake:     a.wakeProject,
+			Activity: a.projectActivity,
+			Traffic: func(t router.Traffic) {
+				a.projectActivity(t.ProjectID)
+				a.traffic.record(t.ProjectID, t.Method, t.Route, t.Status, t.Duration, t.Time)
+			},
 			Event:   a.recordFirewallEvent,
 			Observe: a.observeFirewall,
 			Ban:     a.recordFirewallBan,
@@ -78,6 +83,10 @@ func (a *Server) refresh() {
 func (a *Server) refreshLocked() error {
 	targets := []Target{}
 	routeWorkspace := map[string]string{}
+	asleep := map[string]bool{}
+	for _, p := range a.store.List("projects", "") {
+		asleep[p.ID] = p.Sleeping
+	}
 	for _, r := range a.store.List("routes", "") {
 		app, err := a.store.Get(r.AppID)
 		if err != nil {
@@ -130,7 +139,7 @@ func (a *Server) refreshLocked() error {
 		}
 		policies[ws] = engine
 	}
-	a.publicRouter().Update(router.Snapshot{Targets: targets, RouteWorkspace: routeWorkspace, Policies: policies})
+	a.publicRouter().Update(router.Snapshot{Targets: targets, RouteWorkspace: routeWorkspace, Policies: policies, Asleep: asleep})
 	a.firewall.mu.Lock()
 	for ws := range policies {
 		a.firewall.states[ws].ClearBans()

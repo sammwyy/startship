@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,48 @@ import (
 	"github.com/sammwyy/startship/internal/firewall"
 	"github.com/sammwyy/startship/internal/store"
 )
+
+func TestWakeProject(t *testing.T) {
+	for _, wakeError := range []bool{false, true} {
+		t.Run(fmt.Sprint(wakeError), func(t *testing.T) {
+			r, calls, healthy := setup(t, activePolicy(), Hooks{}, nil)
+			wakes := 0
+			r.hooks.Wake = func(ctx context.Context, id string) error {
+				wakes++
+				if id != "project" {
+					t.Fatalf("project = %q", id)
+				}
+				if wakeError {
+					return errors.New("failed")
+				}
+				r.Update(healthy)
+				return nil
+			}
+			asleep := healthy
+			asleep.Targets = append([]Target(nil), healthy.Targets...)
+			asleep.Targets[0].Deployment.IP = "192.0.2.1"
+			asleep.Asleep = map[string]bool{"project": true}
+			r.Update(asleep)
+			w := request(r, "GET", "/", "", "")
+			if wakes != 1 {
+				t.Fatalf("wake calls = %d", wakes)
+			}
+			if wakeError {
+				if w.Code != 503 || w.Body.String() != "Startship: project failed to wake.\n" || calls.Load() != 0 {
+					t.Fatal(w.Code, w.Body.String(), calls.Load())
+				}
+			} else {
+				if w.Code != 200 || calls.Load() != 1 || w.Header().Get("X-Startship-Woke") == "" {
+					t.Fatal(w.Code, w.Body.String(), calls.Load(), w.Header())
+				}
+				request(r, "GET", "/", "", "")
+				if wakes != 1 {
+					t.Fatal("awake request called wake")
+				}
+			}
+		})
+	}
+}
 
 func activePolicy() firewall.Policy { p := firewall.DefaultPolicy(); p.Mode = "enforce"; return p }
 func setup(t *testing.T, p firewall.Policy, h Hooks, up http.Handler) (*Router, *atomic.Int64, Snapshot) {

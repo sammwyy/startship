@@ -23,6 +23,7 @@ import (
 )
 
 type Server struct {
+	sleep                sleepRuntime
 	dockerService        func(...string) (string, error)
 	dockerStream         func(io.Writer, ...string) error
 	resourcesMu          sync.Mutex
@@ -399,6 +400,27 @@ func (a *Server) api() http.Handler {
 			a.projectTraffic(w, r, old)
 			return
 		}
+		if len(p) == 4 && kind == "projects" && (p[3] == "sleep" || p[3] == "wake") && r.Method == "POST" {
+			if !x.can(old, "deploy") {
+				forbidden(w)
+				return
+			}
+			var err error
+			if p[3] == "sleep" {
+				err = a.sleepProject(old.ID, false)
+			} else {
+				err = a.wakeProject(r.Context(), old.ID)
+			}
+			if err != nil {
+				fail(w, 503, err.Error())
+				return
+			}
+			workspace, project := x.scope(old)
+			a.auditRecord(r.Context(), uid, p[3], old, workspace, project)
+			current, _ := a.store.Get(old.ID)
+			reply(w, 200, x.publicRecord(current))
+			return
+		}
 		if len(p) == 4 && (kind == "projects" || kind == "apps") && (p[3] == "deploy" || p[3] == "redeploy") && r.Method == "POST" && !x.can(old, "deploy") {
 			forbidden(w)
 			return
@@ -620,6 +642,11 @@ func (a *Server) api() http.Handler {
 		}
 		switch kind {
 		case "projects":
+			v.Sleeping = old.Sleeping
+			if v.SleepAfter < 0 || v.SleepAfter > 10080 {
+				fail(w, 400, "sleep_after must be between 0 and 10080 minutes")
+				return
+			}
 			if v.Pipeline != nil {
 				if err := v.Pipeline.Validate(); err != nil {
 					fail(w, 400, err.Error())
