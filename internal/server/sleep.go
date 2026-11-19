@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -23,8 +24,39 @@ type projectSleep struct {
 	mu         sync.Mutex
 	activityMu sync.Mutex
 	last       time.Time
+	inFlight   int
 	wakeMu     sync.Mutex
 	wake       *wakeCall
+}
+
+func (a *Server) projectRequest(id string) func() {
+	s := a.projectSleepState(id)
+	s.activityMu.Lock()
+	s.inFlight++
+	s.last = time.Now()
+	s.activityMu.Unlock()
+	return func() {
+		s.activityMu.Lock()
+		s.inFlight--
+		s.last = time.Now()
+		s.activityMu.Unlock()
+	}
+}
+
+var errStaticSleep = errors.New("static-only projects cannot sleep: no runtime containers")
+
+func (a *Server) staticProject(p Record) bool {
+	release, err := a.store.Get(p.Active)
+	if err != nil || len(release.ContainerReleases) == 0 {
+		return false
+	}
+	for _, id := range release.ContainerReleases {
+		d, err := a.store.Get(id)
+		if err != nil || d.StaticDir == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *Server) projectSleepState(id string) *projectSleep {
@@ -62,7 +94,7 @@ func (a *Server) sleepDeployments(p Record) ([]Record, error) {
 		}
 	}
 	if len(deployments) == 0 {
-		return nil, fmt.Errorf("project has no containers")
+		return nil, errStaticSleep
 	}
 	return deployments, nil
 }
@@ -84,21 +116,41 @@ func (a *Server) sleepProject(id string, idle bool) error {
 		if s.last.IsZero() {
 			s.last = time.Now()
 		}
-		due := p.SleepAfter > 0 && time.Since(s.last) >= time.Duration(p.SleepAfter)*time.Minute
+		due := p.SleepAfter > 0 && s.inFlight == 0 && time.Since(s.last) >= time.Duration(p.SleepAfter)*time.Minute
 		s.activityMu.Unlock()
 		if !due {
 			return nil
-		}
-	}
-	for _, d := range deployments {
-		if err := command("", os.Stderr, "docker", "stop", d.Container); err != nil {
-			return err
 		}
 	}
 	if err = a.store.Update(id, func(r *Record) { r.Sleeping = true }); err != nil {
 		return err
 	}
 	a.refresh()
+	revert := func() error {
+		err := a.store.Update(id, func(r *Record) { r.Sleeping = false })
+		a.refresh()
+		return err
+	}
+	if idle {
+		s.activityMu.Lock()
+		busy := s.inFlight > 0 || time.Since(s.last) < time.Duration(p.SleepAfter)*time.Minute
+		s.activityMu.Unlock()
+		if busy {
+			return revert()
+		}
+	}
+	var stopped []Record
+	for _, d := range deployments {
+		if err := command("", os.Stderr, "docker", "stop", d.Container); err != nil {
+			for _, old := range stopped {
+				if e := command("", os.Stderr, "docker", "start", old.Container); e != nil {
+					log.Printf("Project %q (%s) sleep rollback: %v", p.Name, p.ID, e)
+				}
+			}
+			return errors.Join(err, revert())
+		}
+		stopped = append(stopped, d)
+	}
 	log.Printf("Project %q (%s) sleeping after %d min idle", p.Name, p.ID, p.SleepAfter)
 	return nil
 }
@@ -113,6 +165,9 @@ func (a *Server) wakeProject(ctx context.Context, id string) error {
 		s.wake = call
 		go func() {
 			call.err = a.startSleepingProject(id, s)
+			if call.err != nil {
+				log.Printf("Project %s failed to wake: %v", id, call.err)
+			}
 			s.wakeMu.Lock()
 			s.wake = nil
 			close(call.done)
@@ -144,24 +199,18 @@ func (a *Server) startSleepingProject(id string, s *projectSleep) error {
 		if err := command("", os.Stderr, "docker", "start", d.Container); err != nil {
 			return err
 		}
-		if d.Network != "" {
-			if err := connectSelf(d.Network); err != nil {
-				return err
-			}
-		}
-		ip, err := containerIP(d.Container, d.Network)
+	}
+	var wg sync.WaitGroup
+	results := make(chan error, len(deployments))
+	for _, d := range deployments {
+		wg.Go(func() {
+			results <- a.reconnectRelease(d)
+		})
+	}
+	wg.Wait()
+	close(results)
+	for err := range results {
 		if err != nil {
-			return err
-		}
-		app, err := a.store.Get(d.AppID)
-		if err != nil {
-			return err
-		}
-		app.Port, app.Pipeline = d.Port, d.Pipeline
-		if err := probeRelease(app, d.Container, ip, os.Stderr); err != nil {
-			return err
-		}
-		if err := a.store.Update(d.ID, func(r *Record) { r.IP = ip }); err != nil {
 			return err
 		}
 	}
@@ -171,6 +220,30 @@ func (a *Server) startSleepingProject(id string, s *projectSleep) error {
 	a.projectActivity(id)
 	a.refresh()
 	log.Printf("Project %q (%s) woke in %.2fs", p.Name, p.ID, time.Since(start).Seconds())
+	return nil
+}
+
+func (a *Server) reconnectRelease(d Record) error {
+	if d.Network != "" {
+		if err := connectSelf(d.Network); err != nil {
+			return err
+		}
+	}
+	ip, err := containerIP(d.Container, d.Network)
+	if err != nil {
+		return err
+	}
+	app, err := a.store.Get(d.AppID)
+	if err != nil {
+		return err
+	}
+	app.Port, app.Pipeline = d.Port, d.Pipeline
+	if err := probeRelease(app, d.Container, ip, os.Stderr); err != nil {
+		return err
+	}
+	if err := a.store.Update(d.ID, func(r *Record) { r.IP = ip }); err != nil {
+		return err
+	}
 	return nil
 }
 

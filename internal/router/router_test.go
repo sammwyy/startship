@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/sammwyy/startship/internal/firewall"
 	"github.com/sammwyy/startship/internal/store"
@@ -62,6 +63,69 @@ func TestWakeProject(t *testing.T) {
 }
 
 func activePolicy() firewall.Policy { p := firewall.DefaultPolicy(); p.Mode = "enforce"; return p }
+
+func TestActivityReloadsSleepingSnapshot(t *testing.T) {
+	r, _, healthy := setup(t, activePolicy(), Hooks{}, nil)
+	started, finished, woke := false, false, false
+	r.hooks.Activity = func(id string) func() {
+		started = true
+		asleep := healthy
+		asleep.Asleep = map[string]bool{id: true}
+		r.Update(asleep)
+		return func() { finished = true }
+	}
+	r.hooks.Wake = func(context.Context, string) error {
+		if !started || finished {
+			t.Error("incorrect request lifecycle")
+		}
+		woke = true
+		r.Update(healthy)
+		return nil
+	}
+	if w := request(r, "GET", "/", "", ""); w.Code != 200 || !woke || !finished {
+		t.Fatal(w.Code, woke, finished)
+	}
+}
+
+func TestActivitySpansUpgrade(t *testing.T) {
+	finished := make(chan struct{})
+	r, _, _ := setup(t, activePolicy(), Hooks{Activity: func(string) func() { return func() { close(finished) } }}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, rw, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer conn.Close()
+		fmt.Fprint(rw, "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: test\r\n\r\n")
+		rw.Flush()
+		io.Copy(conn, conn)
+	}))
+	proxy := httptest.NewServer(r)
+	defer proxy.Close()
+	req, _ := http.NewRequest("GET", proxy.URL, nil)
+	req.Host = "app.test"
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "test")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 101 {
+		t.Fatal(resp.StatusCode)
+	}
+	select {
+	case <-finished:
+		t.Fatal("request completed while upgraded connection open")
+	case <-time.After(25 * time.Millisecond):
+	}
+	resp.Body.Close()
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("request did not finish after upgrade closed")
+	}
+}
 func setup(t *testing.T, p firewall.Policy, h Hooks, up http.Handler) (*Router, *atomic.Int64, Snapshot) {
 	t.Helper()
 	calls := &atomic.Int64{}

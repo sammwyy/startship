@@ -56,6 +56,51 @@ func TestProjectSleepSettings(t *testing.T) {
 	}
 }
 
+func TestStaticProjectSleepRejected(t *testing.T) {
+	a := testServer(t)
+	uid, err := a.createUser("static", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := a.api()
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"static","password":"password123"}`)))
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cookie := w.Result().Cookies()[0]
+	ws := a.store.List("workspaces", uid)[0]
+	for _, r := range []Record{
+		{ID: "static-project", Kind: "projects", Name: "Static", Owner: uid, WorkspaceID: ws.ID, Parent: ws.ID, Active: "static-release"},
+		{ID: "static-release", Kind: "releases", Status: "running", ContainerReleases: []string{"static-deploy"}},
+		{ID: "static-deploy", Kind: "deployments", Status: "running", StaticDir: "/site"},
+	} {
+		if err := a.store.Save(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		method, path, body string
+		status             int
+	}{
+		{"PATCH", "/api/projects/static-project", `{"sleep_after":1}`, 400},
+		{"POST", "/api/projects/static-project/sleep", "", 400},
+		{"PATCH", "/api/projects/static-project", `{"sleep_after":0}`, 200},
+	} {
+		r := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		r.AddCookie(cookie)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != tc.status || tc.status == 400 && !strings.Contains(w.Body.String(), "static-only") {
+			t.Fatal(tc.method, w.Code, w.Body.String())
+		}
+	}
+	p, _ := a.store.Get("static-project")
+	if p.Sleeping || p.SleepAfter != 0 {
+		t.Fatal(p)
+	}
+}
+
 func TestProjectSleepWakeAudit(t *testing.T) {
 	a := testServer(t)
 	uid, err := a.createUser("sleeper", "password123")

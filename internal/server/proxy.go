@@ -61,7 +61,7 @@ func (a *Server) publicRouter() *router.Router {
 				return true
 			},
 			Wake:     a.wakeProject,
-			Activity: a.projectActivity,
+			Activity: a.projectRequest,
 			Traffic: func(t router.Traffic) {
 				a.projectActivity(t.ProjectID)
 				a.traffic.record(t.ProjectID, t.Method, t.Route, t.Status, t.Duration, t.Time)

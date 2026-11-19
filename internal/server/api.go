@@ -412,6 +412,10 @@ func (a *Server) api() http.Handler {
 				err = a.wakeProject(r.Context(), old.ID)
 			}
 			if err != nil {
+				if errors.Is(err, errStaticSleep) {
+					fail(w, 400, err.Error())
+					return
+				}
 				fail(w, 503, err.Error())
 				return
 			}
@@ -645,6 +649,10 @@ func (a *Server) api() http.Handler {
 			v.Sleeping = old.Sleeping
 			if v.SleepAfter < 0 || v.SleepAfter > 10080 {
 				fail(w, 400, "sleep_after must be between 0 and 10080 minutes")
+				return
+			}
+			if v.SleepAfter > 0 && a.staticProject(old) {
+				fail(w, 400, errStaticSleep.Error())
 				return
 			}
 			if v.Pipeline != nil {

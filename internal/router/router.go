@@ -44,7 +44,7 @@ type Ban struct {
 }
 type Hooks struct {
 	Wake      func(context.Context, string) error
-	Activity  func(string)
+	Activity  func(string) func()
 	Challenge func(http.ResponseWriter, *http.Request) bool
 	Dashboard func(http.ResponseWriter, *http.Request) bool
 	Traffic   func(Traffic)
@@ -134,8 +134,11 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer release()
 	}
 	if a.hooks.Activity != nil {
-		a.hooks.Activity(target.Route.ProjectID)
+		if done := a.hooks.Activity(target.Route.ProjectID); done != nil {
+			defer done()
+		}
 	}
+	snapshot = a.snapshot.Load()
 	if snapshot.Asleep[target.Route.ProjectID] {
 		start := time.Now()
 		if a.hooks.Wake == nil || a.hooks.Wake(r.Context(), target.Route.ProjectID) != nil {
