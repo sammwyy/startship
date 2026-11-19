@@ -322,6 +322,9 @@ func (a *Server) buildProject(id string) {
 }
 
 func (a *Server) activateProject(projectID, releaseID string, containers []Record, revisions []string) error {
+	state := a.projectSleepState(projectID)
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	a.store.Lock()
 	defer a.store.Unlock()
 	p, err := a.store.Get(projectID)
@@ -372,6 +375,7 @@ func (a *Server) activateProject(projectID, releaseID string, containers []Recor
 		}
 	}
 	p.Active, job.Status, job.Finished = releaseID, "running", &now
+	p.Sleeping = false
 	changes = append(changes, p, job)
 	tx, err := a.store.DB.Begin()
 	if err != nil {
@@ -391,6 +395,7 @@ func (a *Server) activateProject(projectID, releaseID string, containers []Recor
 		return err
 	}
 	a.store.Notify(changes...)
+	a.projectActivity(projectID)
 	a.refresh()
 	for _, d := range retired {
 		if d.Container != "" {

@@ -313,6 +313,8 @@ const usage = `startship [--json] COMMAND
   workspaces list|get ID|create NAME|rename ID NAME|delete ID
   projects list [WORKSPACE] | projects get ID|create NAME WORKSPACE|delete ID
   projects update ID JSON        project settings (same fields as API)
+  projects sleep ID | projects wake ID
+  projects update ID '{"sleep_after":10}'  sleep after idle minutes (0 = off)
   projects source ID JSON        git_url, branch, git_token, build defaults
   projects env get ID | projects env set ID KEY=VALUE...
   deploy PROJECT [--wait] [--no-cache]
@@ -695,6 +697,11 @@ func (c *cli) run(args []string) error {
 		}
 		path += "/" + url.PathEscape(id)
 		switch {
+		case kind == "projects" && (op == "sleep" || op == "wake"):
+			if e := need(1); e != nil {
+				return e
+			}
+			method, path = "POST", path+"/"+op
 		case op == "get":
 			if e := need(1); e != nil {
 				return e

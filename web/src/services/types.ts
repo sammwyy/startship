@@ -132,6 +132,8 @@ export interface Workspace extends Scoped {
   created?: string;
 }
 export interface Project extends Workspace {
+  sleep_after?: number;
+  sleeping?: boolean;
   resources_updated?: string;
   workspace_id: string;
   git_url?: string;
@@ -148,6 +150,7 @@ export interface Project extends Workspace {
   active_deployment?: string;
 }
 export interface Container {
+  pipeline?: Pipeline;
   id: string;
   name: string;
   project_id: string;

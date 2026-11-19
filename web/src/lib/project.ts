@@ -18,8 +18,15 @@ export const busyRelease = (release?: Release) =>
   ["queued", "building", "testing", "starting"].includes(release.status);
 export const sortReleases = (releases: Release[]) =>
   [...releases].sort((a, b) => Date.parse(b.created) - Date.parse(a.created));
-export function projectSummary(containers: Container[], routes: unknown[]) {
-  return `${containers.length} container${containers.length === 1 ? "" : "s"} · ${containers.filter((c) => c.status === "running").length} running · ${routes.length} domain route${routes.length === 1 ? "" : "s"}`;
+export function projectSummary(
+  containers: Container[],
+  routes: unknown[],
+  sleeping = false,
+) {
+  const status = sleeping
+    ? "sleeping"
+    : `${containers.filter((c) => c.status === "running").length} running`;
+  return `${containers.length} container${containers.length === 1 ? "" : "s"} · ${status} · ${routes.length} domain route${routes.length === 1 ? "" : "s"}`;
 }
 export function environmentData(value: string) {
   const env: Record<string, string> = Object.create(null);

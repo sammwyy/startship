@@ -1142,6 +1142,36 @@
   color: var(--muted);
   font-size: 10px;
 }
+.idle-sleep-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+}
+.idle-sleep-minutes {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.idle-sleep-minutes input {
+  width: 76px;
+  margin: 0;
+}
+.idle-sleep-control input:focus-visible {
+  outline: none;
+}
+.idle-sleep-settings p {
+  margin: 4px 0 0;
+}
+.badge.sleeping {
+  color: var(--muted);
+  background: var(--raised);
+}
+.sidebar-project > .badge.sleeping {
+  width: fit-content;
+  margin-block: 4px;
+}
 .project-deployments {
   align-items: stretch;
 }

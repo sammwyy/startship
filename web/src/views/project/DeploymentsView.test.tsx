@@ -11,6 +11,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { DeploymentsView } from "./DeploymentsView";
 const state = vi.hoisted(() => ({
+  sleeping: false,
   canDeploy: true,
   request: vi.fn(async () => ({})),
   refresh: vi.fn(),
@@ -36,7 +37,12 @@ vi.mock("../../components/ProjectHeading", () => ({
 vi.mock("../../services/api", () => ({ request: state.request }));
 vi.mock("../../layouts/ProjectLayout", () => ({
   useProject: () => ({
-    project: { id: "p1", git_url: "https://example.com/repo.git" },
+    project: {
+      id: "p1",
+      git_url: "https://example.com/repo.git",
+      sleeping: state.sleeping,
+      active_deployment: "newest",
+    },
     releases: [
       {
         id: "newest",
@@ -61,9 +67,28 @@ vi.mock("../../providers/UIProvider", () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   state.canDeploy = true;
+  state.sleeping = false;
 });
 afterEach(cleanup);
 describe("deployment history", () => {
+  it("shows only the sleeping active release with the sleeping badge", () => {
+    state.sleeping = true;
+    render(
+      <MemoryRouter>
+        <DeploymentsView />
+      </MemoryRouter>,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: /newest/ })
+        .querySelector(".badge.sleeping"),
+    ).toHaveTextContent("sleeping");
+    expect(
+      screen
+        .getByRole("button", { name: /older/ })
+        .querySelector(".badge.failed"),
+    ).toHaveTextContent("failed");
+  });
   it("opens the selected deployment linked from the overview and supports selection", () => {
     render(
       <MemoryRouter initialEntries={["/project/p1/deployments?release=older"]}>

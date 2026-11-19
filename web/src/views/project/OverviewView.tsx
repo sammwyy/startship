@@ -42,7 +42,14 @@ export function OverviewView() {
                         {new Date(release.created).toLocaleString()}
                       </time>
                     </div>
-                    <Badge status={release.status} />
+                    <Badge
+                      status={
+                        project.sleeping &&
+                        release.id === project.active_deployment
+                          ? "sleeping"
+                          : release.status
+                      }
+                    />
                   </Link>
                 ))}
               </div>
@@ -98,6 +105,16 @@ export function OverviewView() {
               <div>
                 <dt>Deploy on push</dt>
                 <dd>{project.auto_deploy ? "Enabled" : "Disabled"}</dd>
+              </div>
+              <div>
+                <dt>Sleep when idle</dt>
+                <dd>
+                  {project.sleeping
+                    ? "Sleeping"
+                    : project.sleep_after
+                      ? `After ${project.sleep_after} min`
+                      : "Off"}
+                </dd>
               </div>
             </dl>
           </section>

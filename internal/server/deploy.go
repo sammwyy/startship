@@ -433,6 +433,14 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 	if e != nil {
 		return
 	}
+	if e = probeRelease(app, container, ip, logger); e != nil {
+		return
+	}
+	a.store.Update(id, func(r *Record) { r.Container = container; r.IP = ip })
+	return a.activate(app, id)
+}
+
+func probeRelease(app Record, container, ip string, logger io.Writer) (e error) {
 	timeout := 60 * time.Second
 	if app.Pipeline != nil && app.Pipeline.Deploy.HealthTimeout > 0 {
 		timeout = time.Duration(app.Pipeline.Deploy.HealthTimeout) * time.Second
@@ -471,8 +479,7 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	a.store.Update(id, func(r *Record) { r.Container = container; r.IP = ip })
-	return a.activate(app, id)
+	return nil
 }
 
 func (a *Server) logDeploymentResult(out io.Writer, app Record, err error) {
@@ -605,6 +612,9 @@ func (a *Server) restore() {
 	for _, d := range a.store.List("deployments", "") {
 		switch d.Status {
 		case "running":
+			if p, err := a.store.Get(d.ProjectID); err == nil && p.Sleeping {
+				continue
+			}
 			if d.Container != "" {
 				if d.Network != "" {
 					if e := connectSelf(d.Network); e != nil {

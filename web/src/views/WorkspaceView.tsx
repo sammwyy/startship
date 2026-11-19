@@ -92,7 +92,11 @@ export function WorkspaceView() {
           ["Containers", containers.length, "box"],
           [
             "Running containers",
-            containers.filter((c) => c.status === "running").length,
+            containers.filter(
+              (c) =>
+                c.status === "running" &&
+                !projects.find((p) => p.id === c.project_id)?.sleeping,
+            ).length,
             "activity",
           ],
         ].map(([label, count, icon]) => (

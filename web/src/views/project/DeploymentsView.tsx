@@ -92,7 +92,13 @@ export function DeploymentsView() {
                     <Icon name="branch" />
                     {r.commit?.slice(0, 7) || r.id.slice(0, 7)}
                   </span>
-                  <Badge status={r.status} />
+                  <Badge
+                    status={
+                      project.sleeping && r.id === project.active_deployment
+                        ? "sleeping"
+                        : r.status
+                    }
+                  />
                 </span>
                 <span className="release-meta">
                   <time>{new Date(r.created).toLocaleString()}</time>

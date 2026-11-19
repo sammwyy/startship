@@ -1,5 +1,7 @@
 # Startship CLI
 
+Use `startship projects sleep ID` and `startship projects wake ID` to stop/start all containers in a project's active release. Enable idle sleep with `startship projects update ID '{"sleep_after":10}'` (minutes, 0 disables, maximum 10080). Sleep and wake require deploy permission; configuring idle sleep requires project settings permission.
+
 The CLI talks to the daemon's dashboard API. It doesn't need Docker or direct access to the database. The systemd installer includes it; to build just the CLI from the checkout, run `go build -o startship ./cmd/startship`. Run `startship --help` for the full command list.
 
 ## Connect to a daemon

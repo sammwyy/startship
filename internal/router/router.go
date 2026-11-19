@@ -4,6 +4,7 @@ package router
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
@@ -25,6 +26,7 @@ import (
 
 type Target = routing.Target
 type Snapshot struct {
+	Asleep         map[string]bool
 	Targets        []Target
 	RouteWorkspace map[string]string
 	Policies       map[string]*firewall.Engine
@@ -41,6 +43,8 @@ type Ban struct {
 	RuleID, RuleName string
 }
 type Hooks struct {
+	Wake      func(context.Context, string) error
+	Activity  func(string) func()
 	Challenge func(http.ResponseWriter, *http.Request) bool
 	Dashboard func(http.ResponseWriter, *http.Request) bool
 	Traffic   func(Traffic)
@@ -68,7 +72,10 @@ func New(hooks Hooks, options Options) *Router {
 
 // Update takes ownership of copies of the routing slices and maps. Engines are immutable.
 func (r *Router) Update(s Snapshot) {
-	copy := Snapshot{Targets: append([]Target(nil), s.Targets...), RouteWorkspace: map[string]string{}, Policies: map[string]*firewall.Engine{}}
+	copy := Snapshot{Targets: append([]Target(nil), s.Targets...), RouteWorkspace: map[string]string{}, Policies: map[string]*firewall.Engine{}, Asleep: map[string]bool{}}
+	for id, asleep := range s.Asleep {
+		copy.Asleep[id] = asleep
+	}
 	for id, ws := range s.RouteWorkspace {
 		copy.RouteWorkspace[id] = ws
 	}
@@ -125,6 +132,27 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer release()
+	}
+	if a.hooks.Activity != nil {
+		if done := a.hooks.Activity(target.Route.ProjectID); done != nil {
+			defer done()
+		}
+	}
+	snapshot = a.snapshot.Load()
+	if snapshot.Asleep[target.Route.ProjectID] {
+		start := time.Now()
+		if a.hooks.Wake == nil || a.hooks.Wake(r.Context(), target.Route.ProjectID) != nil {
+			http.Error(w, "Startship: project failed to wake.", 503)
+			return
+		}
+		snapshot = a.snapshot.Load()
+		t = routing.MatchRoute(snapshot.Targets, r.Host, r.URL.Path)
+		if t == nil {
+			http.Error(w, "Startship: no route configured for this address.", 404)
+			return
+		}
+		target = *t
+		w.Header().Set("X-Startship-Woke", fmt.Sprint(time.Since(start).Milliseconds()))
 	}
 	d := target.Deployment
 	if d.Status != "running" {

@@ -27,3 +27,22 @@ For a local source build with the [installation example](../INSTALL.md#build-fro
 - Create a database or cache under workspace **Services**. In the project, use **Connections** to attach it, then redeploy so the running container receives the connection settings. Keep services private unless you need external access.
 - Use workspace **Volumes** for persistent storage, and **Backups** to schedule copies for a service backed by a volume.
 - To deploy matching GitHub pushes automatically, enable push deployment in the project overview and use the signed webhook URL and secret shown under **Source**. The webhook endpoint must be reachable by GitHub; do not expose raw dashboard port 8080 just for this.
+
+## Sleep when idle
+
+In the project overview, enable **Sleep when idle** and choose idle minutes (1–10080).
+This setting applies immediately. Startship stops all runtime containers in the active
+release without deleting them; static-only projects cannot enable it. In-flight
+requests, including long-lived WebSocket and SSE connections, keep the project awake.
+The idle timer starts again when the last request finishes.
+
+The next allowed request wakes the entire project and waits for its health checks
+before being proxied. There is no loading page or redirect, so API clients work
+normally, but that first request takes longer. A failed wake returns HTTP 503;
+the next request retries. The active release displays **Sleeping** while stopped.
+
+From the CLI, use `startship projects update ID '{"sleep_after":15}'` to configure
+idle minutes (`0` disables), `startship projects sleep ID` to sleep immediately,
+and `startship projects wake ID` to wake. Manual sleep is explicit and can interrupt
+in-flight connections. Sleep/wake requires deploy permission; configuring the timer
+requires project settings permission.

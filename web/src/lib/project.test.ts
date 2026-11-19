@@ -65,4 +65,15 @@ describe("project configuration", () => {
     expect(busyRelease(releases[1])).toBe(true);
     expect(busyRelease(releases[0])).toBe(false);
   });
+  it("describes sleeping projects without reporting their stopped containers as running", () => {
+    expect(
+      projectSummary([{ status: "running" }] as Container[], [{}], true),
+    ).toBe("1 container · sleeping · 1 domain route");
+    expect(projectSummary([], [], true)).toBe(
+      "0 containers · sleeping · 0 domain routes",
+    );
+    expect(projectSummary([], [])).toBe(
+      "0 containers · 0 running · 0 domain routes",
+    );
+  });
 });
