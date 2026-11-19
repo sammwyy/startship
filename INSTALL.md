@@ -15,11 +15,12 @@ sudo journalctl -u startshipd
 
 The installer verifies release checksums, installs `startship` and `startshipd` in `/usr/local/bin`, installs Nixpacks, and starts the daemon. It keeps existing settings in `/etc/startship/startshipd.env` and `/etc/startship/startship.toml`. By default, state lives in `/var/lib/startship`, including the SQLite database `startship.db`. The service runs as `startship` with Docker access. Without a running systemd, the script writes the units but cannot start them.
 
-To install a specific release instead of the latest, use the installer from that release and pass the same version through `sudo`:
+To install a specific release instead of the latest, replace `vX.Y.Z` with a tag from the [releases page](https://github.com/sammwyy/startship/releases). Use the installer from that tag and pass the same version through `sudo`:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/sammwyy/startship/v0.8.0/install.sh -o install.sh
-sudo env STARTSHIP_VERSION=v0.8.0 sh install.sh
+version=vX.Y.Z
+curl -fsSL "https://raw.githubusercontent.com/sammwyy/startship/$version/install.sh" -o install.sh
+sudo env STARTSHIP_VERSION="$version" sh install.sh
 ```
 
 ## Docker Compose
@@ -64,16 +65,17 @@ Both application router ports need to be available on the configured bind addres
 
 ## Upgrade
 
-Back up the daemon data and any service or application volumes you rely on before upgrading. A service backup alone does not cover the daemon database or unrelated volumes.
+**Pre-1.0 releases have no migration or compatibility guarantee.** A new release can break existing data or configuration. The daemon creates the current schema for a fresh database; it does not migrate older databases, and it may fail to start with one.
 
-- **Systemd install:** Run `startship update check` to check versions and `sudo startship update` to verify and install the latest release. The updater restarts the daemon. To select a release, run `sudo startship update v0.8.0` (replace the tag with the version you want); selecting an older release is a downgrade.
+Before changing versions, back up the daemon data directory, configuration, and any service or application volumes you need. A service backup alone does not cover the daemon database. If compatibility is uncertain, install fresh with an empty data directory or a new Compose data volume and configure the instance again. Keep the original data and configuration set aside.
+
+- **Systemd install:** Run `startship update check` to check versions and `sudo startship update` to verify and install the latest release. The updater restarts the daemon. To install a specific release, run `sudo startship update vX.Y.Z`, replacing `vX.Y.Z` with a tag from the [releases page](https://github.com/sammwyy/startship/releases).
 - **Dashboard or remote CLI:** A Platform Admin can use **Updates** or `startship update daemon` on a systemd install with the installer's updater running.
-- **Compose:** Update the checkout to the revision you want to run and rerun `docker compose up --build -d`. Keep the named data volume.
-- **Source:** Update the checkout, rerun `make build`, and restart using the same settings and data directory.
+- **Compose:** Build the desired revision with `docker compose up --build -d` after choosing which data volume and configuration to use.
+- **Source:** Build the desired revision with `make build`, then start the new daemon with the data directory and configuration you intend to use.
 
 ## Uninstall
 
 For a systemd install, run `sudo sh install.sh --uninstall` using the installer script. It removes the Startship CLI, daemon, and systemd units, but preserves the data, configuration, service account, and Nixpacks binary. It does not remove deployed workloads.
 
 For Compose, run `docker compose down` from the checkout to stop and remove the daemon container while keeping its data volume. Do not add `--volumes` unless you intend to remove Compose-managed data. For a source build, stop the daemon and remove the binaries; keep the data directory if you want to reuse it.
-*** End Patch
