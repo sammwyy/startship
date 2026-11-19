@@ -42,7 +42,14 @@ export function OverviewView() {
                         {new Date(release.created).toLocaleString()}
                       </time>
                     </div>
-                    <Badge status={release.status} />
+                    <Badge
+                      status={
+                        project.sleeping &&
+                        release.id === project.active_deployment
+                          ? "sleeping"
+                          : release.status
+                      }
+                    />
                   </Link>
                 ))}
               </div>

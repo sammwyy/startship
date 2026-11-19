@@ -150,6 +150,7 @@ export interface Project extends Workspace {
   active_deployment?: string;
 }
 export interface Container {
+  pipeline?: Pipeline;
   id: string;
   name: string;
   project_id: string;

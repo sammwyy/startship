@@ -8,12 +8,14 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { OverviewView } from "./OverviewView";
+import type { Container } from "../../services/types";
 
 const state = vi.hoisted(() => ({
   editable: true,
   refresh: vi.fn(),
   notify: vi.fn(),
   request: vi.fn(),
+  containers: [] as Container[],
   project: {
     id: "p1",
     name: "Storefront",
@@ -26,6 +28,7 @@ const state = vi.hoisted(() => ({
     port: 0,
     sleep_after: 0,
     sleeping: false,
+    active_deployment: "release-1",
   },
   releases: [
     {
@@ -38,7 +41,7 @@ const state = vi.hoisted(() => ({
   ],
 }));
 vi.mock("../../layouts/ProjectLayout", () => ({
-  useProject: () => ({ ...state, containers: [], routes: [] }),
+  useProject: () => ({ ...state, routes: [] }),
 }));
 vi.mock("../../providers/SessionProvider", () => ({
   useSession: () => ({ can: () => state.editable }),
@@ -55,6 +58,7 @@ describe("project overview", () => {
     state.editable = true;
     state.project.sleep_after = 0;
     state.project.sleeping = false;
+    state.containers = [];
   });
   const show = () =>
     render(
@@ -159,5 +163,50 @@ describe("project overview", () => {
       "Could not save",
     );
     expect(state.notify).not.toHaveBeenCalled();
+  });
+  it("disables idle sleep only when all containers are static", () => {
+    state.containers = [
+      {
+        id: "static",
+        name: "Site",
+        project_id: "p1",
+        port: 0,
+        pipeline: {
+          build: {},
+          test: { expect_exit_code: 0 },
+          deploy: { static: true },
+        },
+      },
+    ];
+    const view = show();
+    expect(
+      screen.getByRole("checkbox", { name: "Sleep when idle" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(
+        "Static-only projects have no runtime containers to stop.",
+      ),
+    ).toBeTruthy();
+    state.containers.push({
+      id: "runtime",
+      name: "API",
+      project_id: "p1",
+      port: 3000,
+    });
+    view.rerender(
+      <MemoryRouter>
+        <OverviewView />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("checkbox", { name: "Sleep when idle" }),
+    ).not.toBeDisabled();
+  });
+  it("shows the active release as sleeping without changing its stored status", () => {
+    state.project.sleeping = true;
+    show();
+    const link = screen.getByRole("link", { name: /abcdef1/ });
+    expect(link.querySelector(".badge.sleeping")).toHaveTextContent("sleeping");
+    expect(state.releases[0].status).toBe("running");
   });
 });

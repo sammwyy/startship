@@ -8,10 +8,12 @@ import { text } from "../lib/project";
 import { AsyncForm, Field } from "./ui";
 
 export function ProjectSettingsForm() {
-  const { project, refresh } = useProject(),
+  const { project, containers, refresh } = useProject(),
     { can } = useSession(),
     ui = useUI();
   const editable = can("project.settings", project);
+  const staticOnly =
+    containers.length > 0 && containers.every((c) => c.pipeline?.deploy.static);
   const [sleepEnabled, setSleepEnabled] = useState(!!project.sleep_after);
   useEffect(() => {
     setSleepEnabled(!!project.sleep_after);
@@ -34,9 +36,10 @@ export function ProjectSettingsForm() {
               name: text(form, "name"),
               root_dir: text(form, "root_dir"),
               auto_deploy: form.has("auto_deploy"),
-              sleep_after: form.has("sleep_enabled")
-                ? Number(text(form, "sleep_after"))
-                : 0,
+              sleep_after:
+                !staticOnly && form.has("sleep_enabled")
+                  ? Number(text(form, "sleep_after"))
+                  : 0,
             },
             "PATCH",
           );
@@ -78,13 +81,14 @@ export function ProjectSettingsForm() {
               <input
                 type="checkbox"
                 name="sleep_enabled"
-                checked={sleepEnabled}
+                checked={!staticOnly && sleepEnabled}
+                disabled={staticOnly}
                 onChange={(event) => setSleepEnabled(event.target.checked)}
                 aria-describedby="idle-sleep-help"
               />
               Sleep when idle
             </label>
-            {sleepEnabled && (
+            {!staticOnly && sleepEnabled && (
               <label className="idle-sleep-minutes">
                 <input
                   type="number"
@@ -99,6 +103,11 @@ export function ProjectSettingsForm() {
               </label>
             )}
           </div>
+          {staticOnly && (
+            <p className="small muted">
+              Static-only projects have no runtime containers to stop.
+            </p>
+          )}
           <p className="small muted" id="idle-sleep-help">
             Stops the project's containers after this long without requests; the
             next request wakes them (first request waits for the health check).

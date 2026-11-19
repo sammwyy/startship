@@ -48,6 +48,10 @@ Mutations stay on the REST API; their effects arrive over the socket.
 - POST `/api/projects/:id/sleep` or `/wake` requires `deploy`, is audited as `project.sleep` / `project.wake`, and returns the project.
 - Sleeping stops all containers in the active release without deleting them; deployment status stays `running`. Static deployments are skipped. Incoming allowed traffic wakes the whole project before proxying; that response includes `X-Startship-Woke` in milliseconds.
 - Sleep/wake changes publish project upserts to existing subscriptions.
+- Active requests (including SSE and WebSocket connections) prevent idle sleep.
+  The triggering wake request waits for health checks without a loading page;
+  a disconnect does not cancel the wake. Static-only projects reject sleep and
+  enabling idle sleep with HTTP 400.
 
 ## Firewall
 - Subscribe with `{"type":"subscribe","id":"fw","topic":"firewall","workspace_id":"..."}`.
