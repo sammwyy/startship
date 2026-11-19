@@ -99,7 +99,7 @@ func (a *Server) sleepProject(id string, idle bool) error {
 		return err
 	}
 	a.refresh()
-	log.Printf("Project sleeping after %d min idle", p.SleepAfter)
+	log.Printf("Project %q (%s) sleeping after %d min idle", p.Name, p.ID, p.SleepAfter)
 	return nil
 }
 
@@ -170,7 +170,7 @@ func (a *Server) startSleepingProject(id string, s *projectSleep) error {
 	}
 	a.projectActivity(id)
 	a.refresh()
-	log.Printf("Project woke in %.2fs", time.Since(start).Seconds())
+	log.Printf("Project %q (%s) woke in %.2fs", p.Name, p.ID, time.Since(start).Seconds())
 	return nil
 }
 

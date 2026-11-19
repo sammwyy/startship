@@ -24,6 +24,8 @@ const state = vi.hoisted(() => ({
     root_dir: ".",
     build_type: "auto",
     port: 0,
+    sleep_after: 0,
+    sleeping: false,
   },
   releases: [
     {
@@ -51,6 +53,8 @@ describe("project overview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.editable = true;
+    state.project.sleep_after = 0;
+    state.project.sleeping = false;
   });
   const show = () =>
     render(
@@ -86,6 +90,7 @@ describe("project overview", () => {
           name: "New storefront",
           auto_deploy: true,
           root_dir: ".",
+          sleep_after: 0,
         },
         "PATCH",
       ),
@@ -99,5 +104,60 @@ describe("project overview", () => {
       screen.getByLabelText("Project name").closest("fieldset")?.disabled,
     ).toBe(true);
     expect(screen.getByRole("link", { name: /abcdef1/ })).toBeTruthy();
+  });
+  it("saves enabled idle sleep in minutes, defaulting to 15", async () => {
+    show();
+    expect(
+      screen.queryByRole("spinbutton", { name: "Idle minutes" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sleep when idle" }));
+    expect(
+      screen.getByRole("spinbutton", { name: "Idle minutes" }),
+    ).toHaveProperty("value", "15");
+    fireEvent.change(screen.getByRole("spinbutton", { name: "Idle minutes" }), {
+      target: { value: "25" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({ sleep_after: 25 }),
+        "PATCH",
+      ),
+    );
+    await waitFor(() =>
+      expect(state.notify).toHaveBeenCalledWith(
+        "Project saved; idle sleep settings apply immediately",
+      ),
+    );
+  });
+  it("saves zero when idle sleep is disabled", async () => {
+    state.project.sleep_after = 30;
+    show();
+    expect(
+      screen.getByRole("spinbutton", { name: "Idle minutes" }),
+    ).toHaveProperty("value", "30");
+    expect(screen.getByText("After 30 min")).toBeTruthy();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sleep when idle" }));
+    expect(
+      screen.queryByRole("spinbutton", { name: "Idle minutes" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({ sleep_after: 0 }),
+        "PATCH",
+      ),
+    );
+  });
+  it("shows save errors without claiming settings were applied", async () => {
+    state.request.mockRejectedValueOnce(new Error("Could not save"));
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Could not save",
+    );
+    expect(state.notify).not.toHaveBeenCalled();
   });
 });

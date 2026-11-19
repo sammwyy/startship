@@ -15,7 +15,7 @@ import { useSession } from "../providers/SessionProvider";
 import { useUI } from "../providers/UIProvider";
 import { projectSections, text } from "../lib/project";
 import { Brand, Icon } from "../components/Icon";
-import { Field, ThemeButton } from "../components/ui";
+import { Badge, Field, ThemeButton } from "../components/ui";
 import { Popover } from "../components/Popover";
 import { SystemUpdateLink } from "../components/SystemUpdateLink";
 import { useLiveStatus, useLiveSubscription } from "../providers/LiveProvider";
@@ -184,6 +184,7 @@ export function DashboardLayout() {
               {navLink(url, "All projects", "back")}
               <div className="sidebar-project">
                 <strong>{project.name}</strong>
+                {project.sleeping && <Badge status="sleeping" />}
                 <Link
                   className="sidebar-source"
                   to={`/project/${project.id}/source`}

@@ -99,6 +99,16 @@ export function OverviewView() {
                 <dt>Deploy on push</dt>
                 <dd>{project.auto_deploy ? "Enabled" : "Disabled"}</dd>
               </div>
+              <div>
+                <dt>Sleep when idle</dt>
+                <dd>
+                  {project.sleeping
+                    ? "Sleeping"
+                    : project.sleep_after
+                      ? `After ${project.sleep_after} min`
+                      : "Off"}
+                </dd>
+              </div>
             </dl>
           </section>
         </aside>

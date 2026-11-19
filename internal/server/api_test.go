@@ -56,6 +56,33 @@ func TestProjectSleepSettings(t *testing.T) {
 	}
 }
 
+func TestProjectSleepWakeAudit(t *testing.T) {
+	a := testServer(t)
+	uid, err := a.createUser("sleeper", "password123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := a.api()
+	cookie := accountLogin(t, h, "sleeper", "password123")
+	ws := a.store.List("workspaces", uid)[0]
+	p := Record{ID: "sleep-audit", Kind: "projects", Owner: uid, Parent: ws.ID, WorkspaceID: ws.ID, Name: "Demo", Sleeping: true}
+	if err := a.store.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{"sleep", "wake"} {
+		if action == "wake" {
+			if err := a.store.Update(p.ID, func(r *Record) { r.Sleeping = false }); err != nil {
+				t.Fatal(err)
+			}
+		}
+		accountRequest(t, h, "POST", "projects/"+p.ID+"/"+action, "", cookie, 200)
+		entries, err := a.activity(scopeProject, p.ID, false)
+		if err != nil || len(entries) == 0 || entries[0].Action != "project."+action {
+			t.Fatalf("%s: %+v, %v", action, entries, err)
+		}
+	}
+}
+
 func TestRecordCreationTimes(t *testing.T) {
 	a := testServer(t)
 	start := time.Now()
