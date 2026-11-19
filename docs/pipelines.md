@@ -32,9 +32,10 @@ expects status 200 unless overridden.
 
 Auto detects a template per container, overlaying only the project's test stage,
 build engine, nonzero deploy port and HTTP health settings. Explicit templates/custom use one
-container at `root_dir`. Without a pipeline, legacy `test_command` and `port`
-still apply. Releases snapshot configuration and retain resolved pipelines for
-redeploy health checks.
+container at `root_dir`. With automatic detection and no pipeline configured,
+`test_command` supplies the test command and a nonzero project `port` overrides
+the detected port. Releases snapshot configuration and retain resolved pipelines
+for redeploy health checks.
 
 ## Health checks
 
