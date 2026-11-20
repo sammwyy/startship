@@ -1021,19 +1021,12 @@
 .overview-aside {
   min-width: 0;
 }
-.preview-setting,
 .preview-row-heading,
 .preview-row-details {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-}
-.preview-setting {
-  margin: 0;
-}
-.preview-setting input.switch:focus-visible {
-  box-shadow: none;
 }
 .preview-row {
   border-top: 1px solid var(--line);

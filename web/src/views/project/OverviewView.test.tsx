@@ -115,9 +115,9 @@ describe("project overview", () => {
     ).toBe(true);
     expect(screen.getByRole("link", { name: /abcdef1/ })).toBeTruthy();
   });
-  it("saves branch previews using the settings switch", async () => {
+  it("saves branch previews using the settings checkbox", async () => {
     show();
-    fireEvent.click(screen.getByRole("switch", { name: "Branch previews" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Branch previews" }));
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
     await waitFor(() =>
       expect(state.request).toHaveBeenCalledWith(

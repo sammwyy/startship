@@ -77,16 +77,14 @@ export function ProjectSettingsForm() {
           Deploy project on source pushes
         </label>
         <div className="idle-sleep-settings">
-          <label className="preview-setting">
-            <span>Branch previews</span>
+          <label className="inline-check">
             <input
               type="checkbox"
-              role="switch"
-              className="switch"
               name="previews"
               defaultChecked={project.previews}
               aria-describedby="branch-previews-help"
             />
+            Branch previews
           </label>
           <p className="small muted" id="branch-previews-help">
             Pushes to other branches deploy at &lt;branch&gt;--&lt;host&gt;;
