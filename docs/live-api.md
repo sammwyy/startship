@@ -42,6 +42,16 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 
 Mutations stay on the REST API; their effects arrive over the socket.
 
+## Branch previews
+Projects opt in with `PATCH /api/projects/:id` (`{"previews":true}`).
+`GET /api/projects/:id/previews` lists previews; `DELETE /api/projects/:id/previews/:preview_id`
+removes one (deploy permission). The `project` snapshot also contains `previews[]`,
+with `upsert`/`delete` kind `preview`; clients need not poll. Preview records contain
+`project_id`, `branch`, `active_deployment`, `status`, `commit`, `sleeping`, `created`
+and HTTP `addresses[]`. Releases and container deployments carry `preview_id`.
+Preview hosts must be allowed by the workspace's domains. Preview containers sleep
+after the project's idle timeout, or five minutes when that timeout is disabled.
+
 ## Project sleep
 - Projects include `sleep_after` (idle minutes, 0 = disabled, maximum 10080) and the read-only `sleeping` flag. Zero/false values may be omitted.
 - PATCH `/api/projects/:id` with `{"sleep_after":10}` requires `project.settings`.
