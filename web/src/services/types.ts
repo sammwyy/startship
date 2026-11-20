@@ -132,6 +132,7 @@ export interface Workspace extends Scoped {
   created?: string;
 }
 export interface Project extends Workspace {
+  previews?: boolean;
   sleep_after?: number;
   sleeping?: boolean;
   resources_updated?: string;
@@ -162,6 +163,8 @@ export interface Container {
   release_id?: string;
 }
 export interface Release {
+  preview_id?: string;
+  branch?: string;
   id: string;
   project_id: string;
   status: string;
@@ -171,6 +174,16 @@ export interface Release {
   redeploy_of?: string;
   redeployable?: boolean;
   log?: string;
+}
+export interface Preview {
+  id: string;
+  project_id: string;
+  branch: string;
+  status: string;
+  active_deployment?: string;
+  sleeping?: boolean;
+  commit?: string;
+  addresses?: string[];
 }
 export interface DomainRoute {
   id: string;

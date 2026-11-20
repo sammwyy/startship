@@ -221,7 +221,26 @@ func (a *Server) buildProject(id string) {
 			a.store.Update(revision, func(r *Record) { r.Status = "failed" })
 		}
 		a.store.Update(id, func(r *Record) { r.Status = "failed"; now := time.Now().UTC(); r.Finished = &now })
+		if job.PreviewID != "" {
+			if preview, e := a.store.Get(job.PreviewID); e != nil {
+				for _, revision := range revisions {
+					d, e := a.store.Get(revision)
+					if e == nil {
+						a.store.Delete(d)
+					}
+				}
+				a.store.Delete(job)
+			} else if preview.Active == "" {
+				a.store.Update(preview.ID, func(r *Record) { r.Status = "failed" })
+			}
+		}
 	}()
+	if job.PreviewID != "" {
+		if _, e := a.store.Get(job.PreviewID); e != nil {
+			err = fmt.Errorf("preview no longer exists")
+			return
+		}
+	}
 	if current, e := a.store.Get(p.ID); e != nil || current.Owner != p.Owner {
 		err = fmt.Errorf("project no longer exists")
 		return
@@ -290,13 +309,14 @@ func (a *Server) buildProject(id string) {
 		c.RootDir, c.BuildType, c.Port, c.Env, c.TestCommand = candidate.RootDir, candidate.BuildType, candidate.Port, maps.Clone(p.Env), p.TestCommand
 		c.Pipeline = candidate.Pipeline
 		c.ReleaseID = id
-		if _, e := a.store.Get(c.ID); e != nil {
+		if _, e := a.store.Get(c.ID); e != nil && job.PreviewID == "" {
 			if err = a.store.Save(c); err != nil {
 				return
 			}
 		}
 		d := Record{ID: randomID(), Kind: "deployments", Owner: p.Owner, Parent: c.ID, AppID: c.ID, ProjectID: p.ID, ReleaseID: id, Status: "queued", Created: time.Now().UTC(), RootDir: c.RootDir, BuildType: c.BuildType, Port: c.Port, Name: c.Name, NoCache: job.NoCache}
 		d.Pipeline = c.Pipeline
+		d.PreviewID = job.PreviewID
 		if job.RedeployOf != "" {
 			source := artifacts[i]
 			d.RedeployOf, d.Image, d.StaticDir, d.Commit = source.ID, source.Image, source.StaticDir, source.Commit
@@ -315,7 +335,11 @@ func (a *Server) buildProject(id string) {
 			return
 		}
 	}
-	err = a.activateProject(p.ID, id, containers, revisions)
+	if job.PreviewID != "" {
+		err = a.activatePreview(job, revisions)
+	} else {
+		err = a.activateProject(p.ID, id, containers, revisions)
+	}
 	if err == nil {
 		fmt.Fprintln(logger, "Project deployment healthy; all containers switched together")
 	}
@@ -423,6 +447,10 @@ func (a *Server) projectDeployAPI(w http.ResponseWriter, r *http.Request, p Reco
 		source, err := a.store.Get(id)
 		if err != nil || source.Kind != "releases" || source.Owner != p.Owner || source.ProjectID != p.ID {
 			fail(w, 404, "project release not found")
+			return
+		}
+		if source.PreviewID != "" {
+			fail(w, 409, "preview releases cannot be redeployed")
 			return
 		}
 		if source.Status != "running" && source.Status != "superseded" {

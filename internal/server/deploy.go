@@ -612,7 +612,12 @@ func (a *Server) restore() {
 	for _, d := range a.store.List("deployments", "") {
 		switch d.Status {
 		case "running":
-			if p, err := a.store.Get(d.ProjectID); err == nil && p.Sleeping {
+			if d.PreviewID != "" {
+				if p, err := a.store.Get(d.PreviewID); err != nil || p.Sleeping {
+					continue
+				}
+			}
+			if p, err := a.store.Get(d.ProjectID); d.PreviewID == "" && err == nil && p.Sleeping {
 				continue
 			}
 			if d.Container != "" {

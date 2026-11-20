@@ -87,6 +87,9 @@ func (a *Server) refreshLocked() error {
 	for _, p := range a.store.List("projects", "") {
 		asleep[p.ID] = p.Sleeping
 	}
+	for _, p := range a.store.List("previews", "") {
+		asleep[p.ID] = p.Sleeping
+	}
 	for _, r := range a.store.List("routes", "") {
 		app, err := a.store.Get(r.AppID)
 		if err != nil {
@@ -112,6 +115,25 @@ func (a *Server) refreshLocked() error {
 				ws = project.Parent
 			}
 			routeWorkspace[r.ID] = ws
+			for _, preview := range a.previews(projectID) {
+				release, e := a.store.Get(preview.Active)
+				if e != nil || release.Status != "running" {
+					continue
+				}
+				pr := r
+				pr.ID, pr.ProjectID, pr.Host = r.ID+":"+preview.ID, preview.ID, previewHost(preview.Branch, r.Host)
+				pr.CertificateID, pr.ForceHTTPS = "", false
+				if !a.routeAllowed(ws, pr.Host) {
+					continue
+				}
+				for _, id := range release.ContainerReleases {
+					pd, e := a.store.Get(id)
+					if e == nil && pd.AppID == app.ID && pd.Status == "running" {
+						targets = append(targets, Target{Route: pr, Deployment: pd, Port: port})
+						routeWorkspace[pr.ID] = ws
+					}
+				}
+			}
 		}
 	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].Route.ID < targets[j].Route.ID })

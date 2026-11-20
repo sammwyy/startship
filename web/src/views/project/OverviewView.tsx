@@ -5,9 +5,15 @@ import { ScopedActivityTabs } from "../../components/ScopedActivityTabs";
 import { ProjectSettingsForm } from "../../components/ProjectSettingsForm";
 import { Badge } from "../../components/ui";
 import { Icon } from "../../components/Icon";
+import { useSession } from "../../providers/SessionProvider";
+import { useUI } from "../../providers/UIProvider";
+import { request } from "../../services/api";
 
 export function OverviewView() {
-  const { project, releases, containers, routes } = useProject();
+  const { project, releases, containers, routes, previews } = useProject();
+  const { can } = useSession(),
+    ui = useUI();
+  const liveReleases = releases.filter((release) => !release.preview_id);
   const base = `/project/${project.id}`;
   return (
     <>
@@ -25,9 +31,9 @@ export function OverviewView() {
                 View all <Icon name="next" />
               </Link>
             </div>
-            {releases.length ? (
+            {liveReleases.length ? (
               <div className="overview-releases">
-                {releases.slice(0, 3).map((release) => (
+                {liveReleases.slice(0, 3).map((release) => (
                   <Link
                     key={release.id}
                     to={`${base}/deployments?release=${encodeURIComponent(release.id)}`}
@@ -66,6 +72,89 @@ export function OverviewView() {
               </div>
             )}
           </section>
+          {project.previews && (
+            <section className="panel overview-panel" aria-label="Previews">
+              <div className="section-head">
+                <h2>Previews</h2>
+                <span className="small muted">{previews.length}</span>
+              </div>
+              {previews.length ? (
+                previews.map((preview) => {
+                  const latest = releases.find(
+                    (release) => release.preview_id === preview.id,
+                  );
+                  const status = preview.sleeping
+                    ? "sleeping"
+                    : [
+                          "queued",
+                          "building",
+                          "testing",
+                          "starting",
+                          "ready",
+                        ].includes(latest?.status || preview.status)
+                      ? "building"
+                      : latest?.status || preview.status;
+                  return (
+                    <div className="preview-row" key={preview.id}>
+                      <div className="preview-row-heading">
+                        <span className="release-id">
+                          <Icon name="branch" />
+                          {preview.branch}
+                        </span>
+                        <Badge status={status} />
+                      </div>
+                      <div className="preview-row-details">
+                        <code className="small muted">
+                          {preview.commit?.slice(0, 7) || "No commit yet"}
+                        </code>
+                        {can("deploy", project) && (
+                          <button
+                            className="subtle-link"
+                            type="button"
+                            aria-label={`Remove preview ${preview.branch}`}
+                            onClick={() =>
+                              ui.dialog({
+                                title: `Remove preview ${preview.branch}?`,
+                                description:
+                                  "This stops its containers and removes its preview address. The live release is unaffected.",
+                                submit: "Remove preview",
+                                onSubmit: async () => {
+                                  await request(
+                                    `projects/${project.id}/previews/${preview.id}`,
+                                    undefined,
+                                    "DELETE",
+                                  );
+                                  ui.notify("Preview removed");
+                                },
+                              })
+                            }
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      {preview.addresses?.map((address) => (
+                        <a
+                          className="preview-address"
+                          key={address}
+                          href={address}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {address}
+                          <Icon name="next" />
+                        </a>
+                      ))}
+                    </div>
+                  );
+                })
+              ) : (
+                <p className="small muted">
+                  No previews yet. Push to another branch to deploy one.
+                </p>
+              )}
+            </section>
+          )}
           <section className="panel overview-panel">
             <div className="section-head">
               <h2>Project information</h2>

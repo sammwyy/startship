@@ -1021,6 +1021,50 @@
 .overview-aside {
   min-width: 0;
 }
+.preview-row-heading,
+.preview-row-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.preview-row {
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+  min-width: 0;
+}
+.preview-row:last-child {
+  padding-bottom: 0;
+}
+.preview-row-heading .release-id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.preview-row-heading .badge {
+  flex-shrink: 0;
+}
+.preview-row-details {
+  margin-top: 8px;
+}
+.preview-row-details button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  min-height: 24px;
+}
+.preview-address {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+.preview-address .icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
 .overview-aside {
   display: grid;
   gap: 24px;
