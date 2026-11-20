@@ -211,6 +211,9 @@ describe("live query cache", () => {
       containers: [{ id: "new", project_id: "p1" }],
       releases: [],
       routes: [],
+      previews: [
+        { id: "pv", project_id: "p1", branch: "feature", status: "running" },
+      ],
     };
     applyLiveMessage(
       client,
@@ -220,6 +223,50 @@ describe("live query cache", () => {
     expect(client.getQueryData(queries.project("p1").queryKey)).toEqual(
       data.project,
     );
+    expect(client.getQueryData(queries.previews("p1").queryKey)).toEqual(
+      data.previews,
+    );
+    applyLiveMessage(
+      client,
+      { topic: "project", project_id: "p1" },
+      message({
+        type: "upsert",
+        kind: "preview",
+        record: {
+          id: "pv",
+          project_id: "p1",
+          branch: "feature",
+          status: "running",
+          sleeping: true,
+        },
+      }),
+    );
+    expect(client.getQueryData(queries.previews("p1").queryKey)).toEqual([
+      expect.objectContaining({ sleeping: true }),
+    ]);
+    applyLiveMessage(
+      client,
+      { topic: "project", project_id: "p1" },
+      message({
+        type: "upsert",
+        kind: "preview",
+        record: {
+          id: "pv",
+          project_id: "p1",
+          branch: "feature",
+          status: "running",
+        },
+      }),
+    );
+    expect(client.getQueryData(queries.previews("p1").queryKey)).toEqual([
+      { id: "pv", project_id: "p1", branch: "feature", status: "running" },
+    ]);
+    applyLiveMessage(
+      client,
+      { topic: "project", project_id: "p1" },
+      message({ type: "delete", kind: "preview", record_id: "pv" }),
+    );
+    expect(client.getQueryData(queries.previews("p1").queryKey)).toEqual([]);
     expect(client.getQueryData(queries.containers().queryKey)).toEqual([
       { id: "other", project_id: "p2", name: "other", port: 80 },
       { id: "new", project_id: "p1" },

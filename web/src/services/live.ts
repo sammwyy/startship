@@ -5,6 +5,7 @@ import type {
   Container,
   DomainRoute,
   Project,
+  Preview,
   Release,
   SystemVersion,
   UpdateInfo,
@@ -37,8 +38,8 @@ export interface LiveMessage {
   id: string;
   topic: LiveSubscription["topic"];
   data?: unknown;
-  kind?: "project" | "container" | "release" | "route";
-  record?: Project | Container | Release | DomainRoute;
+  kind?: "project" | "container" | "release" | "route" | "preview";
+  record?: Project | Container | Release | DomainRoute | Preview;
   record_id?: string;
   reset?: boolean;
   error?: string;
@@ -191,6 +192,7 @@ export class LiveConnection {
 function replaceRecord<T extends { id: string }>(
   list: T[] | undefined,
   message: LiveMessage,
+  merge = true,
 ): T[] | undefined {
   if (!list) return list;
   if (message.type === "delete")
@@ -198,7 +200,9 @@ function replaceRecord<T extends { id: string }>(
   if (!message.record) return list;
   const record = message.record as unknown as T;
   return list.some((r) => r.id === record.id)
-    ? list.map((r) => (r.id === record.id ? { ...r, ...record } : r))
+    ? list.map((r) =>
+        r.id === record.id ? (merge ? { ...r, ...record } : record) : r,
+      )
     : [...list, record];
 }
 export function applyLiveMessage(
@@ -247,6 +251,7 @@ export function applyLiveMessage(
       container: queries.containers(spec.project_id).queryKey,
       release: queries.releases(spec.project_id).queryKey,
       route: queries.routes(spec.project_id).queryKey,
+      preview: queries.previews(spec.project_id).queryKey,
     };
     for (const queryKey of [
       ...Object.values(key),
@@ -260,11 +265,13 @@ export function applyLiveMessage(
         containers: Container[];
         releases: Release[];
         routes: DomainRoute[];
+        previews: Preview[];
       };
       client.setQueryData(key.project, data.project);
       client.setQueryData(key.container, data.containers);
       client.setQueryData(key.release, data.releases);
       client.setQueryData(key.route, data.routes);
+      client.setQueryData(key.preview, data.previews);
       for (const [query, records] of [
         [queries.containers().queryKey, data.containers],
         [queries.releases().queryKey, data.releases],
@@ -283,9 +290,9 @@ export function applyLiveMessage(
         void client.resetQueries({ queryKey: key.project, exact: true });
       else client.setQueryData(key.project, event.record as Project);
     } else if (event.kind) {
-      client.setQueryData<(Container | Release | DomainRoute)[]>(
+      client.setQueryData<(Container | Release | DomainRoute | Preview)[]>(
         key[event.kind],
-        (old) => replaceRecord(old, event),
+        (old) => replaceRecord(old, event, event.kind !== "preview"),
       );
       if (event.kind === "container")
         client.setQueryData<Container[]>(queries.containers().queryKey, (old) =>

@@ -51,6 +51,7 @@ function show() {
     sleep_after: 15,
   };
   client.setQueryData(queries.project("p1").queryKey, project);
+  client.setQueryData(queries.previews("p1").queryKey, []);
   client.setQueryData(queries.containers("p1").queryKey, [
     {
       id: "container",

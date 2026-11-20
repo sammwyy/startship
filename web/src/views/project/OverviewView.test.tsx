@@ -8,13 +8,15 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { OverviewView } from "./OverviewView";
-import type { Container } from "../../services/types";
+import type { Container, Preview } from "../../services/types";
 
 const state = vi.hoisted(() => ({
   editable: true,
   refresh: vi.fn(),
   notify: vi.fn(),
   request: vi.fn(),
+  dialog: vi.fn(),
+  previews: [] as Preview[],
   containers: [] as Container[],
   project: {
     id: "p1",
@@ -23,6 +25,7 @@ const state = vi.hoisted(() => ({
     git_url: "https://github.com/team/storefront",
     branch: "production",
     auto_deploy: true,
+    previews: false,
     root_dir: ".",
     build_type: "auto",
     port: 0,
@@ -47,7 +50,7 @@ vi.mock("../../providers/SessionProvider", () => ({
   useSession: () => ({ can: () => state.editable }),
 }));
 vi.mock("../../providers/UIProvider", () => ({
-  useUI: () => ({ notify: state.notify }),
+  useUI: () => ({ notify: state.notify, dialog: state.dialog }),
 }));
 vi.mock("../../services/api", () => ({ request: state.request }));
 
@@ -59,6 +62,8 @@ describe("project overview", () => {
     state.project.sleep_after = 0;
     state.project.sleeping = false;
     state.containers = [];
+    state.previews = [];
+    state.project.previews = false;
   });
   const show = () =>
     render(
@@ -93,6 +98,7 @@ describe("project overview", () => {
         {
           name: "New storefront",
           auto_deploy: true,
+          previews: false,
           root_dir: ".",
           sleep_after: 0,
         },
@@ -108,6 +114,67 @@ describe("project overview", () => {
       screen.getByLabelText("Project name").closest("fieldset")?.disabled,
     ).toBe(true);
     expect(screen.getByRole("link", { name: /abcdef1/ })).toBeTruthy();
+  });
+  it("saves branch previews using the settings switch", async () => {
+    show();
+    fireEvent.click(screen.getByRole("switch", { name: "Branch previews" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({ previews: true }),
+        "PATCH",
+      ),
+    );
+  });
+  it("hides disabled previews and shows an opted-in empty state", () => {
+    const view = show();
+    expect(screen.queryByRole("region", { name: "Previews" })).toBeNull();
+    state.project.previews = true;
+    view.rerender(
+      <MemoryRouter>
+        <OverviewView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/No previews yet/)).toBeTruthy();
+  });
+  it("shows live preview changes and confirms removal without polling", async () => {
+    state.project.previews = true;
+    state.previews = [
+      {
+        id: "pv",
+        project_id: "p1",
+        branch: "feature-x",
+        status: "running",
+        commit: "123456789",
+        addresses: ["http://feature-x--demo.localhost/"],
+      },
+    ];
+    const view = show();
+    expect(screen.getByText("feature-x")).toBeTruthy();
+    expect(screen.getByText("1234567")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: /feature-x--demo.localhost/ }),
+    ).toHaveAttribute("href", "http://feature-x--demo.localhost/");
+    state.previews[0].sleeping = true;
+    view.rerender(
+      <MemoryRouter>
+        <OverviewView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("sleeping")).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove preview feature-x" }),
+    );
+    const options = state.dialog.mock.calls[0][0];
+    expect(options.title).toContain("feature-x");
+    await options.onSubmit();
+    expect(state.request).toHaveBeenCalledWith(
+      "projects/p1/previews/pv",
+      undefined,
+      "DELETE",
+    );
+    expect(state.refresh).not.toHaveBeenCalled();
   });
   it("saves enabled idle sleep in minutes, defaulting to 15", async () => {
     show();

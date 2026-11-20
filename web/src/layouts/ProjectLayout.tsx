@@ -7,11 +7,13 @@ import type {
   Container,
   DomainRoute,
   Project,
+  Preview,
   Release,
 } from "../services/types";
 
 interface ProjectContext {
   project: Project;
+  previews: Preview[];
   containers: Container[];
   releases: Release[];
   routes: DomainRoute[];
@@ -27,12 +29,14 @@ export function ProjectLayout() {
     { data: allContainers },
     { data: rawReleases },
     { data: routes },
+    { data: previews },
   ] = useSuspenseQueries({
     queries: [
       queries.project(id),
       queries.containers(id),
       queries.releases(id),
       queries.routes(id),
+      queries.previews(id),
     ],
   });
   const releases = sortReleases(rawReleases);
@@ -51,6 +55,7 @@ export function ProjectLayout() {
       context={
         {
           project,
+          previews,
           containers,
           releases,
           routes,

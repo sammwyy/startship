@@ -55,14 +55,16 @@ export function DeploymentsView() {
               />
               Build without cache
             </label>
-            <button
-              disabled={
-                busy || !log.data?.redeployable || !can("deploy", project)
-              }
-              onClick={() => ui.run(() => deploy(true))}
-            >
-              Redeploy selected
-            </button>
+            {!releases.find((r) => r.id === selected)?.preview_id && (
+              <button
+                disabled={
+                  busy || !log.data?.redeployable || !can("deploy", project)
+                }
+                onClick={() => ui.run(() => deploy(true))}
+              >
+                Redeploy selected
+              </button>
+            )}
             <button
               className="primary"
               disabled={busy || !project.git_url || !can("deploy", project)}
@@ -101,6 +103,9 @@ export function DeploymentsView() {
                   />
                 </span>
                 <span className="release-meta">
+                  {r.preview_id && (
+                    <span className="badge">Preview · {r.branch}</span>
+                  )}
                   <time>{new Date(r.created).toLocaleString()}</time>
                   <span>
                     {r.container_releases?.length || 0} container

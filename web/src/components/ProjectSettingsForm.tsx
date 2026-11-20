@@ -36,6 +36,7 @@ export function ProjectSettingsForm() {
               name: text(form, "name"),
               root_dir: text(form, "root_dir"),
               auto_deploy: form.has("auto_deploy"),
+              previews: form.has("previews"),
               sleep_after:
                 !staticOnly && form.has("sleep_enabled")
                   ? Number(text(form, "sleep_after"))
@@ -75,6 +76,23 @@ export function ProjectSettingsForm() {
           />
           Deploy project on source pushes
         </label>
+        <div className="idle-sleep-settings">
+          <label className="preview-setting">
+            <span>Branch previews</span>
+            <input
+              type="checkbox"
+              role="switch"
+              className="switch"
+              name="previews"
+              defaultChecked={project.previews}
+              aria-describedby="branch-previews-help"
+            />
+          </label>
+          <p className="small muted" id="branch-previews-help">
+            Pushes to other branches deploy at &lt;branch&gt;--&lt;host&gt;;
+            removed when deleted or merged, and sleep when idle.
+          </p>
+        </div>
         <div className="idle-sleep-settings">
           <div className="idle-sleep-control">
             <label className="inline-check">
