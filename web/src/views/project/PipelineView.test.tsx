@@ -103,6 +103,9 @@ describe("project pipeline", () => {
       const option = await screen.findByRole("radio", { name: "Buildpacks" });
       await waitFor(() => expect(option).toBeDisabled());
       expect(option).toHaveAccessibleDescription(reason);
+      expect(screen.getAllByText(reason)).toHaveLength(1);
+      expect(screen.getByText(reason)).toHaveClass("danger");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
       expect(
         screen.queryByText("Paketo app detection."),
       ).not.toBeInTheDocument();
@@ -110,9 +113,9 @@ describe("project pipeline", () => {
       else expect(option).not.toBeChecked();
       expect(screen.getByRole("radio", { name: "Nixpacks" })).toBeEnabled();
       if (selected) {
-        expect(screen.getByRole("alert")).toHaveTextContent(reason);
         fireEvent.click(screen.getByRole("radio", { name: "Nixpacks" }));
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(screen.getByRole("radio", { name: "Nixpacks" })).toBeChecked();
+        expect(screen.getAllByText(reason)).toHaveLength(1);
       }
     },
   );

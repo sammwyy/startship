@@ -107,7 +107,6 @@
 .pipeline-editor-tabs .pipeline-stage-body > label:has(textarea),
 .pipeline-editor-tabs .pipeline-stage-body > .inline-check,
 .pipeline-editor-tabs .pipeline-stage-body > p,
-.pipeline-editor-tabs .pipeline-stage-body > .form-error,
 .pipeline-editor-tabs .pipeline-stage-body > .pipeline-auto-note {
   grid-column: 1 / -1;
 }
@@ -164,7 +163,9 @@
   outline-offset: 2px;
 }
 .pipeline-engine-option:has(input:disabled) {
-  cursor: default;
+  cursor: not-allowed;
+  background: var(--panel);
+  border-style: dashed;
 }
 .pipeline-engine-name {
   display: flex;

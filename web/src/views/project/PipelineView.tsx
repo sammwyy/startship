@@ -423,7 +423,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                         {option.name}
                       </span>
                       <span
-                        className="small muted"
+                        className={`small ${unavailable[option.id] ? "danger" : "muted"}`}
                         id={`engine-hint-${option.id}`}
                       >
                         {unavailable[option.id] || option.hint}
@@ -432,9 +432,6 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                   ))}
                 </div>
               </fieldset>
-              {unavailable[engine] && (
-                <ErrorMessage error={unavailable[engine]} />
-              )}
               {engine !== "docker" ? null : auto ? (
                 <DetectedNote />
               ) : (
