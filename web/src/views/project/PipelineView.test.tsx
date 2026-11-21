@@ -16,6 +16,7 @@ const state = vi.hoisted(() => ({
   refresh: vi.fn(),
   notify: vi.fn(),
   request: vi.fn(),
+  unavailable: {} as Record<string, string>,
   project: {
     id: "p1",
     name: "Storefront",
@@ -69,12 +70,16 @@ const staticDeploy = {
   expect_status: 0,
 };
 function show(entry = "/") {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  client.setQueryData(["system/version"], {
+    version: "dev",
+    commit: "",
+    unavailable_engines: state.unavailable,
+  });
   return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
+    <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[entry]}>
         <PipelineView />
       </MemoryRouter>
@@ -82,6 +87,35 @@ function show(entry = "/") {
   );
 }
 describe("project pipeline", () => {
+  it.each([false, true])(
+    "disables unavailable engines (already selected: %s)",
+    async (selected) => {
+      const reason =
+        "Buildpacks needs a linux/amd64 server; this one is linux/arm64. Use Dockerfile or Nixpacks.";
+      state.unavailable = { buildpacks: reason };
+      if (selected)
+        state.project.pipeline = {
+          build: { engine: "buildpacks" },
+          test: { expect_exit_code: 0 },
+          deploy: {},
+        };
+      show();
+      const option = await screen.findByRole("radio", { name: "Buildpacks" });
+      await waitFor(() => expect(option).toBeDisabled());
+      expect(option).toHaveAccessibleDescription(reason);
+      expect(
+        screen.queryByText("Paketo app detection."),
+      ).not.toBeInTheDocument();
+      if (selected) expect(option).toBeChecked();
+      else expect(option).not.toBeChecked();
+      expect(screen.getByRole("radio", { name: "Nixpacks" })).toBeEnabled();
+      if (selected) {
+        expect(screen.getByRole("alert")).toHaveTextContent(reason);
+        fireEvent.click(screen.getByRole("radio", { name: "Nixpacks" }));
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      }
+    },
+  );
   it.each(["nixpacks", "buildpacks"] as const)(
     "selects %s without changing the strategy or test/deploy settings",
     async (engine) => {
@@ -176,6 +210,7 @@ describe("project pipeline", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.editable = true;
+    state.unavailable = {};
     state.project = {
       id: "p1",
       name: "Storefront",

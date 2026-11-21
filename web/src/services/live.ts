@@ -90,7 +90,11 @@ export class LiveConnection {
           typeof message.version === "string" &&
           typeof message.commit === "string"
         )
-          this.onReady({ version: message.version, commit: message.commit });
+          this.onReady({
+            version: message.version,
+            commit: message.commit,
+            unavailable_engines: message.unavailable_engines,
+          });
         for (const sub of this.subscriptions.values())
           this.send({ type: "subscribe", id: sub.id, ...sub.spec });
         return;

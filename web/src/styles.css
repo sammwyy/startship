@@ -107,6 +107,7 @@
 .pipeline-editor-tabs .pipeline-stage-body > label:has(textarea),
 .pipeline-editor-tabs .pipeline-stage-body > .inline-check,
 .pipeline-editor-tabs .pipeline-stage-body > p,
+.pipeline-editor-tabs .pipeline-stage-body > .form-error,
 .pipeline-editor-tabs .pipeline-stage-body > .pipeline-auto-note {
   grid-column: 1 / -1;
 }

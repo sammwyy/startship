@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/sammwyy/startship/internal/pipeline"
 	"net/http/httptest"
@@ -294,4 +295,38 @@ func TestProjectDeploymentAPI(t *testing.T) {
 	request("GET", "releases?project_id=project&logs=false", "", 200)
 	request("POST", "projects/project/redeploy", "{}", 404)
 	request("POST", "projects/project/deploy", "{}", 202)
+}
+
+func TestProjectEngineAvailabilityAPI(t *testing.T) {
+	old := engineHost
+	t.Cleanup(func() { engineHost = old })
+	engineHost = struct{ OS, Arch string }{"linux", "arm64"}
+	a := testServer(t)
+	uid, _ := a.createUserPending("admin", "password123", false)
+	ws := a.store.List("workspaces", uid)[0].ID
+	p := Record{ID: "project", Kind: "projects", Owner: uid, WorkspaceID: ws, Name: "Project"}
+	a.store.Save(p)
+	call := func(method, path, body string, status int) string {
+		t.Helper()
+		r := httptest.NewRequest(method, "/api/"+path, strings.NewReader(body))
+		r = r.WithContext(context.WithValue(r.Context(), socketContextKey{}, true))
+		w := httptest.NewRecorder()
+		a.api().ServeHTTP(w, r)
+		if w.Code != status {
+			t.Fatalf("%s %s: %d %s", method, path, w.Code, w.Body.String())
+		}
+		return w.Body.String()
+	}
+	body := `{"pipeline":{"build":{"engine":"buildpacks"}}}`
+	if got := call("PATCH", "projects/project", body, 400); !strings.Contains(got, engineUnavailable("buildpacks")) {
+		t.Fatal(got)
+	}
+	call("POST", "projects", `{"name":"New","workspace_id":"`+ws+`","pipeline":{"build":{"engine":"buildpacks"}}}`, 400)
+	call("PATCH", "projects/project", `{"pipeline":{"build":{"engine":"nixpacks"}}}`, 200)
+	a.store.Update(p.ID, func(r *Record) { r.Pipeline = &pipeline.Pipeline{Build: pipeline.Build{Engine: "buildpacks"}} })
+	call("PATCH", "projects/project", `{"env":{"MODE":"updated"}}`, 200)
+	call("PATCH", "projects/project", body, 200)
+	call("PATCH", "projects/project", `{"pipeline":{"build":{"engine":"docker","image":"alpine:3.23"}}}`, 200)
+	engineHost = struct{ OS, Arch string }{"linux", "amd64"}
+	call("PATCH", "projects/project", body, 200)
 }

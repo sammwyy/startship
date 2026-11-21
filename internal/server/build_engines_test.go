@@ -27,6 +27,31 @@ func TestBuildArgsVariablesAndOutputs(t *testing.T) {
 	}
 }
 
+func TestEngineAvailability(t *testing.T) {
+	old := engineHost
+	t.Cleanup(func() { engineHost = old })
+	for _, host := range []struct{ OS, Arch string }{{"linux", "amd64"}, {"linux", "arm64"}, {"darwin", "amd64"}, {"windows", "arm64"}} {
+		engineHost = host
+		for _, engine := range []string{"", "docker", "nixpacks", "buildpacks"} {
+			reason := engineUnavailable(engine)
+			unsupported := engine == "buildpacks" && host != (struct{ OS, Arch string }{"linux", "amd64"})
+			if (reason != "") != unsupported {
+				t.Fatalf("%v %s: %q", host, engine, reason)
+			}
+			if unsupported {
+				want := "Buildpacks needs a linux/amd64 server; this one is " + host.OS + "/" + host.Arch + ". Use Dockerfile or Nixpacks."
+				if reason != want {
+					t.Fatal(reason)
+				}
+				p := &pipeline.Pipeline{Build: pipeline.Build{Engine: engine}}
+				if err := buildEngine("missing", io.Discard, "project", "app", p, false); err == nil || err.Error() != reason {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+}
+
 func TestCNBDockerfile(t *testing.T) {
 	for _, noCache := range []bool{false, true} {
 		dockerfile := cnbDockerfile("project", noCache)
