@@ -128,7 +128,7 @@ func (a *Server) systemAPI(w http.ResponseWriter, r *http.Request, p []string, u
 			fail(w, 405, "method not allowed")
 			return true
 		}
-		reply(w, 200, map[string]string{"version": version.Version, "commit": version.Commit})
+		reply(w, 200, map[string]any{"version": version.Version, "commit": version.Commit, "unavailable_engines": unavailableEngines()})
 	case "update":
 		defer a.live.publish(liveEvent{id: "system_update"})
 		u := a.updater()

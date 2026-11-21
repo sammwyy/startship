@@ -259,6 +259,7 @@ export interface ActivityEntry {
 export interface SystemVersion {
   version: string;
   commit: string;
+  unavailable_engines?: Record<string, string>;
 }
 export interface UpdateRequest {
   version: string;

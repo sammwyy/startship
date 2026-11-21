@@ -45,8 +45,13 @@ describe("authenticated live connection", () => {
       `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/api/live`,
     );
     expect(socket.send).not.toHaveBeenCalled();
-    socket.receive({ type: "ready", version: "v1", commit: "abc" });
-    expect(ready).toHaveBeenCalledWith({ version: "v1", commit: "abc" });
+    const version = {
+      version: "v1",
+      commit: "abc",
+      unavailable_engines: { buildpacks: "Use Dockerfile or Nixpacks." },
+    };
+    socket.receive({ type: "ready", ...version });
+    expect(ready).toHaveBeenCalledWith(version);
     expect(socket.send).toHaveBeenCalledTimes(1);
     a();
     expect(socket.send).toHaveBeenCalledTimes(1);

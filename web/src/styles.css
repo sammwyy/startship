@@ -158,11 +158,14 @@
   background: var(--accent-soft);
 }
 .pipeline-engine-option:has(input:focus-visible) {
+  border-color: transparent;
   outline: 2px solid var(--success);
   outline-offset: 2px;
 }
 .pipeline-engine-option:has(input:disabled) {
-  cursor: default;
+  cursor: not-allowed;
+  background: var(--panel);
+  border-style: dashed;
 }
 .pipeline-engine-name {
   display: flex;

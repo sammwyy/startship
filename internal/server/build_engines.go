@@ -32,6 +32,23 @@ const cnbRunRef = "mirror.gcr.io/paketobuildpacks/run-jammy-base:latest"
 const cnbRunLayout = "out/mirror.gcr.io/paketobuildpacks/run-jammy-base/latest"
 const cnbAppLayout = "out/index.docker.io/library/startship-cnb/latest"
 
+var engineHost = struct{ OS, Arch string }{runtime.GOOS, runtime.GOARCH}
+
+func engineUnavailable(engine string) string {
+	if engine == "buildpacks" && (engineHost.OS != "linux" || engineHost.Arch != "amd64") {
+		return fmt.Sprintf("Buildpacks needs a linux/amd64 server; this one is %s/%s. Use Dockerfile or Nixpacks.", engineHost.OS, engineHost.Arch)
+	}
+	return ""
+}
+
+func unavailableEngines() map[string]string {
+	engines := map[string]string{}
+	if reason := engineUnavailable("buildpacks"); reason != "" {
+		engines["buildpacks"] = reason
+	}
+	return engines
+}
+
 func externalEngine(p *pipeline.Pipeline) bool {
 	return p != nil && (p.Build.Engine == "nixpacks" || p.Build.Engine == "buildpacks")
 }
@@ -44,6 +61,9 @@ func engineAppDir(p *pipeline.Pipeline) string {
 }
 
 func buildEngine(root string, out io.Writer, projectID, image string, p *pipeline.Pipeline, noCache bool) error {
+	if reason := engineUnavailable(p.Build.Engine); reason != "" {
+		return fmt.Errorf("%s", reason)
+	}
 	stage, err := os.MkdirTemp(filepath.Dir(root), ".startship-engine-")
 	if err != nil {
 		return err
@@ -51,9 +71,6 @@ func buildEngine(root string, out io.Writer, projectID, image string, p *pipelin
 	defer os.RemoveAll(stage)
 	if p.Build.Engine == "nixpacks" {
 		return buildNixpacks(root, stage, out, projectID, image, noCache)
-	}
-	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		return fmt.Errorf("the pinned Buildpacks builder supports linux/amd64 only")
 	}
 	if err = copyBuildContext(root, filepath.Join(stage, "app")); err != nil {
 		return err

@@ -74,6 +74,9 @@ func TestLiveStaleAccessCookie(t *testing.T) {
 }
 
 func TestLive(t *testing.T) {
+	oldHost := engineHost
+	engineHost = struct{ OS, Arch string }{"linux", "arm64"}
+	t.Cleanup(func() { engineHost = oldHost })
 	a := testServer(t)
 	a.liveSessionInterval = 50 * time.Millisecond
 	uid, err := a.createUser("alice", "password123")
@@ -131,6 +134,8 @@ func TestLive(t *testing.T) {
 		}
 	}
 	if m := read(); m["type"] != "ready" || m["user_id"] != uid {
+		t.Fatal(m)
+	} else if m["unavailable_engines"].(map[string]any)["buildpacks"] != engineUnavailable("buildpacks") {
 		t.Fatal(m)
 	}
 	send(map[string]any{"type": "subscribe", "id": "p", "topic": "project", "project_id": p.ID})
