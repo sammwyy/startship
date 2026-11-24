@@ -120,6 +120,8 @@ func liveKind(r Record) string {
 		return "release"
 	case "projects":
 		return "project"
+	case "previews":
+		return "preview"
 	case "routes":
 		return "route"
 	}
@@ -247,9 +249,9 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 	case "release_log":
 		full := x.publicRecord(r)
 		if r.Status == "running" || r.Status == "superseded" {
-			if r.Kind == "releases" {
+			if r.Kind == "releases" && r.PreviewID == "" {
 				full.Redeployable = a.projectReleaseAvailable(r) == nil
-			} else {
+			} else if r.Kind != "releases" && r.PreviewID == "" {
 				full.Redeployable = releaseAvailable(r) == nil
 			}
 		}
@@ -268,7 +270,7 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return map[string]any{"projects": projects}, records, r, ""
 	default:
 		data := map[string]any{"project": convert(r)}
-		for _, k := range []string{"apps", "releases", "routes"} {
+		for _, k := range []string{"apps", "releases", "routes", "previews"} {
 			out := []apiRecord{}
 			for _, v := range a.store.List(k, "") {
 				if v.ProjectID == s.ProjectID && x.visible(v) {

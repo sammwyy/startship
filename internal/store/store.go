@@ -12,6 +12,9 @@ import (
 )
 
 type Record struct {
+	Previews          bool               `json:"previews"`
+	PreviewID         string             `json:"preview_id,omitempty"`
+	Addresses         []string           `json:"addresses,omitempty"`
 	ID                string             `json:"id"`
 	Kind              string             `json:"-"`
 	Owner             string             `json:"-"`

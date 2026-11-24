@@ -314,6 +314,8 @@ const usage = `startship [--json] COMMAND
   projects list [WORKSPACE] | projects get ID|create NAME WORKSPACE|delete ID
   projects update ID JSON        project settings (same fields as API)
   projects sleep ID | projects wake ID
+  projects update ID --previews on|off
+  previews PROJECT | previews remove PROJECT PREVIEW_ID
   projects update ID '{"sleep_after":10}'  sleep after idle minutes (0 = off)
   projects source ID JSON        git_url, branch, git_token, build defaults
   projects env get ID | projects env set ID KEY=VALUE...
@@ -468,6 +470,49 @@ func (c *cli) run(args []string) error {
 		return m, nil
 	}
 	switch cmd {
+	case "previews":
+		remove := len(a) > 0 && (a[0] == "remove" || a[0] == "rm")
+		if remove {
+			a = a[1:]
+		}
+		if len(a) != 1 && !remove || remove && len(a) != 2 {
+			return errors.New("use previews PROJECT or previews remove PROJECT PREVIEW_ID")
+		}
+		id, e := c.resolve("projects", a[0])
+		if e != nil {
+			return e
+		}
+		path = "projects/" + url.PathEscape(id) + "/previews"
+		if remove {
+			method = "DELETE"
+			path += "/" + url.PathEscape(a[1])
+		}
+		if !remove {
+			v, e := c.request("GET", path, nil)
+			if e != nil {
+				return e
+			}
+			if c.raw {
+				return c.print(v)
+			}
+			w := tabwriter.NewWriter(c.out, 0, 4, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tBRANCH\tSTATUS\tADDRESS\tCOMMIT")
+			rows, _ := v.([]any)
+			for _, row := range rows {
+				m, _ := row.(map[string]any)
+				addresses, _ := m["addresses"].([]any)
+				parts := []string{}
+				for _, address := range addresses {
+					parts = append(parts, fmt.Sprint(address))
+				}
+				status := field(m, "status")
+				if m["sleeping"] == true {
+					status = "sleeping"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", field(m, "id"), field(m, "branch"), status, strings.Join(parts, ","), field(m, "commit"))
+			}
+			return w.Flush()
+		}
 	case "version":
 		fmt.Fprintln(c.out, version.Version)
 		return nil
@@ -593,6 +638,17 @@ func (c *cli) run(args []string) error {
 		}
 		op := a[0]
 		a = a[1:]
+		if kind == "projects" && op == "update" && len(a) == 3 && a[1] == "--previews" {
+			if a[2] != "on" && a[2] != "off" {
+				return errors.New("--previews expects on or off")
+			}
+			id, e := c.resolve(kind, a[0])
+			if e != nil {
+				return e
+			}
+			path, method, body = kind+"/"+url.PathEscape(id), "PATCH", map[string]any{"previews": a[2] == "on"}
+			break
+		}
 		path = kind
 		if op == "list" {
 			if len(a) > 1 || (kind == "workspaces" && len(a) > 0) {

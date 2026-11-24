@@ -6,6 +6,7 @@ import type {
   DomainRoute,
   Permission,
   Project,
+  Preview,
   Release,
   Role,
   User,
@@ -49,6 +50,7 @@ export const queries = {
   projects: (id: string) =>
     resource<Project[]>(`projects?workspace_id=${encodeURIComponent(id)}`),
   project: (id: string) => resource<Project>(`projects/${id}`),
+  previews: (id: string) => resource<Preview[]>(`projects/${id}/previews`),
   containers: (id?: string) =>
     resource<Container[]>(`containers${id ? `?project_id=${id}` : ""}`),
   releases: (id?: string) =>

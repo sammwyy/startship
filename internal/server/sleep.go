@@ -107,6 +107,9 @@ func (a *Server) sleepProject(id string, idle bool) error {
 	if err != nil || p.Sleeping {
 		return err
 	}
+	if p.Kind == "previews" {
+		p.SleepAfter = a.previewSleepAfter(p)
+	}
 	deployments, err := a.sleepDeployments(p)
 	if err != nil {
 		return err
@@ -255,7 +258,10 @@ func (a *Server) watchIdle(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			for _, p := range a.store.List("projects", "") {
+			for _, p := range append(a.store.List("projects", ""), a.store.List("previews", "")...) {
+				if p.Kind == "previews" {
+					p.SleepAfter = a.previewSleepAfter(p)
+				}
 				if p.SleepAfter > 0 && !p.Sleeping {
 					if _, err := a.sleepDeployments(p); err != nil {
 						continue

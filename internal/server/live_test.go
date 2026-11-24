@@ -151,6 +151,19 @@ func TestLive(t *testing.T) {
 	if m := read(); m["type"] != "upsert" || m["kind"] != "route" {
 		t.Fatal(m)
 	}
+	preview := Record{ID: randomID(), Kind: "previews", Owner: uid, ProjectID: p.ID, Branch: "feature", Addresses: []string{"http://feature--demo.localhost/"}}
+	if err = a.store.Save(preview); err != nil {
+		t.Fatal(err)
+	}
+	if m := read(); m["type"] != "upsert" || m["kind"] != "preview" {
+		t.Fatal(m)
+	}
+	if err = a.store.Delete(preview); err != nil {
+		t.Fatal(err)
+	}
+	if m := read(); m["type"] != "delete" || m["kind"] != "preview" || m["record_id"] != preview.ID {
+		t.Fatal(m)
+	}
 	req, err := http.NewRequestWithContext(ctx, "DELETE", srv.URL+"/api/routes/"+route.ID, nil)
 	if err != nil {
 		t.Fatal(err)

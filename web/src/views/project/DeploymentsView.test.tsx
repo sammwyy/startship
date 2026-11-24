@@ -12,6 +12,7 @@ import { MemoryRouter } from "react-router-dom";
 import { DeploymentsView } from "./DeploymentsView";
 const state = vi.hoisted(() => ({
   sleeping: false,
+  preview: false,
   canDeploy: true,
   request: vi.fn(async () => ({})),
   refresh: vi.fn(),
@@ -46,6 +47,8 @@ vi.mock("../../layouts/ProjectLayout", () => ({
     releases: [
       {
         id: "newest",
+        preview_id: state.preview ? "pv" : undefined,
+        branch: "feature-x",
         status: "running",
         created: "2026-11-17",
         container_releases: [{ id: "c1" }],
@@ -68,9 +71,22 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.canDeploy = true;
   state.sleeping = false;
+  state.preview = false;
 });
 afterEach(cleanup);
 describe("deployment history", () => {
+  it("tags preview releases and hides redeploy even if the log marks it redeployable", () => {
+    state.preview = true;
+    render(
+      <MemoryRouter>
+        <DeploymentsView />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Preview · feature-x")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Redeploy selected" }),
+    ).toBeNull();
+  });
   it("shows only the sleeping active release with the sleeping badge", () => {
     state.sleeping = true;
     render(

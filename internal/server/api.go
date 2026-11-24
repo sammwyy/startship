@@ -392,6 +392,40 @@ func (a *Server) api() http.Handler {
 				return
 			}
 		}
+		if kind == "projects" && len(p) >= 4 && p[3] == "previews" {
+			if r.Method == "GET" && len(p) == 4 {
+				if !x.can(old, "project.view") {
+					forbidden(w)
+					return
+				}
+				items := []apiRecord{}
+				for _, preview := range a.previews(old.ID) {
+					items = append(items, x.publicRecord(preview))
+				}
+				reply(w, 200, items)
+				return
+			}
+			if r.Method == "DELETE" && len(p) == 5 {
+				if !x.can(old, "deploy") {
+					forbidden(w)
+					return
+				}
+				preview, err := a.store.Get(p[4])
+				if err != nil || preview.Kind != "previews" || preview.ProjectID != old.ID {
+					fail(w, 404, "preview not found")
+					return
+				}
+				if err = a.removePreview(preview); err != nil {
+					fail(w, 500, err.Error())
+					return
+				}
+				a.audit(r.Context(), uid, "preview.delete", preview.Name, scopeProject, old.ID, nil)
+				reply(w, 200, map[string]bool{"deleted": true})
+				return
+			}
+			fail(w, 405, "method not allowed")
+			return
+		}
 		if len(p) == 4 && kind == "projects" && p[3] == "traffic" {
 			if !x.can(old, "traffic.view") {
 				forbidden(w)
@@ -498,7 +532,7 @@ func (a *Server) api() http.Handler {
 				if containers {
 					result = a.containerRecord(old)
 				}
-				if old.Kind == "releases" && (old.Status == "running" || old.Status == "superseded") {
+				if old.Kind == "releases" && old.PreviewID == "" && (old.Status == "running" || old.Status == "superseded") {
 					result.Redeployable = a.projectReleaseAvailable(old) == nil
 				}
 				if old.Kind == "deployments" && (old.Status == "running" || old.Status == "superseded") {
@@ -578,6 +612,12 @@ func (a *Server) api() http.Handler {
 				a.removeScopeAccess(strings.TrimSuffix(old.Kind, "s"), old.ID)
 			}
 			if old.Kind == "projects" {
+				for _, preview := range a.previews(old.ID) {
+					if err := a.removePreview(preview); err != nil {
+						fail(w, 500, err.Error())
+						return
+					}
+				}
 				a.detachProjectServices(old.ID)
 				lock := projectBuildLock(old.ID)
 				lock.Lock()
@@ -772,6 +812,14 @@ func (a *Server) api() http.Handler {
 			fail(w, 500, "save failed")
 			return
 		}
+		if kind == "projects" && !v.Previews {
+			for _, preview := range a.previews(v.ID) {
+				if err := a.removePreview(preview); err != nil {
+					fail(w, 500, err.Error())
+					return
+				}
+			}
+		}
 		if kind == "workspaces" && old.ID == "" {
 			if tx, e := a.store.DB.Begin(); e == nil {
 				a.grant(tx, uid, "administrator", scopeWorkspace, v.ID, uid)
@@ -816,13 +864,57 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	var event struct {
-		Ref string `json:"ref"`
+		Ref         string `json:"ref"`
+		Deleted     bool   `json:"deleted"`
+		Action      string `json:"action"`
+		PullRequest struct {
+			Head struct {
+				Ref string `json:"ref"`
+			} `json:"head"`
+		} `json:"pull_request"`
 	}
 	if json.Unmarshal(body, &event) != nil {
 		fail(w, 400, "invalid JSON")
 		return
 	}
-	if r.Header.Get("X-GitHub-Event") != "push" || event.Ref != "refs/heads/"+project.Branch || !project.AutoDeploy {
+	kind := r.Header.Get("X-GitHub-Event")
+	branch := strings.TrimPrefix(event.Ref, "refs/heads/")
+	remove := kind == "push" && event.Deleted
+	if kind == "pull_request" && event.Action == "closed" {
+		branch, remove = event.PullRequest.Head.Ref, true
+	}
+	if project.Previews && branch != "" && branch != project.Branch && (kind == "push" && strings.HasPrefix(event.Ref, "refs/heads/") || kind == "pull_request" && remove) {
+		if remove {
+			for _, preview := range a.previews(project.ID) {
+				if preview.Branch == branch {
+					if err := a.removePreview(preview); err != nil {
+						fail(w, 500, err.Error())
+						return
+					}
+					a.audit(r.Context(), "", "preview.delete", preview.Name, scopeProject, project.ID, nil)
+				}
+			}
+			reply(w, 200, map[string]bool{"deleted": true})
+			return
+		}
+		if project.AutoDeploy {
+			preview, err := a.previewForBranch(project, branch)
+			if err != nil {
+				fail(w, 500, err.Error())
+				return
+			}
+			project.Branch = branch
+			d, err := a.enqueueProject(project, Record{PreviewID: preview.ID})
+			if err != nil {
+				fail(w, 409, err.Error())
+				return
+			}
+			a.audit(r.Context(), "", "preview.autodeploy", preview.Name, scopeProject, project.ID, map[string]string{"release_id": d.ID})
+			reply(w, 202, publicRecord(d))
+			return
+		}
+	}
+	if kind != "push" || event.Deleted || event.Ref != "refs/heads/"+project.Branch || !project.AutoDeploy {
 		reply(w, 200, map[string]bool{"ignored": true})
 		return
 	}
