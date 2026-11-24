@@ -56,6 +56,17 @@ func TestSystemUpdateAPI(t *testing.T) {
 	if v := call(false, "GET", "system/version", "", 200); v["version"] != "v1.4.0" {
 		t.Fatal(v)
 	}
+	oldHost := engineHost
+	t.Cleanup(func() { engineHost = oldHost })
+	engineHost = struct{ OS, Arch string }{"linux", "arm64"}
+	if v := call(false, "GET", "system/version", "", 200); v["unavailable_engines"].(map[string]any)["buildpacks"] != engineUnavailable("buildpacks") {
+		t.Fatal(v)
+	}
+	engineHost = struct{ OS, Arch string }{"linux", "amd64"}
+	if v := call(false, "GET", "system/version", "", 200); len(v["unavailable_engines"].(map[string]any)) != 0 {
+		t.Fatal(v)
+	}
+	engineHost = oldHost
 	v := call(false, "GET", "system/update", "", 200)
 	if v["current"] != "v1.4.0" || v["latest"] != "v1.5.0" || v["update_available"] != true || v["self_update"] != true {
 		t.Fatal(v)

@@ -129,6 +129,11 @@ export function PipelineView() {
   );
 }
 function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
+  const { data: version } = useQuery({
+    ...queries.version(),
+    staleTime: Infinity,
+  });
+  const unavailable = version?.unavailable_engines || {};
   const [params, setParams] = useSearchParams();
   const tab = tabs.find((value) => value === params.get("tab")) || "build";
   const [invalidField, setInvalidField] = useState<ValidatableField>();
@@ -405,6 +410,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                         name="build-engine"
                         value={option.id}
                         checked={engine === option.id}
+                        disabled={!!unavailable[option.id]}
                         aria-labelledby={`engine-name-${option.id}`}
                         aria-describedby={`engine-hint-${option.id}`}
                         onChange={() => stage("build", { engine: option.id })}
@@ -417,10 +423,10 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                         {option.name}
                       </span>
                       <span
-                        className="small muted"
+                        className={`small ${unavailable[option.id] ? "danger" : "muted"}`}
                         id={`engine-hint-${option.id}`}
                       >
-                        {option.hint}
+                        {unavailable[option.id] || option.hint}
                       </span>
                     </label>
                   ))}

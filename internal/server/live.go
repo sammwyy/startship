@@ -319,7 +319,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 		defer stop()
 		return conn.Write(writeCtx, websocket.MessageText, b) == nil
 	}
-	if !send(map[string]any{"type": "ready", "user_id": uid, "version": version.Version, "commit": version.Commit}) {
+	if !send(map[string]any{"type": "ready", "user_id": uid, "version": version.Version, "commit": version.Commit, "unavailable_engines": unavailableEngines()}) {
 		return
 	}
 	input := make(chan liveSub, 16)

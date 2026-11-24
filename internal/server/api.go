@@ -700,6 +700,12 @@ func (a *Server) api() http.Handler {
 					fail(w, 400, err.Error())
 					return
 				}
+				if old.Pipeline == nil || old.Pipeline.Build.Engine != v.Pipeline.Build.Engine {
+					if reason := engineUnavailable(v.Pipeline.Build.Engine); reason != "" {
+						fail(w, 400, reason)
+						return
+					}
+				}
 			}
 			if v.BuildType == "custom" && v.Pipeline == nil {
 				fail(w, 400, "custom requires a pipeline")

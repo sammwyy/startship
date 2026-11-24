@@ -79,6 +79,7 @@ staged with a copy of the source; plan variables become build arguments, with a
 stable project cache key. Project runtime secrets are not passed to the planner
 or baked into the image. This is not a mechanism for build-time secrets.
 
+Buildpacks needs a linux/amd64 server; on other hosts, use Dockerfile or Nixpacks.
 Buildpacks requires no host `pack`, crane or registry service. The daemon stages
 the run image as OCI data, then executes the CNB lifecycle inside the same bounded
 buildx worker as Docker/Nixpacks. No Docker socket is exposed to the lifecycle.
