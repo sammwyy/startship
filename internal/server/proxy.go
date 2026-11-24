@@ -1,11 +1,13 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -40,6 +42,18 @@ func routeURL(route Record) string {
 		host = "[" + host + "]"
 	}
 	return (&url.URL{Scheme: scheme, Host: host, Path: route.PathPrefix}).String()
+}
+
+func previewRouteURL(route Record) string {
+	if route.CertificateID != "" {
+		return certificateRouteURL(route)
+	}
+	_, port, _ := net.SplitHostPort(config.Env("STARTSHIP_HTTP_ADDR", ":80"))
+	host := route.Host
+	if port != "" && port != "80" {
+		host = net.JoinHostPort(host, port)
+	}
+	return (&url.URL{Scheme: "http", Host: host, Path: route.PathPrefix}).String()
 }
 func (a *Server) publicRouter() *router.Router {
 	a.routerOnce.Do(func() {
@@ -84,11 +98,13 @@ func (a *Server) refreshLocked() error {
 	targets := []Target{}
 	routeWorkspace := map[string]string{}
 	asleep := map[string]bool{}
+	addresses := map[string][]string{}
 	for _, p := range a.store.List("projects", "") {
 		asleep[p.ID] = p.Sleeping
 	}
 	for _, p := range a.store.List("previews", "") {
 		asleep[p.ID] = p.Sleeping
+		addresses[p.ID] = nil
 	}
 	for _, r := range a.store.List("routes", "") {
 		app, err := a.store.Get(r.AppID)
@@ -121,16 +137,25 @@ func (a *Server) refreshLocked() error {
 					continue
 				}
 				pr := r
-				pr.ID, pr.ProjectID, pr.Host = r.ID+":"+preview.ID, preview.ID, previewHost(preview.Branch, r.Host)
+				pr.ID, pr.ProjectID, pr.Host = r.ID+":"+preview.ID, preview.ID, previewHost(preview.HostSlug, r.Host)
 				pr.CertificateID, pr.ForceHTTPS = "", false
 				if !a.routeAllowed(ws, pr.Host) {
 					continue
+				}
+				if c := a.storedCertificate(pr.Host); c != nil {
+					pr.CertificateID, pr.ForceHTTPS = c.ID, r.ForceHTTPS
+				} else if a.acmeSettings().Email != "" && (r.CertificateID != "" || r.ForceHTTPS || a.https) {
+					go a.ensurePreviewCertificate(preview.ID, ws, pr.Host)
 				}
 				for _, id := range release.ContainerReleases {
 					pd, e := a.store.Get(id)
 					if e == nil && pd.AppID == app.ID && pd.Status == "running" {
 						targets = append(targets, Target{Route: pr, Deployment: pd, Port: port})
 						routeWorkspace[pr.ID] = ws
+						address := previewRouteURL(pr)
+						if !slices.Contains(addresses[preview.ID], address) {
+							addresses[preview.ID] = append(addresses[preview.ID], address)
+						}
 					}
 				}
 			}
@@ -162,6 +187,19 @@ func (a *Server) refreshLocked() error {
 		policies[ws] = engine
 	}
 	a.publicRouter().Update(router.Snapshot{Targets: targets, RouteWorkspace: routeWorkspace, Policies: policies, Asleep: asleep})
+	for id, values := range addresses {
+		p, err := a.store.Get(id)
+		if err != nil || slices.Equal(p.Addresses, values) {
+			continue
+		}
+		body, _ := json.Marshal(values)
+		if _, err := a.store.DB.Exec("UPDATE records SET body=json_set(body,'$.addresses',json(?)) WHERE id=?", string(body), id); err != nil {
+			return err
+		}
+		if p, err = a.store.Get(id); err == nil {
+			a.store.Notify(p)
+		}
+	}
 	a.firewall.mu.Lock()
 	for ws := range policies {
 		a.firewall.states[ws].ClearBans()
