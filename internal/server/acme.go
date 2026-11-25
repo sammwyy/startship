@@ -181,25 +181,33 @@ func finalizeCertificate(ctx context.Context, client orderClient, orderURL, fina
 func (a *Server) startIssuance(id string) bool {
 	a.certMu.Lock()
 	defer a.certMu.Unlock()
-	if _, loaded := a.issuing.LoadOrStore(id, true); loaded {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	if _, loaded := a.issuing.LoadOrStore(id, cancel); loaded {
+		cancel()
 		return false
 	}
 	c, err := a.certificate(id)
 	if err != nil {
+		cancel()
 		a.issuing.Delete(id)
 		return false
 	}
 	c.Status = "issuing"
 	c.LastError = ""
 	if a.saveCertificate(c) != nil {
+		cancel()
 		a.issuing.Delete(id)
 		return false
 	}
 	go func() {
 		defer a.issuing.Delete(id)
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		updated, err := a.issue(ctx, c)
+		a.certMu.Lock()
+		if _, lookupErr := a.certificate(c.ID); lookupErr != nil {
+			a.certMu.Unlock()
+			return
+		}
 		if err != nil {
 			c.Status = "failed"
 			c.LastError = err.Error()
@@ -207,22 +215,57 @@ func (a *Server) startIssuance(id string) bool {
 		} else {
 			a.saveCertificate(updated)
 		}
+		a.certMu.Unlock()
+		a.refresh()
 	}()
 	return true
+}
+
+func (a *Server) ensurePreviewCertificate(previewID, workspace, host string) {
+	if !domainPattern.MatchString(host) {
+		return
+	}
+	id := "preview:" + previewID + ":" + host
+	a.certMu.Lock()
+	p, err := a.store.Get(previewID)
+	if err != nil || p.Kind != "previews" || p.Active == "" {
+		a.certMu.Unlock()
+		return
+	}
+	if _, err := a.certificate(id); err == nil {
+		a.certMu.Unlock()
+		return
+	}
+	now := time.Now().UTC()
+	c := Certificate{ID: id, PreviewID: previewID, WorkspaceID: workspace, Domains: []string{host}, Source: "acme", Status: "pending", AutoRenew: true, Created: now}
+	err = a.saveCertificate(c)
+	a.certMu.Unlock()
+	if err == nil {
+		a.startIssuance(id)
+	}
 }
 func renewalDue(c Certificate, now time.Time) bool {
 	return c.Source == "acme" && c.AutoRenew && c.Status != "issuing" && (c.NotAfter.IsZero() || !c.NotAfter.After(now.Add(30*24*time.Hour)))
 }
 func (a *Server) renewCertificates(now time.Time) {
 	for _, c := range a.certificates("") {
+		a.certMu.Lock()
+		current, err := a.certificate(c.ID)
+		if err != nil {
+			a.certMu.Unlock()
+			continue
+		}
+		c = current
 		if !c.NotAfter.IsZero() && !now.Before(c.NotAfter) && c.Status != "issuing" {
 			c.Status = "expired"
 			a.saveCertificate(c)
 		}
+		a.certMu.Unlock()
 		if renewalDue(c, now) {
 			a.startIssuance(c.ID)
 		}
 	}
+	a.refresh()
 }
 func (a *Server) watchCertificates(ctx context.Context) {
 	for _, c := range a.certificates("") {

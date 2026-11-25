@@ -27,7 +27,7 @@ func TestPreviewCommands(t *testing.T) {
 				w.Write([]byte(`[]`))
 				return
 			}
-			w.Write([]byte(`[{"id":"preview","branch":"feature","status":"running","addresses":["http://feature--demo.localhost/"],"commit":"abc123"}]`))
+			w.Write([]byte(`[{"id":"preview","branch":"feature","status":"running","addresses":["https://feature--demo.localhost/"],"commit":"abc123"}]`))
 		case "/api/projects/p/previews/preview":
 			if r.Method != "DELETE" {
 				t.Error(r.Method)
@@ -45,7 +45,7 @@ func TestPreviewCommands(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, want := range []string{"feature", "running", "http://feature--demo.localhost/", "abc123"} {
+	for _, want := range []string{"feature", "running", "https://feature--demo.localhost/", "abc123"} {
 		if !strings.Contains(out.String(), want) {
 			t.Fatal(out.String())
 		}

@@ -14,6 +14,7 @@ import (
 )
 
 type Certificate struct {
+	PreviewID   string    `json:"preview_id,omitempty"`
 	ID          string    `json:"id"`
 	WorkspaceID string    `json:"workspace_id"`
 	Domains     []string  `json:"domains"`
@@ -247,6 +248,7 @@ func (a *Server) certificatesAPI(w http.ResponseWriter, r *http.Request, p []str
 			if c.Source == "acme" {
 				a.startIssuance(c.ID)
 			}
+			a.refresh()
 			a.audit(r.Context(), uid, "certificate.create", c.ID, scopeWorkspace, ws.ID, nil)
 			reply(w, 201, c)
 		default:
@@ -280,6 +282,7 @@ func (a *Server) certificatesAPI(w http.ResponseWriter, r *http.Request, p []str
 			return true
 		}
 		a.store.Notify(Record{ID: c.ID, Kind: "certificates", WorkspaceID: ws.ID})
+		a.refresh()
 		a.audit(r.Context(), uid, "certificate.delete", c.ID, scopeWorkspace, ws.ID, nil)
 		reply(w, 200, map[string]bool{"ok": true})
 	case len(p) == 6 && p[5] == "renew" && r.Method == "POST":

@@ -871,6 +871,7 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	var event struct {
 		Ref         string `json:"ref"`
+		RefType     string `json:"ref_type"`
 		Deleted     bool   `json:"deleted"`
 		Action      string `json:"action"`
 		PullRequest struct {
@@ -886,10 +887,13 @@ func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
 	kind := r.Header.Get("X-GitHub-Event")
 	branch := strings.TrimPrefix(event.Ref, "refs/heads/")
 	remove := kind == "push" && event.Deleted
+	if kind == "delete" && event.RefType == "branch" {
+		branch, remove = event.Ref, true
+	}
 	if kind == "pull_request" && event.Action == "closed" {
 		branch, remove = event.PullRequest.Head.Ref, true
 	}
-	if project.Previews && branch != "" && branch != project.Branch && (kind == "push" && strings.HasPrefix(event.Ref, "refs/heads/") || kind == "pull_request" && remove) {
+	if project.Previews && branch != "" && branch != project.Branch && (kind == "push" && strings.HasPrefix(event.Ref, "refs/heads/") || (kind == "pull_request" || kind == "delete") && remove) {
 		if remove {
 			for _, preview := range a.previews(project.ID) {
 				if preview.Branch == branch {

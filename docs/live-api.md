@@ -47,8 +47,19 @@ Projects opt in with `PATCH /api/projects/:id` (`{"previews":true}`).
 `GET /api/projects/:id/previews` lists previews; `DELETE /api/projects/:id/previews/:preview_id`
 removes one (deploy permission). The `project` snapshot also contains `previews[]`,
 with `upsert`/`delete` kind `preview`; clients need not poll. Preview records contain
-`project_id`, `branch`, `active_deployment`, `status`, `commit`, `sleeping`, `created`
-and HTTP `addresses[]`. Releases and container deployments carry `preview_id`.
+`project_id`, `branch`, `host_slug`, `active_deployment`, `status`, `commit`, `sleeping`, `created`
+and `addresses[]`. Releases and container deployments carry `preview_id`.
+Slugs are persisted, unique per project, with a branch SHA-256 suffix on collisions.
+Long first DNS labels are shortened with a hash to fit the 63-character limit.
+Addresses use HTTPS only when a usable certificate covers the host; otherwise
+they visibly remain HTTP. Preview routes reuse stored certificates (including
+wildcards), inherit the live route's HTTPS redirect once covered, and request
+their own renewable ACME certificate when ACME is configured and the live route
+uses HTTPS. Preview-owned certificates are deleted with the preview; shared
+certificates are retained. Address changes are pushed as preview upserts.
+Signed GitHub push events deploy branches; branch push deletions, branch `delete`
+events and closed pull requests (merged or not) remove previews. `ping`, tag and
+`create` events are ignored; branch creation is deployed by its accompanying push.
 Preview hosts must be allowed by the workspace's domains. Preview containers sleep
 after the project's idle timeout, or five minutes when that timeout is disabled.
 

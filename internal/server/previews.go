@@ -1,13 +1,15 @@
 package server
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 )
 
-func previewHost(branch, host string) string {
+func previewSlug(branch string) string {
 	var b strings.Builder
 	for _, c := range strings.ToLower(branch) {
 		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' {
@@ -23,10 +25,23 @@ func previewHost(branch, host string) string {
 	if slug == "" {
 		slug = "branch"
 	}
-	if strings.Contains(host, ".") {
-		return slug + "--" + host
+	return slug
+}
+
+func shortHash(value string) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(value)))[:6]
+}
+
+func previewHost(slug, host string) string {
+	label, rest, dotted := strings.Cut(host, ".")
+	if !dotted {
+		return slug + "." + host
 	}
-	return slug + "." + host
+	label = slug + "--" + label
+	if len(label) > 63 {
+		label = strings.TrimRight(label[:56], "-") + "-" + shortHash(label)
+	}
+	return label + "." + rest
 }
 
 func (a *Server) previews(project string) []Record {
@@ -50,12 +65,22 @@ func (a *Server) previewSleepAfter(p Record) int {
 func (a *Server) previewForBranch(project Record, branch string) (Record, error) {
 	a.store.Lock()
 	defer a.store.Unlock()
+	used := map[string]bool{}
 	for _, p := range a.previews(project.ID) {
 		if p.Branch == branch {
 			return p, nil
 		}
+		used[p.HostSlug] = true
 	}
-	p := Record{ID: randomID(), Kind: "previews", Owner: project.Owner, Parent: project.ID, ProjectID: project.ID, Name: project.Name + ":" + branch, Branch: branch, Status: "queued", Created: time.Now().UTC()}
+	slug := previewSlug(branch)
+	if used[slug] {
+		base := slug
+		slug = base + "-" + shortHash(branch)
+		for n := 1; used[slug]; n++ {
+			slug = base + "-" + shortHash(fmt.Sprintf("%s:%d", branch, n))
+		}
+	}
+	p := Record{ID: randomID(), Kind: "previews", Owner: project.Owner, Parent: project.ID, ProjectID: project.ID, Name: project.Name + ":" + branch, Branch: branch, HostSlug: slug, Status: "queued", Created: time.Now().UTC()}
 	return p, a.store.Save(p)
 }
 
@@ -66,6 +91,22 @@ func (a *Server) removePreview(p Record) error {
 	if err := a.store.Delete(p); err != nil {
 		return err
 	}
+	a.certMu.Lock()
+	for _, c := range a.certificates("") {
+		if c.PreviewID == p.ID {
+			if cancel, ok := a.issuing.Load(c.ID); ok {
+				if cancel, ok := cancel.(context.CancelFunc); ok {
+					cancel()
+				}
+			}
+			if _, err := a.store.DB.Exec("DELETE FROM certificates WHERE id=?", c.ID); err != nil {
+				a.certMu.Unlock()
+				return err
+			}
+			a.store.Notify(Record{ID: c.ID, Kind: "certificates", WorkspaceID: c.WorkspaceID})
+		}
+	}
+	a.certMu.Unlock()
 	for _, kind := range []string{"deployments", "releases"} {
 		for _, d := range a.store.List(kind, "") {
 			if d.PreviewID != p.ID {
@@ -95,7 +136,6 @@ func (a *Server) activatePreview(job Record, revisions []string) error {
 	}
 	previous, _ := a.store.Get(p.Active)
 	changes := []Record{}
-	apps := map[string]bool{}
 	now := time.Now().UTC()
 	for _, id := range revisions {
 		d, e := a.store.Get(id)
@@ -104,23 +144,11 @@ func (a *Server) activatePreview(job Record, revisions []string) error {
 		}
 		d.Status, d.Finished = "running", &now
 		changes = append(changes, d)
-		apps[d.AppID] = true
 	}
 	p.Active, p.Sleeping, p.Status = job.ID, false, "running"
 	current, _ := a.store.Get(job.ID)
 	p.Commit = current.Commit
 	p.Addresses = nil
-	for _, route := range a.store.List("routes", "") {
-		if route.ProjectID != job.ProjectID || !apps[route.AppID] {
-			continue
-		}
-		host := previewHost(p.Branch, route.Host)
-		project, _ := a.store.Get(job.ProjectID)
-		if !a.routeAllowed(projectWorkspace(project), host) {
-			continue
-		}
-		p.Addresses = append(p.Addresses, "http://"+host+route.PathPrefix)
-	}
 	current.Status, current.Finished = "running", &now
 	changes = append(changes, p, current)
 	retired := []Record{}
