@@ -89,6 +89,10 @@ type liveSub struct {
 
 func (s *liveSub) relevant(r Record) bool {
 	switch s.Topic {
+	case "uptime":
+		return r.ID == s.ProjectID
+	case "status_page":
+		return r.ID == s.WorkspaceID
 	case "firewall":
 		return r.ID == s.WorkspaceID
 	case "project":
@@ -131,7 +135,7 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 	x := a.access(uid)
 	id, kind, perm := "", "", ""
 	switch s.Topic {
-	case "project", "traffic", "project_activity":
+	case "project", "traffic", "project_activity", "uptime":
 		id, kind = s.ProjectID, "projects"
 		if s.Topic == "project_activity" {
 			perm = "activity.view"
@@ -145,8 +149,11 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 				return x, Record{}, "invalid subscription"
 			}
 		}
-	case "workspace", "certificates", "services", "volumes", "firewall", "backups", "workspace_activity":
+	case "workspace", "certificates", "services", "volumes", "firewall", "backups", "workspace_activity", "status_page":
 		id, kind = s.WorkspaceID, "workspaces"
+		if s.Topic == "status_page" {
+			perm = "workspace.manage"
+		}
 		if s.Topic == "workspace_activity" {
 			perm = "activity.view"
 		}
@@ -235,6 +242,18 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return a.backupsData(s.WorkspaceID, ""), nil, r, ""
 	case "certificates":
 		return map[string]any{"certificates": a.certificates(s.WorkspaceID)}, nil, r, ""
+	case "uptime":
+		data, err := a.summarizeUptime(r, time.Now(), 30, true)
+		if err != nil {
+			return nil, nil, r, "uptime unavailable"
+		}
+		return data, nil, r, ""
+	case "status_page":
+		data, err := a.statusConfig(r.ID)
+		if err != nil {
+			return nil, nil, r, "status page unavailable"
+		}
+		return data, nil, r, ""
 	case "traffic":
 		return a.trafficData(r, s.Window), nil, r, ""
 	case "container_log":
@@ -534,6 +553,12 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				periodic := s.Topic == "system_update" && now.After(s.next) || s.Topic == "traffic" && now.After(s.next)
 				periodic = periodic || s.Topic == "firewall" && s.firewallDirty && !now.Before(s.next)
 				key := s.activityKey(uid)
+				switch s.Topic {
+				case "uptime":
+					key = "uptime:" + s.ProjectID
+				case "status_page":
+					key = "status_page:" + s.WorkspaceID
+				}
 				_, relevant := pending[key]
 				for _, e := range pending {
 					if s.relevant(e.record) {

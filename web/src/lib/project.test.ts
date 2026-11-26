@@ -19,6 +19,7 @@ describe("project configuration", () => {
       "connections",
       "volumes",
       "traffic",
+      "uptime",
       "domains",
       "source",
       "pipeline",

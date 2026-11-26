@@ -181,6 +181,12 @@ func (a *Server) user(r *http.Request) string { return a.authenticate(r).userID 
 func (a *Server) api() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
+		if slug, ok := strings.CutPrefix(r.URL.Path, "/status/"); ok && statusSlug.MatchString(slug) {
+			page := r.Clone(r.Context())
+			page.URL.Path = "/"
+			dashboard.ServeHTTP(w, page)
+			return
+		}
 		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			dashboard.ServeHTTP(w, r)
 			return
@@ -194,6 +200,10 @@ func (a *Server) api() http.Handler {
 			}
 		}
 		p := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(p) == 3 && p[1] == "status" {
+			a.servePublicStatus(w, r, p[2])
+			return
+		}
 		if localRequest(r) && len(p) > 1 && (p[1] == "login" || p[1] == "refresh" || p[1] == "logout" || p[1] == "setup" && r.Method != "GET" || p[1] == "me" && r.Method != "GET") {
 			fail(w, 400, "this operation requires an HTTP login session, not the local admin socket")
 			return
@@ -424,6 +434,14 @@ func (a *Server) api() http.Handler {
 				return
 			}
 			fail(w, 405, "method not allowed")
+			return
+		}
+		if len(p) == 4 && kind == "projects" && p[3] == "uptime" {
+			a.projectUptime(w, r, old)
+			return
+		}
+		if len(p) == 4 && kind == "workspaces" && p[3] == "status-page" {
+			a.workspaceStatusPage(w, r, old, x, uid)
 			return
 		}
 		if len(p) == 4 && kind == "projects" && p[3] == "traffic" {

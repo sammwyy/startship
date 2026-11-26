@@ -447,28 +447,7 @@ func probeRelease(app Record, container, ip string, logger io.Writer) (e error) 
 	}
 	deadline := time.Now().Add(timeout)
 	for {
-		address := net.JoinHostPort(ip, fmt.Sprint(app.Port))
-		if app.Pipeline != nil && app.Pipeline.Deploy.HealthPath != "" {
-			client := http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-			var response *http.Response
-			response, e = client.Get("http://" + address + app.Pipeline.Deploy.HealthPath)
-			if e == nil {
-				response.Body.Close()
-				expected := app.Pipeline.Deploy.ExpectStatus
-				if expected == 0 {
-					expected = 200
-				}
-				if response.StatusCode != expected {
-					e = fmt.Errorf("expected HTTP status %d, got %d", expected, response.StatusCode)
-				}
-			}
-		} else {
-			var c net.Conn
-			c, e = net.DialTimeout("tcp", address, time.Second)
-			if e == nil {
-				c.Close()
-			}
-		}
+		e = probeOnce(app, ip)
 		if e == nil {
 			break
 		}
@@ -480,6 +459,31 @@ func probeRelease(app Record, container, ip string, logger io.Writer) (e error) 
 		time.Sleep(300 * time.Millisecond)
 	}
 	return nil
+}
+
+func probeOnce(app Record, ip string) error {
+	address := net.JoinHostPort(ip, fmt.Sprint(app.Port))
+	if app.Pipeline != nil && app.Pipeline.Deploy.HealthPath != "" {
+		client := http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		response, err := client.Get("http://" + address + app.Pipeline.Deploy.HealthPath)
+		if err != nil {
+			return err
+		}
+		response.Body.Close()
+		expected := app.Pipeline.Deploy.ExpectStatus
+		if expected == 0 {
+			expected = 200
+		}
+		if response.StatusCode != expected {
+			return fmt.Errorf("expected HTTP status %d, got %d", expected, response.StatusCode)
+		}
+		return nil
+	}
+	c, err := net.DialTimeout("tcp", address, time.Second)
+	if err == nil {
+		c.Close()
+	}
+	return err
 }
 
 func (a *Server) logDeploymentResult(out io.Writer, app Record, err error) {

@@ -303,6 +303,13 @@ export const router = createHashRouter([
                     .TrafficView,
                 }),
               },
+              {
+                path: "uptime",
+                lazy: async () => ({
+                  Component: (await import("./views/project/UptimeView"))
+                    .UptimeView,
+                }),
+              },
               { path: "git", element: <Navigate to="../source" replace /> },
               { path: "webhook", element: <Navigate to="../source" replace /> },
               { path: "*", element: <Navigate to="../overview" replace /> },

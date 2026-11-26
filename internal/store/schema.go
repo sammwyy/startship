@@ -32,4 +32,9 @@ CREATE TABLE IF NOT EXISTS backups(id TEXT PRIMARY KEY, workspace_id TEXT NOT NU
 CREATE TABLE IF NOT EXISTS firewall_policies(workspace_id TEXT PRIMARY KEY, body TEXT NOT NULL, updated TEXT NOT NULL, updated_by TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS firewall_lists(id TEXT NOT NULL, workspace_id TEXT NOT NULL, body TEXT NOT NULL, PRIMARY KEY(workspace_id,id));
 CREATE TABLE IF NOT EXISTS network_rules(id TEXT PRIMARY KEY, body TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS uptime_checks(project_id TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, latency_ms REAL NOT NULL, error TEXT NOT NULL, PRIMARY KEY(project_id, at));
+CREATE INDEX IF NOT EXISTS uptime_checks_at ON uptime_checks(at);
+CREATE TABLE IF NOT EXISTS uptime_incidents(project_id TEXT NOT NULL, started INTEGER NOT NULL, ended INTEGER, cause TEXT NOT NULL, PRIMARY KEY(project_id, started));
+CREATE UNIQUE INDEX IF NOT EXISTS uptime_one_open_incident ON uptime_incidents(project_id) WHERE ended IS NULL;
+CREATE TABLE IF NOT EXISTS status_pages(workspace_id TEXT PRIMARY KEY, slug TEXT UNIQUE, enabled INTEGER NOT NULL, title TEXT NOT NULL, projects TEXT NOT NULL);
 `

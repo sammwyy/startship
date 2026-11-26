@@ -1,0 +1,309 @@
+.uptime-view {
+  display: grid;
+  gap: 14px;
+  max-width: 1080px;
+  margin-inline: auto;
+}
+
+.uptime-view .heading {
+  margin-bottom: 0;
+}
+
+.uptime-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.uptime-kpis > div {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 5px;
+  padding: 17px 19px;
+  border-right: 1px solid var(--line);
+}
+
+.uptime-kpis > div:last-child {
+  border-right: 0;
+}
+
+.uptime-kpis > div > span:first-child,
+.status-project-metric > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.uptime-kpis strong,
+.status-project-metric strong {
+  font-size: clamp(19px, 3vw, 34px);
+  line-height: 1.2;
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  font-variant-numeric: tabular-nums;
+}
+
+.uptime-panel {
+  padding: 16px 19px;
+}
+
+.uptime-panel h2 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.uptime-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 100px;
+  color: var(--muted);
+  background: var(--raised);
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.uptime-state::before {
+  content: "";
+  background: currentColor;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.uptime-operational {
+  --state-ink: var(--success);
+  --state-fill: var(--success-bg);
+}
+
+.uptime-degraded {
+  --state-ink: var(--warning);
+  --state-fill: var(--warning-bg);
+}
+
+.uptime-down {
+  --state-ink: var(--error);
+  --state-fill: var(--error-bg);
+}
+
+.uptime-state,
+.status-banner {
+  color: var(--state-ink, var(--muted));
+  background: var(--state-fill, var(--raised));
+}
+
+.uptime-history,
+.uptime-latency {
+  display: flex;
+  gap: 3px;
+  margin-top: 11px;
+}
+
+.uptime-bar,
+.uptime-latency > span {
+  flex: 1 1 0;
+  min-width: 1px;
+  border-radius: 2px;
+}
+
+.uptime-bar {
+  height: 24px;
+  background: var(--state-ink, var(--line-strong));
+}
+
+.uptime-latency {
+  align-items: flex-end;
+  height: 83px;
+  padding-bottom: 1px;
+  border-bottom: 1px solid var(--line);
+}
+
+.uptime-latency > span {
+  max-width: 22px;
+  background: var(--state-ink, var(--success));
+}
+
+.uptime-axis {
+  margin-top: 5px;
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.uptime-incidents {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.uptime-incidents li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) auto;
+  gap: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}
+
+.uptime-incidents li > div > span {
+  display: block;
+}
+
+.uptime-incidents li > span,
+.uptime-incidents li > div > span,
+.uptime-incidents p,
+.uptime-empty {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 3px 0 0;
+}
+
+.status-settings {
+  margin-top: 14px;
+}
+
+.status-settings p {
+  margin-bottom: 0;
+}
+
+.status-settings-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.status-picker {
+  display: grid;
+  max-height: 260px;
+  overflow: auto;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 10px;
+}
+
+.status-picker legend {
+  padding: 0 5px;
+}
+
+.status-settings .status-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+}
+
+.status-option + .status-option {
+  border-top: 1px solid var(--line);
+}
+
+.status-settings .status-option input {
+  width: auto;
+  margin: 0;
+}
+
+.status-option small {
+  margin-left: auto;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+.public-status {
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 24px 18px 35px;
+}
+
+.status-shell {
+  display: grid;
+  gap: 14px;
+  max-width: 830px;
+  margin-inline: auto;
+}
+
+.status-header,
+.status-project > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-header {
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.status-title {
+  padding-top: 10px;
+}
+
+.status-title h1 {
+  font-size: clamp(30px, 6vw, 46px);
+}
+
+.status-title p {
+  margin-bottom: 0;
+}
+
+.status-banner {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding: 11px 15px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.status-project-metric {
+  display: flex;
+  gap: 9px;
+  align-items: baseline;
+  margin-top: 8px;
+}
+
+.status-project h3 {
+  margin: 12px 0 0;
+  font-size: 12px;
+}
+
+.status-shell > footer {
+  color: var(--muted);
+  text-align: center;
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .uptime-kpis {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .uptime-kpis > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .uptime-kpis > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .uptime-history {
+    gap: 1px;
+  }
+
+  .status-settings-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .uptime-incidents li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 5px 10px;
+  }
+
+  .uptime-incidents li > div:nth-child(2) {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+}

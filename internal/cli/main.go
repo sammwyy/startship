@@ -369,6 +369,9 @@ const usage = `startship [--json] COMMAND
                                  durations: 30s/15m/1h/7d; sizes: 10MB/512KB
   workspaces domains ...         alias for domains; quote wildcard names
   traffic PROJECT | detect JSON | version
+  uptime PROJECT [enable|disable] project health history and incidents
+  status-page show WORKSPACE
+  status-page set WORKSPACE [--slug SLUG] [--title TITLE] [--projects ID,NAME,...] [--enable|--disable]
   update check                   CLI, daemon and latest release versions
   update [VERSION]               install the latest (or VERSION) CLI and daemon
                                  beside this binary and restart startshipd (root)
@@ -563,6 +566,10 @@ func (c *cli) run(args []string) error {
 			return e
 		}
 		method, path, body = "PATCH", "me", map[string]string{"current_password": p, "new_password": n}
+	case "uptime":
+		return c.runUptime(a)
+	case "status-page":
+		return c.runStatusPage(a)
 	case "deploy", "redeploy", "traffic", "logs":
 		if len(a) == 0 {
 			return errors.New("project or log target required")
