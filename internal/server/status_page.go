@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-var statusSlug = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+var statusSlug = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
 
 type statusPageConfig struct {
 	Enabled  bool     `json:"enabled"`
@@ -82,10 +82,12 @@ func (a *Server) workspaceStatusPage(w http.ResponseWriter, r *http.Request, ws 
 		return
 	}
 	config.Title = strings.TrimSpace(config.Title)
+	config.Slug = strings.TrimSpace(config.Slug)
 	if config.Slug != "" && !statusSlug.MatchString(config.Slug) {
-		fail(w, 400, "slug must be 1–63 lowercase letters, digits, or hyphens, and start and end with a letter or digit")
+		fail(w, 400, "slug must be 1–63 ASCII letters, digits, or hyphens, and start and end with a letter or digit")
 		return
 	}
+	config.Slug = strings.ToLower(config.Slug)
 	if len(config.Title) > 120 || len(config.Projects) > 25 {
 		fail(w, 400, "use a title of at most 120 bytes and select at most 25 projects")
 		return
@@ -120,7 +122,7 @@ func (a *Server) workspaceStatusPage(w http.ResponseWriter, r *http.Request, ws 
 		var owner string
 		err = a.store.DB.QueryRow("SELECT workspace_id FROM status_pages WHERE slug=? AND workspace_id<>?", slug, ws.ID).Scan(&owner)
 		if err == nil {
-			fail(w, 409, "status page slug is already in use")
+			fail(w, 409, "status page address is already in use; choose a different slug")
 			return
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -179,7 +181,7 @@ func (a *Server) servePublicStatus(w http.ResponseWriter, r *http.Request, slug 
 		fail(w, 404, "status page not found")
 		return
 	}
-	page, err := a.publicStatusData(slug)
+	page, err := a.publicStatusData(strings.ToLower(slug))
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		fail(w, 404, "status page not found")

@@ -561,7 +561,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				}
 				_, relevant := pending[key]
 				for _, e := range pending {
-					if s.relevant(e.record) {
+					if s.relevant(e.record) || s.Topic == "status_page" && e.deleted && e.record.Kind == "projects" && e.record.WorkspaceID == s.WorkspaceID {
 						relevant = true
 						break
 					}

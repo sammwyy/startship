@@ -22,7 +22,7 @@ const client = new QueryClient({
   },
 });
 const statusSlug = window.location.pathname.match(
-  /^\/status\/([a-z0-9-]+)$/,
+  /^\/status\/([a-z0-9-]+)$/i,
 )?.[1];
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

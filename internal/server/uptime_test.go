@@ -183,10 +183,228 @@ func TestActiveReleaseProbePushesUptimeSnapshots(t *testing.T) {
 	failing.Store(false)
 	a.sampleUptime(p)
 	assertSnapshot("operational")
-	sleeping := p
-	sleeping.Sleeping = true
-	a.sampleUptime(sleeping)
 	if got := probes.Load(); got != 4 {
 		t.Fatalf("got %d readiness attempts; want one per active runtime check", got)
 	}
+	sample := func() {
+		t.Helper()
+		a.sampleUptime(p)
+		a.sampleUptime(p)
+	}
+	summary := func(state string, checks int) {
+		t.Helper()
+		current, err := a.store.Get(p.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := a.summarizeUptime(current, time.Now(), 30, true)
+		if err != nil || got.State != state || len(got.Checks) != checks || len(got.Incidents) != 1 || got.Incidents[0].End == nil {
+			t.Fatalf("want %s with %d checks and one resolved incident; got %s with %d checks and %+v: %v", state, checks, got.State, len(got.Checks), got.Incidents, err)
+		}
+		if want := 100 * float64(checks-2) / float64(checks); got.Uptime24h == nil || *got.Uptime24h != want {
+			t.Fatalf("want %g%%, got %v", want, got.Uptime24h)
+		}
+	}
+	save := func(r Record) {
+		t.Helper()
+		if err := a.store.Save(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current := p
+	current.Sleeping = true
+	save(current)
+	failing.Store(true)
+	sample() // An awake version of the project was previously read by the worker.
+	summary("sleeping", 4)
+	state := a.projectSleepState(p.ID)
+	state.mu.Lock()
+	current.Sleeping = false
+	save(current)
+	sample() // A wake or activation still owns the lifecycle lock.
+	state.mu.Unlock()
+	summary("operational", 4)
+	failing.Store(false)
+	a.sampleUptime(p)
+	summary("operational", 5)
+
+	save(Record{ID: "static-only", Kind: "releases", ProjectID: p.ID, ContainerReleases: []string{"static"}})
+	current.Active = "static-only"
+	save(current)
+	sample()
+	summary("static", 5)
+
+	preview, err := a.store.Get("preview")
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview.PreviewID = "branch"
+	save(preview)
+	a.sampleUptime(Record{ID: p.ID, Kind: "previews", Active: preview.ID, UptimeMonitoring: true})
+	current.Active = preview.ID
+	save(current)
+	sample()
+	summary("operational", 5)
+	if got := probes.Load(); got != 5 {
+		t.Fatalf("preview, static, and sleeping targets must not be probed, got %d requests", got)
+	}
+	current.Active = "replacement"
+	save(Record{ID: current.Active, Kind: "releases", ProjectID: p.ID, ContainerReleases: []string{"running"}})
+	save(current)
+	a.sampleUptime(p)
+	summary("operational", 6)
+}
+
+func TestUptimeRetentionKeepsBoundaryAndOngoingIncidents(t *testing.T) {
+	a := testServer(t)
+	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	cutoff := now.Add(-uptimeRetention)
+	p := Record{ID: "kept", Kind: "projects", Active: "r", UptimeMonitoring: true}
+	if err := a.store.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		at    time.Time
+		cause string
+	}{
+		{cutoff.Add(-5 * time.Hour), "expired"},
+		{cutoff.Add(-4 * time.Hour), "expired"},
+		{cutoff.Add(-3 * time.Hour), ""},
+		{cutoff.Add(-2 * time.Hour), "ongoing"},
+		{cutoff.Add(-time.Hour), "ongoing"},
+		{cutoff, "inside retention"},
+	} {
+		if err := a.recordUptime(p.ID, row.at, 10, row.cause); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := a.recordUptime("deleted", now, 10, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.pruneUptime(now); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := a.store.DB.QueryRow("SELECT COUNT(*) FROM uptime_checks").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("wanted only the at-cutoff check; got %d: %v", count, err)
+	}
+	if err := a.store.DB.QueryRow("SELECT COUNT(*) FROM uptime_incidents").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("wanted only the ongoing incident; got %d: %v", count, err)
+	}
+	if err := a.recordUptime(p.ID, now, 10, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := a.summarizeUptime(p, now, 90, true)
+	if err != nil || got.State != "operational" || got.Uptime30d == nil || *got.Uptime30d != 100 || len(got.Incidents) != 1 || got.Incidents[0].End == nil || !got.Incidents[0].End.Equal(now) {
+		t.Fatalf("unexpected retained summary: %s, %v, %+v: %v", got.State, got.Uptime30d, got.Incidents, err)
+	}
+}
+
+func TestUptimeRestrictedAccess(t *testing.T) {
+	f := newRBACFixture(t)
+	p := "projects/" + f.project.ID
+	ws := "workspaces/" + f.workspace.ID + "/status-page"
+	toggle := `{"uptime_monitoring":true}`
+	for _, path := range []string{p + "/uptime", ws} {
+		accountRequest(t, f.h, "GET", path, "", f.bob, 404)
+	}
+	accountRequest(t, f.h, "PATCH", p, toggle, f.bob, 404)
+	accountRequest(t, f.h, "PATCH", ws, `{"enabled":false}`, f.bob, 404)
+	srv := httptest.NewServer(f.h)
+	defer srv.Close()
+	subscribe := func(topic, key, id, want string) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		headers := http.Header{"Origin": {srv.URL}, "Cookie": {f.bob.Name + "=" + f.bob.Value}}
+		conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: headers})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.CloseNow()
+		var msg map[string]any
+		if err := wsjson.Read(ctx, conn, &msg); err != nil || msg["type"] != "ready" {
+			t.Fatalf("ready: %v %v", msg, err)
+		}
+		if err := wsjson.Write(ctx, conn, map[string]string{"type": "subscribe", "id": topic, "topic": topic, key: id}); err != nil {
+			t.Fatal(err)
+		}
+		msg = nil
+		if err := wsjson.Read(ctx, conn, &msg); err != nil || msg["type"] != want || want == "error" && msg["data"] != nil {
+			t.Fatalf("wanted %s, got %v: %v", want, msg, err)
+		}
+	}
+	subscribe("uptime", "project_id", f.project.ID, "error")
+	subscribe("status_page", "workspace_id", f.workspace.ID, "error")
+	f.assign(t, f.alice, f.bobID, "member", scopeWorkspace, f.workspace.ID, 201)
+	accountRequest(t, f.h, "GET", p+"/uptime", "", f.bob, 200)
+	subscribe("uptime", "project_id", f.project.ID, "snapshot")
+	accountRequest(t, f.h, "PATCH", p, toggle, f.bob, 403)
+	accountRequest(t, f.h, "GET", ws, "", f.bob, 403)
+	accountRequest(t, f.h, "PATCH", ws, `{"enabled":false}`, f.bob, 403)
+	subscribe("status_page", "workspace_id", f.workspace.ID, "error")
+	accountRequest(t, f.h, "PATCH", p, toggle, f.alice, 200)
+}
+
+func TestStatusPageSlugCollisionAndRecordDeletion(t *testing.T) {
+	f := newRBACFixture(t)
+	other := f.a.store.List("workspaces", f.bobID)[0]
+	first := "workspaces/" + f.workspace.ID + "/status-page"
+	second := "workspaces/" + other.ID + "/status-page"
+	patch := func(path, slug string, cookie *http.Cookie, status int) *httptest.ResponseRecorder {
+		t.Helper()
+		return accountRequest(t, f.h, "PATCH", path, `{"slug":"`+slug+`"}`, cookie, status)
+	}
+	patch(first, "Bad/Slug", f.alice, 400)
+	patch(first, "Team-Status", f.alice, 200)
+	if got := patch(second, "TEAM-STATUS", f.bob, 409).Body.String(); !strings.Contains(got, "choose a different slug") {
+		t.Fatalf("unhelpful collision error: %s", got)
+	}
+	config := f.project.ID + `","` + f.second.ID
+	accountRequest(t, f.h, "PATCH", first, `{"enabled":true,"title":"Team","projects":["`+config+`"]}`, f.alice, 200)
+	call := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		f.h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		return w
+	}
+	if w := call("/status/TEAM-STATUS"); w.Code != 200 || !strings.Contains(w.Body.String(), `id="root"`) {
+		t.Fatalf("mixed-case page did not serve the app shell: %d", w.Code)
+	}
+	public := func(want int) publicStatusPage {
+		t.Helper()
+		w := call("/api/status/TEAM-STATUS")
+		if w.Code != want {
+			t.Fatalf("expected public status %d, got %d: %s", want, w.Code, w.Body.String())
+		}
+		if want == 200 {
+			return decodeBody[publicStatusPage](t, w.Body.Bytes())
+		}
+		return publicStatusPage{}
+	}
+	if got := public(200); len(got.Projects) != 2 {
+		t.Fatalf("selected projects missing: %+v", got.Projects)
+	}
+	for _, p := range []Record{f.project, f.second} {
+		if err := f.a.store.Delete(p); err != nil {
+			t.Fatal(err)
+		}
+		config := decodeBody[statusPageConfig](t, accountRequest(t, f.h, "GET", first, "", f.alice, 200).Body.Bytes())
+		if p.ID == f.project.ID {
+			if got := public(200); len(got.Projects) != 1 || got.Projects[0].Name != f.second.Name {
+				t.Fatalf("deleted project still published: %+v", got.Projects)
+			}
+			if len(config.Projects) != 1 || config.Projects[0] != f.second.ID || !config.Enabled {
+				t.Fatalf("unexpected retained config: %+v", config)
+			}
+		} else if len(config.Projects) != 0 || config.Enabled || config.Slug != "team-status" {
+			t.Fatalf("last project deletion must unpublish and retain the slug: %+v", config)
+		}
+	}
+	public(404)
+	patch(second, "team-status", f.bob, 409)
+	if err := f.a.store.Delete(f.workspace); err != nil {
+		t.Fatal(err)
+	}
+	patch(second, "team-status", f.bob, 200)
+	patch(second, "api", f.bob, 200) // This slug is in /status/, not the API namespace.
 }
