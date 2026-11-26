@@ -96,11 +96,20 @@ func (a *Server) pruneUptime(now time.Time) error {
 }
 
 func (a *Server) sampleUptime(p Record) {
-	if p.Active == "" || p.Sleeping {
+	if p.Kind != "projects" {
+		return
+	}
+	state := a.projectSleepState(p.ID)
+	if !state.mu.TryLock() {
+		return
+	}
+	defer state.mu.Unlock()
+	p, err := a.store.Get(p.ID)
+	if err != nil || !p.UptimeMonitoring || p.Active == "" || p.Sleeping {
 		return
 	}
 	release, err := a.store.Get(p.Active)
-	if err != nil || release.Kind != "releases" || release.ProjectID != p.ID {
+	if err != nil || release.Kind != "releases" || release.ProjectID != p.ID || release.PreviewID != "" {
 		return
 	}
 	probed, latency, cause := false, float64(0), ""

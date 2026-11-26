@@ -36,5 +36,15 @@ CREATE TABLE IF NOT EXISTS uptime_checks(project_id TEXT NOT NULL, at INTEGER NO
 CREATE INDEX IF NOT EXISTS uptime_checks_at ON uptime_checks(at);
 CREATE TABLE IF NOT EXISTS uptime_incidents(project_id TEXT NOT NULL, started INTEGER NOT NULL, ended INTEGER, cause TEXT NOT NULL, PRIMARY KEY(project_id, started));
 CREATE UNIQUE INDEX IF NOT EXISTS uptime_one_open_incident ON uptime_incidents(project_id) WHERE ended IS NULL;
-CREATE TABLE IF NOT EXISTS status_pages(workspace_id TEXT PRIMARY KEY, slug TEXT UNIQUE, enabled INTEGER NOT NULL, title TEXT NOT NULL, projects TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS status_pages(workspace_id TEXT PRIMARY KEY, slug TEXT COLLATE NOCASE UNIQUE, enabled INTEGER NOT NULL, title TEXT NOT NULL, projects TEXT NOT NULL);
+CREATE TRIGGER IF NOT EXISTS status_workspace_delete AFTER DELETE ON records WHEN OLD.kind='workspaces' BEGIN
+    DELETE FROM status_pages WHERE workspace_id=OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS status_project_delete AFTER DELETE ON records WHEN OLD.kind='projects' BEGIN
+    UPDATE status_pages SET
+        projects=(SELECT json_group_array(value) FROM json_each(projects) WHERE value<>OLD.id),
+        enabled=enabled AND EXISTS (SELECT 1 FROM json_each(projects) WHERE value<>OLD.id)
+    WHERE workspace_id=json_extract(OLD.body,'$.workspace_id')
+        AND EXISTS (SELECT 1 FROM json_each(projects) WHERE value=OLD.id);
+END;
 `
