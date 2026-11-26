@@ -45,6 +45,18 @@ startship activity project website
 
 Account activity includes the session that performed each action when known. Use `--follow` on any activity feed to receive new actions over the WebSocket, or add `--json` before the command for machine-readable output. Theme preference is local to the dashboard browser.
 
+### Uptime and public status
+
+`startship uptime PROJECT` shows the current state, 24-hour/7-day/30-day uptime, latest probe latency, and incidents. Add `enable` or `disable` to change the project opt-in. Uptime is the percentage of successful checks; sleeping and static projects are not probed. Two consecutive failures start an incident dated from the first failure. The next success resolves it.
+
+`startship status-page show WORKSPACE` shows the workspace's publishing settings. For example:
+
+```sh
+startship status-page set "Team" --slug team-status --title "Team status" --projects "API,Website" --enable
+```
+
+Visitors can open `/status/team-status` on the dashboard origin without signing in. They see only the selected projects' public summaries as of page load. To unpublish, use `startship status-page set "Team" --disable`.
+
 ## Deploy a project
 
 Replace `Team` with your workspace and the example Git URL with your repository. These examples use an existing workspace and create a new project:

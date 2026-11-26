@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from "react";
 
 export type ThemePreference = "system" | "light" | "dark";
-const storageKey = "startship-theme";
+const storageKey = window.location.pathname.startsWith("/status/")
+  ? "startship-status-theme"
+  : "startship-theme";
 function resolveTheme(preference: ThemePreference) {
   return preference === "system"
     ? window.matchMedia?.("(prefers-color-scheme: light)").matches

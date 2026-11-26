@@ -32,6 +32,8 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | `release_log` | `release_id` (release or deployment id) | `logs.view` | the record with `log`, = GET `releases/:id` | `log` chunks as the build writes them; `upsert` kind release on status/finished change | LogPanel release 2s |
 | `container_log` | `container_id` | `logs.view` | `{"log": "..."}` = GET `containers/:id/logs` (last 200 lines or the same "not deployed"/"static" text) | `log` chunks streamed from the running container; `log` with `reset:true` when the container's active deployment changes | LogPanel container 2s |
 | `traffic` | `project_id`, `window` 300/900/3600 | `traffic.view` | = GET `projects/:id/traffic?window=` | a new `snapshot` pushed every 5s | TrafficView 5s |
+| `uptime` | `project_id` | project visible | = GET `projects/:id/uptime` | replacement snapshot on check or project change | Project Uptime |
+| `status_page` | `workspace_id` | `workspace.manage` | = GET `workspaces/:id/status-page` | replacement snapshot when publishing settings change | Workspace settings |
 | `system_update` | none | signed in (same as GET) | = GET `system/update` | a new `snapshot` whenever it changes (update requested, status file, release check) | SystemView 2s/60s |
 | `account_sessions` | none | signed in | = GET `me/sessions` | replacement snapshot when session data changes | account session list |
 | `account_tokens` | none | signed in | = GET `me/tokens` | replacement snapshot when a token is created, used from a new IP or after a minute, or revoked | account access tokens |

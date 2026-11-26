@@ -8,6 +8,7 @@ export const projectSections = [
   ["connections", "Connections", "plug"],
   ["volumes", "Volumes", "hard-drive"],
   ["traffic", "Traffic", "activity"],
+  ["uptime", "Uptime", "activity"],
   ["domains", "Domains", "globe"],
   ["source", "Source", "branch"],
   ["pipeline", "Pipeline", "pipeline"],

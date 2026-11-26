@@ -135,6 +135,7 @@ export interface Project extends Workspace {
   previews?: boolean;
   sleep_after?: number;
   sleeping?: boolean;
+  uptime_monitoring?: boolean;
   resources_updated?: string;
   workspace_id: string;
   git_url?: string;

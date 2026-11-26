@@ -7,10 +7,12 @@ import { UIProvider } from "./providers/UIProvider";
 import { router } from "./router";
 import { initTheme } from "./lib/theme";
 import { watchDashboardChunks } from "./lib/dashboardReload";
+import { PublicStatusView } from "./views/PublicStatusView";
 import "../style.css";
 import "../traffic.css";
 import "../access.css";
 import "./styles.css";
+import "./uptime.css";
 
 initTheme();
 watchDashboardChunks(import.meta.url);
@@ -19,14 +21,21 @@ const client = new QueryClient({
     queries: { retry: false, staleTime: 1000, refetchOnWindowFocus: false },
   },
 });
+const statusSlug = window.location.pathname.match(
+  /^\/status\/([a-z0-9-]+)$/,
+)?.[1];
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <QueryClientProvider client={client}>
-      <SessionProvider>
-        <UIProvider>
-          <RouterProvider router={router} />
-        </UIProvider>
-      </SessionProvider>
-    </QueryClientProvider>
+    {statusSlug ? (
+      <PublicStatusView slug={statusSlug} />
+    ) : (
+      <QueryClientProvider client={client}>
+        <SessionProvider>
+          <UIProvider>
+            <RouterProvider router={router} />
+          </UIProvider>
+        </SessionProvider>
+      </QueryClientProvider>
+    )}
   </StrictMode>,
 );

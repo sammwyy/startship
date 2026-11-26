@@ -10,7 +10,11 @@
     />
     <script>
       try {
-        const saved = localStorage.getItem("startship-theme");
+        const saved = localStorage.getItem(
+          location.pathname.startsWith("/status/")
+            ? "startship-status-theme"
+            : "startship-theme",
+        );
         document.documentElement.dataset.themePreference =
           saved === "light" || saved === "dark" ? saved : "system";
         document.documentElement.dataset.theme =
