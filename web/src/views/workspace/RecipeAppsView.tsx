@@ -521,21 +521,23 @@ function AppDetail({
           <h2>
             <Icon name="layers" /> Containers
           </h2>
-          {app.recipe.containers.map((c) => (
-            <div className="recipe-row" key={c.id}>
-              <div>
-                <strong>{c.id}</strong>
-                <code>{c.image}</code>
+          {app.recipe.containers.map((c) => {
+            const container = app.containers[c.id];
+            const status = container?.status || "pending";
+            return (
+              <div className="recipe-row" key={c.id}>
+                <div>
+                  <strong>{c.id}</strong>
+                  <code>{c.image}</code>
+                </div>
+                <Badge
+                  status={
+                    status === "running" ? container?.health || status : status
+                  }
+                />
               </div>
-              <Badge
-                status={
-                  app.containers[c.id]?.health ||
-                  app.containers[c.id]?.status ||
-                  "pending"
-                }
-              />
-            </div>
-          ))}
+            );
+          })}
         </section>
         <section className="panel recipe-section">
           <h2>
