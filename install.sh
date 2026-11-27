@@ -74,7 +74,7 @@ env_file=/etc/startship/startshipd.env
 if [ "$uninstall" = 1 ]; then
     [ "$options" = 1 ] || die '--uninstall takes no other options'
     section 'Removing Startship'
-    if [ -d /run/systemd/system ]; then systemctl disable --now startship-update.path startshipd.service || true; fi
+    if [ -d /run/systemd/system ]; then systemctl --quiet disable --now startship-update.path startshipd.service || true; fi
     rm -f /etc/systemd/system/startshipd.service /etc/systemd/system/startship-update.path /etc/systemd/system/startship-update.service /usr/local/bin/startship /usr/local/bin/startshipd
     if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
     detail 'Binaries and systemd units removed.' 'Data, configuration, and the startship user were kept.'
@@ -199,7 +199,7 @@ if [ "$start" = 0 ]; then
 elif [ -d /run/systemd/system ]; then
     detail 'Starting systemd services...'
     systemctl daemon-reload
-    systemctl enable --now startshipd.service startship-update.path
+    systemctl --quiet enable --now startshipd.service startship-update.path
     systemctl restart startshipd.service
     status=''
 else
