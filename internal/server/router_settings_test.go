@@ -48,14 +48,14 @@ func TestSystemRouterSettings(t *testing.T) {
 	a.legacyCertificate = func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
 		return &certificate.TLS.Certificates[0], nil
 	}
-	initial, _, err := a.prepareRouterListeners(settings)
+	initial, err := a.prepareRouterListeners(settings)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.commitRouterListeners(settings, initial)
+	a.commitRouterListeners(settings, initial.next)
 	t.Cleanup(a.stopRouterListeners)
-	oldHTTP := initial[listenerKey{1, "127.0.0.1:0"}].listener.Addr().String()
-	oldHTTPS := initial[listenerKey{2, "127.0.0.1:0"}].listener.Addr().String()
+	oldHTTP := initial.next[listenerKey{1, "127.0.0.1:0"}].listener.Addr().String()
+	oldHTTPS := initial.next[listenerKey{2, "127.0.0.1:0"}].listener.Addr().String()
 	h := a.api()
 	login := httptest.NewRecorder()
 	h.ServeHTTP(login, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"bob","password":"password123"}`)))
@@ -127,8 +127,8 @@ func TestSystemRouterSettings(t *testing.T) {
 	disabled := settings
 	disabled.RouterDisabled = true
 	disabled.HTTPListen = []string{occupied.Addr().String()}
-	if listeners, _, err := a.prepareRouterListeners(disabled); err != nil || len(listeners) != 0 {
-		t.Fatalf("disabled router attempted to bind: %v, %v", listeners, err)
+	if prepared, err := a.prepareRouterListeners(disabled); err != nil || len(prepared.next) != 0 {
+		t.Fatalf("disabled router attempted to bind: %v, %v", prepared.next, err)
 	}
 	candidate := routerTestListener(t)
 	newHTTP := candidate.Addr().String()
@@ -217,13 +217,13 @@ func TestSystemDashboardAndInterfaces(t *testing.T) {
 			{Name: "lo", Addresses: []string{"127.0.0.1", "::1"}, Up: true, Loopback: true},
 		}, nil
 	}
-	initial, _, err := a.prepareDashboardListeners(settings)
+	initial, err := a.prepareDashboardListeners(settings)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a.commitDashboardListeners(settings, initial)
+	a.commitDashboardListeners(settings, initial.next)
 	t.Cleanup(a.stopRouterListeners)
-	oldAddr := initial[listenerKey{0, "127.0.0.1:0"}].listener.Addr().String()
+	oldAddr := initial.next[listenerKey{0, "127.0.0.1:0"}].listener.Addr().String()
 	h := a.api()
 	login := httptest.NewRecorder()
 	h.ServeHTTP(login, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"bob","password":"password123"}`)))
@@ -300,6 +300,29 @@ func TestSystemDashboardAndInterfaces(t *testing.T) {
 	}
 	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["`+newAddr+`"]}`, 200)
 	checkDashboard(oldAddr, false)
+	checkDashboard(newAddr, true)
+	_, port, err := net.SplitHostPort(newAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Switching between specific interface and wildcard on the same port must succeed in both directions.
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":[":`+port+`"]}`, 200)
+	checkDashboard("127.0.0.1:"+port, true)
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["lo:`+port+`"]}`, 200)
+	checkDashboard("127.0.0.1:"+port, true)
+	// Config write failure during a same-port switch must roll back to the previous listener.
+	if err := os.Remove(settings.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(settings.ConfigPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":[":`+port+`"]}`, 500)
+	checkDashboard("127.0.0.1:"+port, true)
+	if err := os.Remove(settings.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["`+newAddr+`"]}`, 200)
 	checkDashboard(newAddr, true)
 	if os.Getenv("STARTSHIP_DASHBOARD_ADDR") != newAddr {
 		t.Fatalf("STARTSHIP_DASHBOARD_ADDR=%q, want %q", os.Getenv("STARTSHIP_DASHBOARD_ADDR"), newAddr)

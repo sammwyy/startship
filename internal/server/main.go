@@ -105,19 +105,19 @@ func Run(settings config.Daemon) {
 	go a.watchIdle(metricsContext)
 	go a.watchUptime(metricsContext)
 	a.routerListeners.dashboardHandler = a.api()
-	nextRouter, _, e := a.prepareRouterListeners(settings)
+	nextRouter, e := a.prepareRouterListeners(settings)
 	if e != nil {
 		log.Fatal(e)
 	}
-	a.commitRouterListeners(settings, nextRouter)
+	a.commitRouterListeners(settings, nextRouter.next)
 	if settings.RouterDisabled {
 		log.Print("Startship public router is disabled")
 	}
-	nextDashboard, _, e := a.prepareDashboardListeners(settings)
+	nextDashboard, e := a.prepareDashboardListeners(settings)
 	if e != nil {
 		log.Fatal(e)
 	}
-	a.commitDashboardListeners(settings, nextDashboard)
+	a.commitDashboardListeners(settings, nextDashboard.next)
 	socket, e := a.serveSocket(socketPath(data))
 	if e != nil {
 		log.Fatal(e)
