@@ -6,35 +6,44 @@ import { useUI } from "../providers/UIProvider";
 import { Badge, ErrorMessage } from "./ui";
 import { Icon } from "./Icon";
 import { useLiveStatus, useLiveSubscription } from "../providers/LiveProvider";
+import type { LiveSubscription } from "../services/live";
 
-export function useLog(releaseId: string, containerId = "") {
-  const liveError = useLiveSubscription(
-    containerId
-      ? { topic: "container_log", container_id: containerId }
-      : releaseId
-        ? { topic: "release_log", release_id: releaseId }
-        : null,
-  );
-  const path = containerId
-    ? `containers/${containerId}/logs`
-    : `releases/${releaseId}`;
+function useLogQuery<T>(path: string, subscription: LiveSubscription | null) {
+  const liveError = useLiveSubscription(subscription);
   const query = useQuery({
     queryKey: [path],
-    queryFn: ({ signal }) => request<Release>(path, undefined, "GET", signal),
-    enabled: !!(releaseId || containerId),
+    queryFn: ({ signal }) => request<T>(path, undefined, "GET", signal),
+    enabled: subscription !== null,
   });
   return { ...query, error: liveError || query.error };
 }
+
+export function useLog(releaseId: string) {
+  return useLogQuery<Release>(
+    `releases/${releaseId}`,
+    releaseId ? { topic: "release_log", release_id: releaseId } : null,
+  );
+}
+
+export function useRuntimeLog(containerId?: string) {
+  return useLogQuery<{ log: string }>(
+    `containers/${containerId}/logs`,
+    containerId ? { topic: "container_log", container_id: containerId } : null,
+  );
+}
+
 export function LogPanel({
   log,
   status,
   title,
+  emptyMessage,
   error,
   loading = false,
 }: {
   log?: string;
   status?: string;
   title?: string;
+  emptyMessage?: string;
   error?: unknown;
   loading?: boolean;
 }) {
@@ -47,11 +56,12 @@ export function LogPanel({
   const lineCount = output ? output.trimEnd().split("\n").length : 0;
   const placeholder = loading
     ? "Loading logs…"
-    : status && ["queued", "building", "testing", "starting"].includes(status)
-      ? "Waiting for build output…"
-      : status
-        ? "No output was recorded for this deployment."
-        : "Deploy your project to see its build output here.";
+    : (emptyMessage ??
+      (status && ["queued", "building", "testing", "starting"].includes(status)
+        ? "Waiting for build output…"
+        : status
+          ? "No output was recorded for this deployment."
+          : "Deploy your project to see its build output here."));
   useEffect(() => {
     if (follow && pre.current) pre.current.scrollTop = pre.current.scrollHeight;
   }, [follow, output]);
