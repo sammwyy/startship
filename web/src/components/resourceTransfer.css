@@ -6,7 +6,8 @@
   padding: 16px 20px;
 }
 
-.resource-transfer > form {
+.resource-transfer > form,
+.resource-transfer > .transfer-plan-error {
   overflow: auto;
   padding: 16px 20px;
 }

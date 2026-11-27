@@ -89,7 +89,7 @@ function TransferDialog({
     retry: false,
   });
   const target = destinations.find((workspace) => workspace.id === destination);
-  const data = plan.data;
+  const data = plan.isSuccess && !plan.isFetching ? plan.data : undefined;
   const linked = data?.linked ?? [];
   const eligible = (item: Linked) =>
     item.allowed && (!target || can(createPermission[item.kind], target));
@@ -104,8 +104,13 @@ function TransferDialog({
       onClose={close}
       className="resource-transfer"
     >
-      {plan.isPending && <Loading />}
-      <ErrorMessage error={plan.error} />
+      {plan.isFetching || plan.isPending ? (
+        <Loading />
+      ) : plan.isError ? (
+        <div className="transfer-plan-error">
+          <ErrorMessage error={plan.error} />
+        </div>
+      ) : null}
       {data && (
         <AsyncForm
           className="service-form"

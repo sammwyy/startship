@@ -87,3 +87,55 @@ it("preselects linked resources and sends only the ones kept for copy", async ()
     HTMLDialogElement.prototype.showModal = showModal;
   }
 });
+
+it("hides a previously authorized plan while reopening and after permission is denied", async () => {
+  const showModal = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  try {
+    vi.mocked(request)
+      .mockResolvedValueOnce({
+        plan_id: "old-plan",
+        linked: [
+          { kind: "services", id: "db", name: "Database", allowed: true },
+        ],
+      })
+      .mockRejectedValueOnce(new Error("Source permission denied"));
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <UIProvider>
+            <ResourceTransfer
+              kind="projects"
+              id="p"
+              name="API"
+              workspaceId="from"
+            />
+          </UIProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const open = () =>
+      fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    const expectNoPlan = () => {
+      expect(screen.queryByText("Linked resources")).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Copy resources" }),
+      ).not.toBeInTheDocument();
+    };
+    open();
+    expect(
+      await screen.findByRole("checkbox", { name: "Database Service" }),
+    ).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Close dialog" }));
+    open();
+    expectNoPlan();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Source permission denied",
+    );
+    expectNoPlan();
+  } finally {
+    HTMLDialogElement.prototype.showModal = showModal;
+  }
+});
