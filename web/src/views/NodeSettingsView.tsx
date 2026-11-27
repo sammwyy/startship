@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { queries } from "../services/queries";
 import { ErrorMessage, Loading, ThemeButton } from "../components/ui";
 import { useLiveStatus } from "../providers/LiveProvider";
+import { RouterPanel } from "./RouterPanel";
 
 export function NodeSettingsView() {
   const version = useQuery(queries.version());
@@ -55,6 +56,7 @@ export function NodeSettingsView() {
           </dl>
         )}
       </section>
+      <RouterPanel />
       <section className="panel panel-pad" aria-labelledby="appearance-title">
         <div className="section-head">
           <div>

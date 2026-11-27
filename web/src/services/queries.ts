@@ -12,6 +12,7 @@ import type {
   User,
   Workspace,
   UpdateInfo,
+  RouterConfig,
   SystemVersion,
   PipelineTemplate,
   ServiceEngine,
@@ -42,6 +43,7 @@ export const queries = {
     ...resource<UpdateInfo>("system/update"),
     retry: false,
   }),
+  router: () => resource<RouterConfig>("system/router"),
   version: () => ({
     ...resource<SystemVersion>("system/version"),
     retry: false,

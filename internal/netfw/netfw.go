@@ -116,9 +116,6 @@ func (m *Manager) Reconcile(rules []Rule, now time.Time) error {
 		}
 	}
 	sort.Strings(ports)
-	if len(ports) == 0 {
-		return fmt.Errorf("router ports must not be empty")
-	}
 	entries := map[string]map[string]int{}
 	for _, set := range sets {
 		entries[set] = map[string]int{}

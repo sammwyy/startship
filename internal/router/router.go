@@ -58,16 +58,26 @@ type Options struct {
 	HTTPSPort      string
 }
 type Router struct {
-	snapshot atomic.Pointer[Snapshot]
-	hooks    Hooks
-	options  Options
+	snapshot  atomic.Pointer[Snapshot]
+	httpsPort atomic.Value
+	hooks     Hooks
+	options   Options
 }
 
 func New(hooks Hooks, options Options) *Router {
 	options.TrustedProxies = append([]netip.Prefix(nil), options.TrustedProxies...)
 	r := &Router{hooks: hooks, options: options}
+	r.SetHTTPSPort(options.HTTPSPort)
 	r.Update(Snapshot{})
 	return r
+}
+
+func (r *Router) SetHTTPSPort(port string) {
+	r.httpsPort.Store(port)
+}
+
+func (r *Router) HTTPSPort() string {
+	return r.httpsPort.Load().(string)
 }
 
 // Update takes ownership of copies of the routing slices and maps. Engines are immutable.
@@ -107,7 +117,7 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	target := *t
 	if target.Route.ForceHTTPS && r.TLS == nil {
 		host := strings.Trim(routing.NormalizeHost(target.Route.Host), "[]")
-		port := a.options.HTTPSPort
+		port := a.HTTPSPort()
 		if port != "" && port != "443" {
 			host = net.JoinHostPort(host, port)
 		} else if strings.Contains(host, ":") {

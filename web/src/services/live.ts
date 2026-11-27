@@ -9,6 +9,7 @@ import type {
   Preview,
   Release,
   SystemVersion,
+  RouterConfig,
   UpdateInfo,
   Service,
   Workspace,
@@ -37,6 +38,7 @@ export type LiveSubscription =
   | { topic: "workspace_activity"; workspace_id: string }
   | { topic: "project_activity"; project_id: string }
   | { topic: "system_update" }
+  | { topic: "system_router" }
   | { topic: "workspaces" };
 export interface LiveMessage {
   type: "snapshot" | "upsert" | "delete" | "log" | "error";
@@ -365,6 +367,10 @@ export function applyLiveMessage(
       exact: true,
     });
     client.setQueryData(["traffic", spec.project_id, spec.window], event.data);
+  } else if (spec.topic === "system_router" && event.type === "snapshot") {
+    const queryKey = queries.router().queryKey;
+    void client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData<RouterConfig>(queryKey, event.data as RouterConfig);
   } else if (spec.topic === "system_update" && event.type === "snapshot") {
     void client.cancelQueries({
       queryKey: queries.updates().queryKey,

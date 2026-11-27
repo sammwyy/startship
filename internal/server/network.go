@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
+	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -113,14 +114,7 @@ func (a *Server) expireNetwork(rules []netfw.Rule) ([]netfw.Rule, error) {
 func (a *Server) initNetwork(settings config.Daemon) {
 	n := &a.network
 	n.enabled = settings.NetworkFirewall
-	ports := []string{}
-	for _, entry := range append(slices.Clone(settings.HTTPListen), settings.HTTPSListen...) {
-		_, port, _ := net.SplitHostPort(entry)
-		if port != "0" {
-			ports = append(ports, port)
-		}
-	}
-	n.manager = &netfw.Manager{Executor: netfw.OSExecutor{}, Ports: ports, Country: func(code string) ([]string, error) { return netfw.ExpandCountry(settings.GeoIPDatabase, code) }}
+	n.manager = &netfw.Manager{Executor: netfw.OSExecutor{}, Ports: networkRouterPorts(settings), Country: func(code string) ([]string, error) { return netfw.ExpandCountry(settings.GeoIPDatabase, code) }}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if !n.enabled {
@@ -138,6 +132,69 @@ func (a *Server) initNetwork(settings config.Daemon) {
 	if n.err != nil {
 		log.Printf("network firewall: %v", n.err)
 	}
+}
+
+func networkRouterPorts(settings config.Daemon) []string {
+	if settings.RouterDisabled {
+		return nil
+	}
+	var ports []string
+	for _, port := range slices.Sorted(maps.Keys(listenPorts(settings.HTTPListen, settings.HTTPSListen))) {
+		ports = append(ports, strconv.Itoa(port))
+	}
+	return ports
+}
+
+func (a *Server) withNetworkRouterPorts(settings config.Daemon, apply func() error) error {
+	n := &a.network
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if !n.enabled {
+		return apply()
+	}
+	manager := a.networkManager()
+	old, next := manager.Ports, networkRouterPorts(settings)
+	if slices.Equal(old, next) {
+		return apply()
+	}
+	rules, err := a.networkRules()
+	if err != nil {
+		return fmt.Errorf("read network firewall rules: %w", err)
+	}
+	reconcile := func(ports []string) error {
+		manager.Ports = ports
+		n.err = manager.Reconcile(rules, time.Now())
+		return n.err
+	}
+	restore := func() {
+		if err := reconcile(old); err != nil {
+			log.Printf("restore network firewall router ports: %v", err)
+		}
+	}
+	// Cover both sets until the new listeners replace the old ones.
+	combined := slices.Clone(old)
+	for _, port := range next {
+		if !slices.Contains(combined, port) {
+			combined = append(combined, port)
+		}
+	}
+	unionChanged := len(combined) != len(old)
+	if unionChanged {
+		if err := reconcile(combined); err != nil {
+			restore()
+			return fmt.Errorf("protect new router ports: %w", err)
+		}
+	}
+	if err := apply(); err != nil {
+		if unionChanged {
+			restore()
+		}
+		return err
+	}
+	if err := reconcile(next); err != nil {
+		log.Printf("remove old network firewall router ports: %v", err)
+	}
+	return nil
 }
 
 func (a *Server) watchNetwork(ctx context.Context) {

@@ -14,16 +14,23 @@ import (
 )
 
 func (a *Server) reserveServicePorts(groups ...[]string) {
-	a.serviceReservedPorts = map[int]bool{}
+	a.serviceReservedPorts = listenPorts(groups...)
+}
+
+func listenPorts(groups ...[]string) map[int]bool {
+	ports := map[int]bool{}
 	for _, entries := range groups {
 		for _, entry := range entries {
 			_, port, err := net.SplitHostPort(entry)
 			if err == nil {
 				n, _ := strconv.Atoi(port)
-				a.serviceReservedPorts[n] = true
+				if n > 0 {
+					ports[n] = true
+				}
 			}
 		}
 	}
+	return ports
 }
 
 func (a *Server) validateService(s Service) error {
@@ -51,24 +58,10 @@ func (a *Server) validateService(s Service) error {
 	return nil
 }
 func (a *Server) daemonPortReserved(n int) bool {
-	if a.serviceReservedPorts[n] {
-		return true
+	if a.serviceReservedPorts != nil {
+		return a.serviceReservedPorts[n]
 	}
-	ports := []string{}
-	if a.serviceReservedPorts == nil {
-		ports = []string{"8080", "80", "443"}
-	}
-	for _, key := range []string{"STARTSHIP_DASHBOARD_ADDR", "STARTSHIP_HTTP_ADDR", "STARTSHIP_HTTPS_ADDR"} {
-		if v := os.Getenv(key); v != "" {
-			ports = append(ports, v[strings.LastIndex(v, ":")+1:])
-		}
-	}
-	for _, p := range ports {
-		if strconv.Itoa(n) == p {
-			return true
-		}
-	}
-	return false
+	return listenPorts([]string{":8080", ":80", ":443", os.Getenv("STARTSHIP_DASHBOARD_ADDR"), os.Getenv("STARTSHIP_HTTP_ADDR"), os.Getenv("STARTSHIP_HTTPS_ADDR")})[n]
 }
 func (a *Server) resourceProject(x *access, ws, id, mount string) bool {
 	if id == "" {
