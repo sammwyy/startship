@@ -38,6 +38,7 @@ type Server struct {
 	routerRefresh        sync.Mutex
 	router               *router.Router
 	routerOptions        router.Options
+	routerListeners      routerListeners
 	firewall             firewallRuntime
 	network              networkRuntime
 	traffic              trafficMetrics

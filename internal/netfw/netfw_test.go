@@ -156,6 +156,15 @@ func TestReconcileAndTeardown(t *testing.T) {
 	if len(f.chains["iptables"][chain]) != 2 || strings.Contains(fmt.Sprint(f.chains), "443,80") {
 		t.Fatal(f.chains)
 	}
+	m.Ports = nil
+	if err := m.Reconcile(rules, now); err != nil {
+		t.Fatal(err)
+	}
+	for binary, family := range map[string]string{"iptables": "v4", "ip6tables": "v6"} {
+		if rules := f.chains[binary][chain]; len(rules) != 1 || !strings.Contains(rules[0], "startship-all-"+family) {
+			t.Fatal(binary, rules)
+		}
+	}
 	f.sets["startship-all-v4-tmp"] = true
 	if err := m.Teardown(); err != nil {
 		t.Fatal(err)

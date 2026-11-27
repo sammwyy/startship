@@ -68,7 +68,11 @@ func (a *Server) publicRouter() *router.Router {
 					return false
 				}
 				if a.https && r.TLS == nil {
-					http.Redirect(w, r, "https://"+routing.NormalizeHost(r.Host)+r.URL.RequestURI(), http.StatusPermanentRedirect)
+					host := routing.NormalizeHost(r.Host)
+					if port := a.publicRouter().HTTPSPort(); port != "" && port != "443" {
+						host = net.JoinHostPort(strings.Trim(host, "[]"), port)
+					}
+					http.Redirect(w, r, "https://"+host+r.URL.RequestURI(), http.StatusPermanentRedirect)
 				} else {
 					a.api().ServeHTTP(w, r)
 				}

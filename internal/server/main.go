@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"github.com/sammwyy/startship/internal/config"
 	"github.com/sammwyy/startship/internal/firewall"
@@ -26,42 +25,23 @@ func listen(name, addr, variable, fallback string) (net.Listener, error) {
 	return l, nil
 }
 func serve(servers []*http.Server, groups ...int) error {
-	names := []string{"dashboard", "proxy", "HTTPS proxy"}
-	variables := []string{"STARTSHIP_DASHBOARD_ADDR", "STARTSHIP_HTTP_ADDR", "STARTSHIP_HTTPS_ADDR"}
-	fallbacks := []string{":18080", ":8081", ":8443"}
-	listeners := make([]net.Listener, 0, len(servers))
+	listeners := make([]*boundServer, 0, len(servers))
 	for i, srv := range servers {
 		group := i
 		if len(groups) > 0 {
 			group = groups[i]
 		}
-		l, err := listen(names[group], srv.Addr, variables[group], fallbacks[group])
+		l, err := bindServer(srv, group)
 		if err != nil {
 			for _, opened := range listeners {
-				opened.Close()
+				opened.listener.Close()
 			}
 			return err
 		}
 		listeners = append(listeners, l)
 	}
-	for i, srv := range servers {
-		group := i
-		if len(groups) > 0 {
-			group = groups[i]
-		}
-		l := listeners[i]
-		go func() {
-			var err error
-			if srv.TLSConfig != nil {
-				err = srv.ServeTLS(l, "", "")
-			} else {
-				err = srv.Serve(l)
-			}
-			if err != nil && err != http.ErrServerClosed {
-				log.Fatal(err)
-			}
-		}()
-		log.Printf("Startship %s listening on %s", names[group], l.Addr())
+	for _, l := range listeners {
+		l.start()
 	}
 	return nil
 }
@@ -91,10 +71,10 @@ func Run(settings config.Daemon) {
 	if settings.GeoIPDatabase != "" {
 		a.routerOptions.GeoIP = geo
 	}
-	if len(settings.HTTPSListen) > 0 {
-		_, a.routerOptions.HTTPSPort, _ = net.SplitHostPort(settings.HTTPSListen[0])
-	}
-	a.reserveServicePorts(settings.DashboardListen, settings.HTTPListen, settings.HTTPSListen)
+	a.routerListeners.settings = settings
+	a.setRouterPorts(settings)
+	proxyHandler := a.configureRouterProxy(settings)
+	a.routerListeners.httpHandler = proxyHandler
 	a.initLive()
 	if e = a.bootstrapAdmin(os.Getenv("STARTSHIP_ADMIN_USER"), os.Getenv("STARTSHIP_ADMIN_PASSWORD")); e != nil {
 		log.Fatal(e)
@@ -111,47 +91,24 @@ func Run(settings config.Daemon) {
 	go a.scheduleBackups(metricsContext)
 	go a.watchIdle(metricsContext)
 	go a.watchUptime(metricsContext)
-	var proxyHandler http.Handler = a
-	if email := os.Getenv("STARTSHIP_ACME_EMAIL"); email != "" {
-		a.https = true
-		m := &autocert.Manager{Client: &acme.Client{DirectoryURL: settings.ACMEDirectory}, Prompt: autocert.AcceptTOS, Email: email, Cache: autocert.DirCache(filepath.Join(data, "certs")), HostPolicy: func(ctx context.Context, host string) error {
-			if a.certAllowed(host) {
-				return nil
-			}
-			return errInvalid
-		}}
-		legacyHTTP := m.HTTPHandler(a)
-		proxyHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if _, ok := a.challenges.Load(r.URL.Path); ok {
-				a.serveChallenge(w, r)
-				return
-			}
-			legacyHTTP.ServeHTTP(w, r)
-		})
-		a.legacyCertificate = m.GetCertificate
-	}
 	var servers []*http.Server
 	var groups []int
-	for group, entries := range [][]string{settings.DashboardListen, settings.HTTPListen, settings.HTTPSListen} {
-		addresses, err := config.Resolve(entries)
-		if err != nil {
-			log.Fatal(err)
-		}
-		for _, addr := range addresses {
-			handler := a.api()
-			if group == 1 {
-				handler = proxyHandler
-			}
-			if group == 2 {
-				handler = a
-			}
-			srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-			if group == 2 {
-				srv.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12, GetCertificate: a.tlsCertificate}
-			}
-			servers = append(servers, srv)
-			groups = append(groups, group)
-		}
+	addresses, err := config.Resolve(settings.DashboardListen)
+	if err != nil {
+		log.Fatal(err)
+	}
+	handler := a.api()
+	for _, addr := range addresses {
+		servers = append(servers, &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second})
+		groups = append(groups, 0)
+	}
+	next, _, e := a.prepareRouterListeners(settings)
+	if e != nil {
+		log.Fatal(e)
+	}
+	a.commitRouterListeners(settings, next)
+	if settings.RouterDisabled {
+		log.Print("Startship public router is disabled")
 	}
 	if e := serve(servers, groups...); e != nil {
 		log.Fatal(e)
@@ -166,7 +123,30 @@ func Run(settings config.Daemon) {
 	<-c
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	a.stopRouterListeners()
 	for _, srv := range servers {
 		srv.Shutdown(ctx)
 	}
+}
+
+func (a *Server) configureRouterProxy(settings config.Daemon) http.Handler {
+	if email := os.Getenv("STARTSHIP_ACME_EMAIL"); email != "" {
+		a.https = true
+		m := &autocert.Manager{Client: &acme.Client{DirectoryURL: settings.ACMEDirectory}, Prompt: autocert.AcceptTOS, Email: email, Cache: autocert.DirCache(filepath.Join(a.data, "certs")), HostPolicy: func(ctx context.Context, host string) error {
+			if a.certAllowed(host) {
+				return nil
+			}
+			return errInvalid
+		}}
+		legacyHTTP := m.HTTPHandler(a)
+		a.legacyCertificate = m.GetCertificate
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, ok := a.challenges.Load(r.URL.Path); ok {
+				a.serveChallenge(w, r)
+				return
+			}
+			legacyHTTP.ServeHTTP(w, r)
+		})
+	}
+	return a
 }

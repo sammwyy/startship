@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/BurntSushi/toml"
 )
@@ -28,9 +30,24 @@ func Get(b []byte, key string) (string, error) {
 }
 
 func Edit(path, key string, values []string, unset bool) error {
-	if _, ok := environment[key]; !ok {
-		return fmt.Errorf("unknown daemon setting %q", key)
+	d := Defaults()
+	if _, ok := d.lists()[key]; ok && !unset {
+		list := []string{}
+		for _, v := range values {
+			list = append(list, strings.Split(v, ",")...)
+		}
+		values = list
 	}
+	if unset {
+		values = nil
+	} else if values == nil {
+		values = []string{}
+	}
+	return EditSettings(path, map[string][]string{key: values})
+}
+
+// EditSettings writes all changes atomically. A nil value unsets a key.
+func EditSettings(path string, changes map[string][]string) error {
 	b, err := Read(path)
 	if err != nil {
 		return err
@@ -39,36 +56,69 @@ func Edit(path, key string, values []string, unset bool) error {
 	if err = Parse(b, &d); err != nil {
 		return err
 	}
-	var replacement string
-	if !unset {
-		if p, ok := d.strings()[key]; ok {
+	for key, values := range changes {
+		if _, ok := environment[key]; !ok {
+			return fmt.Errorf("unknown daemon setting %q", key)
+		}
+		if values == nil {
+			continue
+		}
+		switch {
+		case d.strings()[key] != nil:
 			if len(values) != 1 {
 				return fmt.Errorf("%s requires exactly one value", key)
 			}
-			*p = values[0]
-		} else {
-			list := []string{}
-			for _, v := range values {
-				list = append(list, strings.Split(v, ",")...)
+			*d.strings()[key] = values[0]
+		case d.bools()[key] != nil:
+			if len(values) != 1 {
+				return fmt.Errorf("%s requires exactly one value", key)
 			}
-			*d.lists()[key] = list
+			value, err := strconv.ParseBool(values[0])
+			if err != nil {
+				return fmt.Errorf("%s: %w", key, err)
+			}
+			*d.bools()[key] = value
+		default:
+			*d.lists()[key] = append([]string{}, values...)
 		}
-		if err = d.Validate(); err != nil {
-			return err
-		}
-		var value any
-		if p, ok := d.strings()[key]; ok {
-			value = *p
-		} else {
-			value = *d.lists()[key]
-		}
-		var out bytes.Buffer
-		if err = toml.NewEncoder(&out).Encode(map[string]any{key: value}); err != nil {
-			return err
-		}
-		replacement = out.String()
 	}
-	lines := strings.SplitAfter(string(b), "\n")
+	content := string(b)
+	for key, values := range changes {
+		var replacement string
+		if values != nil {
+			var value any
+			switch {
+			case d.strings()[key] != nil:
+				value = *d.strings()[key]
+			case d.bools()[key] != nil:
+				value = *d.bools()[key]
+			default:
+				list := *d.lists()[key]
+				for i := range list {
+					list[i] = strings.TrimSpace(list[i])
+				}
+				value = list
+			}
+			var out bytes.Buffer
+			if err = toml.NewEncoder(&out).Encode(map[string]any{key: value}); err != nil {
+				return err
+			}
+			replacement = out.String()
+		}
+		content = replaceSetting(content, key, replacement)
+	}
+	check := Defaults()
+	if err = Parse([]byte(content), &check); err != nil {
+		return err
+	}
+	if err = check.Validate(); err != nil {
+		return err
+	}
+	return writeSettings(path, content)
+}
+
+func replaceSetting(content, key, replacement string) string {
+	lines := strings.SplitAfter(content, "\n")
 	start, end := -1, -1
 	for i := 0; i < len(lines); i++ {
 		line := strings.TrimSpace(lines[i])
@@ -89,38 +139,34 @@ func Edit(path, key string, values []string, unset bool) error {
 			break
 		}
 	}
-	var content string
 	if start >= 0 {
-		if end < 0 {
-			return fmt.Errorf("cannot locate complete TOML value for %s", key)
-		}
-		content = strings.Join(lines[:start], "") + replacement + strings.Join(lines[end:], "")
-	} else {
-		content = string(b)
-		if replacement != "" {
-			if content != "" && !strings.HasSuffix(content, "\n") {
-				content += "\n"
-			}
-			content += replacement
-		}
+		return strings.Join(lines[:start], "") + replacement + strings.Join(lines[end:], "")
 	}
-	check := Defaults()
-	if err = Parse([]byte(content), &check); err != nil {
-		return err
+	if replacement != "" && content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
 	}
-	if err = check.Validate(); err != nil {
-		return err
-	}
+	return content + replacement
+}
+
+func writeSettings(path, content string) error {
 	mode := os.FileMode(0644)
+	var owner *syscall.Stat_t
 	if stat, err := os.Stat(path); err == nil {
 		mode = stat.Mode().Perm()
+		owner, _ = stat.Sys().(*syscall.Stat_t)
 	}
 	f, err := os.CreateTemp(filepath.Dir(path), ".startship-*.toml")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(f.Name())
-	if err = f.Chmod(mode); err == nil {
+	if owner != nil && os.Geteuid() == 0 {
+		err = f.Chown(int(owner.Uid), int(owner.Gid))
+	}
+	if err == nil {
+		err = f.Chmod(mode)
+	}
+	if err == nil {
 		_, err = f.WriteString(content)
 	}
 	if err == nil {

@@ -63,6 +63,61 @@ func configFile(t *testing.T, text string) string {
 	}
 	return path
 }
+
+func TestRouterSettingsPrecedence(t *testing.T) {
+	cleanEnvironment(t)
+	path := configFile(t, "router_disabled = true\n")
+	t.Setenv("STARTSHIP_CONFIG", path)
+	d, err := Load(nil, io.Discard)
+	if err != nil || !d.RouterDisabled || d.ConfigPath != path || len(d.Overridden) != 0 {
+		t.Fatal(d, err)
+	}
+	t.Setenv("STARTSHIP_ROUTER_DISABLED", "true")
+	t.Setenv("STARTSHIP_HTTP_ADDR", "127.0.0.1:18081")
+	d, err = Load([]string{"--config", path, "--router-disabled=false", "--https-listen", "127.0.0.1:18443"}, io.Discard)
+	if err != nil || d.RouterDisabled || !reflect.DeepEqual(d.Overridden, map[string]bool{"router_disabled": true, "http_listen": true, "https_listen": true}) {
+		t.Fatal(d, err)
+	}
+	if err := d.ExportRouter(); err != nil || os.Getenv("STARTSHIP_ROUTER_DISABLED") != "false" || os.Getenv("STARTSHIP_HTTPS_ADDR") != "127.0.0.1:18443" {
+		t.Fatal("router export", err)
+	}
+	t.Setenv("STARTSHIP_ROUTER_DISABLED", "invalid")
+	if _, err := Load(nil, io.Discard); err == nil || !strings.Contains(err.Error(), "STARTSHIP_ROUTER_DISABLED") {
+		t.Fatal(err)
+	}
+}
+
+func TestEditRouterSettings(t *testing.T) {
+	path := configFile(t, "# keep this\nhttp_listen = [\n  '127.0.0.1:8080',\n]\n")
+	if err := Edit(path, "router_disabled", []string{"true"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := EditSettings(path, map[string][]string{"http_listen": {}, "https_listen": {}}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(before), "# keep this") {
+		t.Fatal(string(before), err)
+	}
+	for _, key := range []string{"http_listen", "https_listen"} {
+		if v, err := Get(before, key); err != nil || v != "[]" {
+			t.Fatal(key, v, err)
+		}
+	}
+	if err := Edit(path, "router_disabled", []string{"invalid"}, false); err == nil {
+		t.Fatal("accepted invalid bool")
+	}
+	if err := EditSettings(path, map[string][]string{"router_disabled": {"false"}, "http_listen": {":80"}}); err == nil {
+		t.Fatal("enabled with an empty HTTPS list")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(after, before) {
+		t.Fatal("partial write", string(after), err)
+	}
+	if err := EditSettings(path, map[string][]string{"router_disabled": {"false"}, "http_listen": {":80"}, "https_listen": {":443"}}); err != nil {
+		t.Fatal(err)
+	}
+}
 func TestDaemonPrecedence(t *testing.T) {
 	cleanEnvironment(t)
 	path := configFile(t, "dashboard_listen = ['127.0.0.1:9000']\ndata_dir = '/file-data'\nacme_email = 'file@example.com'\n")

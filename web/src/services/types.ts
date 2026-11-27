@@ -275,6 +275,16 @@ export interface SystemVersion {
   commit: string;
   unavailable_engines?: Record<string, string>;
 }
+export interface RouterSettings {
+  enabled: boolean;
+  http_listen: string[];
+  https_listen: string[];
+}
+export type RouterOverride = "router_disabled" | "http_listen" | "https_listen";
+export interface RouterConfig extends RouterSettings {
+  config_path: string;
+  overridden: RouterOverride[];
+}
 export interface UpdateRequest {
   version: string;
   by?: string;

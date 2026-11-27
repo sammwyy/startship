@@ -4,19 +4,20 @@ set -eu
 die() { printf '%s\n' "startship installer: $*" >&2; exit 1; }
 [ "$(id -u)" = 0 ] || die 'run as root (sudo sh install.sh)'
 data=${STARTSHIP_DATA:-/var/lib/startship}
+config=/etc/startship/config/startship.toml
 case "$data" in /*) ;; *) die 'STARTSHIP_DATA must be absolute' ;; esac
 case "$data" in *[!a-zA-Z0-9_./-]*) die 'STARTSHIP_DATA contains unsupported characters' ;; esac
 if [ "${1:-}" = --uninstall ]; then
     if [ -d /run/systemd/system ]; then systemctl disable --now startship-update.path startshipd.service || true; fi
     rm -f /etc/systemd/system/startshipd.service /etc/systemd/system/startship-update.path /etc/systemd/system/startship-update.service /usr/local/bin/startship /usr/local/bin/startshipd
     if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
-    printf '%s\n' 'Uninstalled binaries and service; data, configuration and service user preserved.'
+    printf '%s\n' "Uninstalled binaries and service; data, configuration ($config and /etc/startship/startshipd.env), and service user preserved."
     exit 0
 fi
 [ "$#" = 0 ] || die 'usage: install.sh [--uninstall]'
 [ "$(uname -s)" = Linux ] || die 'only Linux is supported'
 case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) die 'supported architectures: amd64, arm64' ;; esac
-for tool in curl sha256sum tar docker git useradd usermod getent; do command -v "$tool" >/dev/null 2>&1 || die "install $tool first"; done
+for tool in curl sha256sum tar docker git useradd usermod getent runuser; do command -v "$tool" >/dev/null 2>&1 || die "install $tool first"; done
 caps=CAP_NET_BIND_SERVICE
 if [ "${STARTSHIP_NETWORK_FIREWALL:-0}" = 1 ]; then
     for tool in ipset iptables ip6tables; do command -v "$tool" >/dev/null 2>&1 || die "install $tool first"; done
@@ -48,7 +49,9 @@ printf '%s  %s\n' "$nixsum" "$tmp/nixpacks.tar.gz" | sha256sum -c - || die 'Nixp
 tar -xzf "$tmp/nixpacks.tar.gz" -C "$tmp" nixpacks
 if ! id startship >/dev/null 2>&1; then useradd --system --home-dir "$data" --shell /usr/sbin/nologin startship; fi
 usermod -a -G docker startship
-install -d -m 0755 /usr/local/bin /etc/startship
+install -d -m 0755 /usr/local/bin
+install -d -o root -g root -m 0755 /etc/startship
+install -d -o startship -g startship -m 0750 /etc/startship/config
 install -m 0755 "$tmp/nixpacks" /usr/local/bin/nixpacks
 install -d -o startship -g startship -m 0700 "$data"
 install -d -o startship -g startship -m 0750 "$data/update"
@@ -57,18 +60,17 @@ for bin in startship startshipd; do
     mv -f "/usr/local/bin/.$bin.new" "/usr/local/bin/$bin"
 done
 if [ ! -f /etc/startship/startshipd.env ]; then
-    printf 'STARTSHIP_DATA=%s\nSTARTSHIP_DASHBOARD_ADDR=:8080\nSTARTSHIP_HTTP_ADDR=:80\nSTARTSHIP_HTTPS_ADDR=:443\n' "$data" > /etc/startship/startshipd.env
+    printf 'STARTSHIP_DATA=%s\nSTARTSHIP_DASHBOARD_ADDR=:8080\n' "$data" > /etc/startship/startshipd.env
     chmod 0600 /etc/startship/startshipd.env
 fi
-if [ ! -f /etc/startship/startship.toml ]; then
-    printf '%s\n' '# Startship daemon settings; flags > environment > this file > defaults.' '# Existing /etc/startship/startshipd.env values override these settings.' '# Remove corresponding *_ADDR entries from that env file to use file listeners.' '# dashboard_listen = ["127.0.0.1:8080"]' '# dashboard_listen = ["tailscale0:8080", "127.0.0.1:8080"]' '# http_listen = [":80"]' '# https_listen = [":443"]' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' > /etc/startship/startship.toml
-    chmod 0644 /etc/startship/startship.toml
+if [ ! -f "$config" ]; then
+    printf '%s\n' '# Startship daemon settings; flags > environment > this file > defaults.' '# Existing /etc/startship/startshipd.env values override these settings.' '# Remove corresponding *_ADDR entries from that env file to use file listeners.' '# dashboard_listen = ["127.0.0.1:8080"]' '# dashboard_listen = ["tailscale0:8080", "127.0.0.1:8080"]' '# http_listen = [":80"]' '# https_listen = [":443"]' '# router_disabled = false' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' |
+        runuser -u startship -- sh -c 'umask 027; cat > "$1"' sh "$config"
 fi
 if [ "${STARTSHIP_NETWORK_FIREWALL:-0}" = 1 ]; then
     sed -i '/^STARTSHIP_NETWORK_FIREWALL=/d' /etc/startship/startshipd.env
     printf '%s\n' 'STARTSHIP_NETWORK_FIREWALL=1' >> /etc/startship/startshipd.env
-    sed -i '/^[[:space:]]*network_firewall[[:space:]]*=/d' /etc/startship/startship.toml
-    printf '%s\n' 'network_firewall = true' >> /etc/startship/startship.toml
+    runuser -u startship -- /usr/local/bin/startship config --config "$config" set network_firewall true >/dev/null
 fi
 install -d -m 0755 /etc/systemd/system
 printf '%s\n' '[Unit]' 'Description=Startship deployment daemon' 'After=network-online.target docker.service' 'Wants=network-online.target' 'Requires=docker.service' '' '[Service]' 'Type=simple' 'User=startship' 'Group=startship' 'RuntimeDirectory=startship' 'RuntimeDirectoryMode=0750' 'SupplementaryGroups=docker' 'EnvironmentFile=/etc/startship/startshipd.env' 'WorkingDirectory=/var/lib/startship' 'Environment=STARTSHIP_UPDATE_REQUEST=/var/lib/startship/update/request.json' 'Environment=STARTSHIP_UPDATE_STATUS=/var/lib/startship/update/status.json' 'ExecStart=/usr/local/bin/startshipd' 'AmbientCapabilities=CAP_NET_BIND_SERVICE' 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target' > /etc/systemd/system/startshipd.service

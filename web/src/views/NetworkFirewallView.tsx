@@ -138,8 +138,9 @@ export function NetworkFirewallView() {
                     <div className="fw-network-enable">
                       <h3>Enable on your daemon</h3>
                       <p>
-                        Add this to <code>/etc/startship/startship.toml</code>,
-                        then restart with the required network capabilities:
+                        Add this to{" "}
+                        <code>/etc/startship/config/startship.toml</code>, then
+                        restart with the required network capabilities:
                       </p>
                       <pre>
                         <code>network_firewall = true</code>

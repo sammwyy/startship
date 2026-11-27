@@ -370,6 +370,9 @@ const usage = `startship [--json] COMMAND
   workspaces domains ...         alias for domains; quote wildcard names
   traffic PROJECT | detect JSON | version
   uptime PROJECT [enable|disable] project health history and incidents
+  router [show]                  show active router settings and startup overrides
+  router set [--http ADDR[,ADDR]] [--https ADDR[,ADDR]]
+  router disable | router enable  apply and save changes without a restart (Platform Admin)
   status-page show WORKSPACE
   status-page set WORKSPACE [--slug SLUG] [--title TITLE] [--projects ID,NAME,...] [--enable|--disable]
   update check                   CLI, daemon and latest release versions
@@ -422,6 +425,9 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "network" {
 		return c.runNetwork(a)
+	}
+	if cmd == "router" {
+		return c.runRouter(a)
 	}
 	if cmd == "catalog" {
 		return c.runCatalog(a)

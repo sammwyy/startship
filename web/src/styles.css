@@ -986,6 +986,28 @@
   flex-shrink: 0;
   padding: 7px 12px;
 }
+.router-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+.router-toggle > input.switch {
+  margin: 0;
+}
+.router-warning {
+  margin: 0 0 14px;
+}
+.router-listen {
+  margin-bottom: 12px;
+}
+.router-listen label {
+  margin-bottom: 0;
+}
+.router-override {
+  display: block;
+  margin: 5px 0 12px;
+}
 .sidebar-bottom > a[aria-current="page"] {
   color: var(--text);
   background: var(--accent-soft);
