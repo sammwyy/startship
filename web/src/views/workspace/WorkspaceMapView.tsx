@@ -33,21 +33,8 @@ type Node = {
   engine?: string;
 };
 type Curve = ReturnType<typeof routeMapEdges>[number];
-const tone = (status: string) =>
-  ["running", "success", "active"].includes(status)
-    ? "running"
-    : [
-          "building",
-          "deploying",
-          "pending",
-          "queued",
-          "testing",
-          "starting",
-        ].includes(status)
-      ? "busy"
-      : ["failed", "error"].includes(status)
-        ? "failed"
-        : "idle";
+const isRunning = (status: string) =>
+  ["running", "success", "active"].includes(status);
 
 export function WorkspaceMapView() {
   const id = useParams().workspaceId!,
@@ -84,7 +71,7 @@ export function WorkspaceMapView() {
       return {
         key: mapKey("projects", p.id),
         name: p.name,
-        detail: `${owned.length} container${owned.length === 1 ? "" : "s"} · ${status}`,
+        detail: `${owned.length} container${owned.length === 1 ? "" : "s"}`,
         status,
         to: `/project/${p.id}`,
       };
@@ -117,9 +104,7 @@ export function WorkspaceMapView() {
         ]
           .filter(Boolean)
           .join(" · "),
-        status: owners.some((n) => tone(n.status) === "running")
-          ? "running"
-          : "idle",
+        status: owners.some((n) => isRunning(n.status)) ? "running" : "idle",
         to: `/workspace/${id}/volumes`,
       };
     });
@@ -237,9 +222,11 @@ export function WorkspaceMapView() {
           {alias && <span className="map-tree-alias">{alias} → </span>}
           {node.name}
         </strong>
-        <small>{node.detail}</small>
+        <small>
+          <span>{node.detail}</span>
+          <span>· {node.status}</span>
+        </small>
       </span>
-      <i className={`map-dot ${tone(node.status)}`} aria-label={node.status} />
     </Link>
   );
   const children = (key: string) =>
@@ -300,18 +287,13 @@ export function WorkspaceMapView() {
               {graph.projects.length} projects · {graph.services.length}{" "}
               services · {graph.volumes.length} volumes
             </span>
-            <span className="map-live">
-              <i
-                className={
-                  liveStatus === "connected" ? "live-dot" : "map-dot idle"
-                }
-              />
-              {liveStatus === "connected"
-                ? "Live updates"
-                : liveStatus === "disconnected"
+            {liveStatus !== "connected" && (
+              <span>
+                {liveStatus === "disconnected"
                   ? "Updates disconnected"
                   : "Connecting…"}
-            </span>
+              </span>
+            )}
           </div>
           <div className="map-board" ref={root}>
             {verticalLayout ? (
@@ -356,9 +338,8 @@ export function WorkspaceMapView() {
               <>
                 <svg className="map-edges" aria-hidden="true">
                   {curves.map((edge, i) => {
-                    const live = [edge.from, edge.to].every(
-                      (key) =>
-                        tone(nodeByKey.get(key)?.status || "") === "running",
+                    const live = [edge.from, edge.to].every((key) =>
+                      isRunning(nodeByKey.get(key)?.status || ""),
                     );
                     const dim = connected && !connected.has(edge.from);
                     return (
@@ -426,22 +407,7 @@ export function WorkspaceMapView() {
               </>
             )}
           </div>
-          <div className="map-legend" aria-label="Status legend">
-            {[
-              ["running", "Running"],
-              ["busy", "Deploying"],
-              ["failed", "Failed"],
-              ["idle", "Idle"],
-            ].map(([status, label]) => (
-              <span key={status}>
-                <i className={`map-dot ${status}`} />
-                {label}
-              </span>
-            ))}
-            <span className="map-hint">
-              Hover or focus to trace connections
-            </span>
-          </div>
+          <p className="map-hint">Hover or focus to trace connections</p>
         </>
       )}
     </div>

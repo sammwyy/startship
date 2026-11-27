@@ -795,27 +795,6 @@
 .form-error:empty {
   display: none;
 }
-.update-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--success);
-  margin-left: auto;
-}
-.live-connection {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-.live-connection > span {
-  width: 5px;
-  height: 5px;
-  background: var(--warning);
-  border-radius: 50%;
-}
-.live-connection.connected > span {
-  background: var(--success);
-}
 .update-panel .section-head {
   padding: 0 0 16px;
 }

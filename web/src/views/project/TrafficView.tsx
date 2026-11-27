@@ -291,24 +291,22 @@ export function TrafficView() {
         signal,
       ),
   });
+  const offline = query.isError || liveError || liveStatus !== "connected";
   return (
     <>
       <ProjectHeading title="Traffic" />
       <section className="traffic-page">
         <div className="traffic-toolbar">
           <div>
-            <span
-              className={`traffic-live ${query.isError || liveError || liveStatus !== "connected" ? "offline" : ""}`}
-            >
-              <span className="traffic-dot" />
-              {query.isError || liveError
-                ? "Disconnected"
-                : query.isFetching
-                  ? "Updating…"
-                  : liveStatus === "connected"
-                    ? "Live updates"
+            {(offline || query.isFetching) && (
+              <span className={`traffic-live${offline ? " offline" : ""}`}>
+                {query.isError || liveError
+                  ? "Disconnected"
+                  : query.isFetching
+                    ? "Updating…"
                     : "Reconnecting…"}
-            </span>
+              </span>
+            )}
           </div>
           <div className="traffic-window" aria-label="Traffic time range">
             {[

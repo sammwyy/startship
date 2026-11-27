@@ -154,6 +154,19 @@ function setup() {
   return userEvent.setup();
 }
 describe("workspace map view", () => {
+  it("shows node statuses as text without a connected-updates indicator", () => {
+    setup();
+    const database = screen.getByRole("link", { name: /^Database postgresql/ });
+    expect(within(database).getByText("· running")).toBeVisible();
+    const uploads = screen.getByRole("link", { name: /Uploads/ });
+    expect(within(uploads).getByText("· running")).toBeVisible();
+    expect(screen.queryByText("Live updates")).not.toBeInTheDocument();
+  });
+  it("shows when map updates are disconnected", () => {
+    state.live = "disconnected";
+    setup();
+    expect(screen.getByText("Updates disconnected")).toBeVisible();
+  });
   it("includes connection aliases and mounts in card tooltips and accessible names", () => {
     setup();
     const project = screen.getByRole("link", { name: /Website/ });

@@ -31,10 +31,7 @@ export function SystemLayout() {
         </NavLink>
         <NavLink to="/system/updates">
           <Icon name="server" />
-          Updates
-          {data?.update_available && (
-            <span className="update-dot" aria-label="Update available" />
-          )}
+          {data?.update_available ? "Update available" : "Updates"}
         </NavLink>
         {can("network.firewall") && (
           <NavLink to="/system/network-firewall">

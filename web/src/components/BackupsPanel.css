@@ -149,7 +149,7 @@
 }
 .backup-schedules a {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 11px;
   padding: 11px 0;
@@ -185,15 +185,6 @@
 }
 .backup-schedules a:hover strong {
   color: var(--success);
-}
-.backup-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--line-strong);
-}
-.backup-dot.on {
-  background: var(--success);
 }
 @media (max-width: 800px) {
   .backups-layout aside {

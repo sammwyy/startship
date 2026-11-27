@@ -89,12 +89,9 @@ export function ActivityFeed({
             Show all
           </Link>
         ) : (
-          <span
-            className="activity-live"
-            data-connected={feed.status === "connected"}
-          >
-            {feed.status === "connected" ? "Live" : "Reconnecting"}
-          </span>
+          feed.status !== "connected" && (
+            <span className="small">Reconnecting</span>
+          )
         )}
       </header>
       {entries.length === 0 ? (

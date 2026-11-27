@@ -63,12 +63,7 @@ export function WorkspaceServicesView() {
       ) : (
         <>
           <div className="collection-toolbar">
-            <span>
-              {services.data.services.length} services{" "}
-              <span className="collection-live">
-                <i className="live-dot" /> Live updates
-              </span>
-            </span>
+            <span>{services.data.services.length} services</span>
             <CollectionLayout layout={layout} change={setLayout} />
           </div>
           {layout === "list" ? (

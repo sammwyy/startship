@@ -816,12 +816,7 @@ export function RecipeAppsView() {
       ) : apps.length ? (
         <>
           <div className="collection-toolbar">
-            <span>
-              {apps.length} installed{" "}
-              <span className="collection-live">
-                <i className="live-dot" /> Live updates
-              </span>
-            </span>
+            <span>{apps.length} installed</span>
             <CollectionLayout layout={layout} change={setLayout} />
           </div>
           <div className={`collection collection-${layout}`}>
