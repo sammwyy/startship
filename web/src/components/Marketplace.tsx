@@ -16,6 +16,7 @@ const categories = new Map([
   ["games", "Games"],
   ["communication", "Communication"],
   ["dev-tools", "Developer tools"],
+  ["files", "Files & storage"],
   ["database", "Databases"],
   ["cache", "Caches"],
   ["queue", "Messaging & queues"],
