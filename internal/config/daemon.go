@@ -16,20 +16,23 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-const DefaultPath = "/etc/startship/startship.toml"
+const DefaultPath = "/etc/startship/config/startship.toml"
 
 type Daemon struct {
-	DashboardListen []string `toml:"dashboard_listen"`
-	HTTPListen      []string `toml:"http_listen"`
-	HTTPSListen     []string `toml:"https_listen"`
-	DataDir         string   `toml:"data_dir"`
-	DashboardDomain string   `toml:"dashboard_domain"`
-	ACMEEmail       string   `toml:"acme_email"`
-	ACMEDirectory   string   `toml:"acme_directory"`
-	SocketPath      string   `toml:"socket_path"`
-	TrustedProxies  []string `toml:"trusted_proxies"`
-	GeoIPDatabase   string   `toml:"geoip_database"`
-	NetworkFirewall bool     `toml:"network_firewall"`
+	DashboardListen []string        `toml:"dashboard_listen"`
+	HTTPListen      []string        `toml:"http_listen"`
+	HTTPSListen     []string        `toml:"https_listen"`
+	DataDir         string          `toml:"data_dir"`
+	DashboardDomain string          `toml:"dashboard_domain"`
+	ACMEEmail       string          `toml:"acme_email"`
+	ACMEDirectory   string          `toml:"acme_directory"`
+	SocketPath      string          `toml:"socket_path"`
+	TrustedProxies  []string        `toml:"trusted_proxies"`
+	GeoIPDatabase   string          `toml:"geoip_database"`
+	NetworkFirewall bool            `toml:"network_firewall"`
+	RouterDisabled  bool            `toml:"router_disabled"`
+	ConfigPath      string          `toml:"-"`
+	Overridden      map[string]bool `toml:"-"`
 }
 
 var environment = map[string]string{
@@ -37,11 +40,13 @@ var environment = map[string]string{
 	"data_dir": "STARTSHIP_DATA", "dashboard_domain": "STARTSHIP_DASHBOARD_DOMAIN", "acme_email": "STARTSHIP_ACME_EMAIL",
 	"acme_directory": "STARTSHIP_ACME_DIRECTORY", "socket_path": "STARTSHIP_SOCKET",
 	"trusted_proxies": "STARTSHIP_TRUSTED_PROXIES", "geoip_database": "STARTSHIP_GEOIP_DB",
-	"network_firewall": "STARTSHIP_NETWORK_FIREWALL",
+	"network_firewall": "STARTSHIP_NETWORK_FIREWALL", "router_disabled": "STARTSHIP_ROUTER_DISABLED",
 }
 
+func EnvironmentKey(key string) string { return environment[key] }
+
 func (d *Daemon) bools() map[string]*bool {
-	return map[string]*bool{"network_firewall": &d.NetworkFirewall}
+	return map[string]*bool{"network_firewall": &d.NetworkFirewall, "router_disabled": &d.RouterDisabled}
 }
 
 func (d *Daemon) strings() map[string]*string {
@@ -90,7 +95,7 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 	var file string
 	f := flag.NewFlagSet("startshipd", flag.ContinueOnError)
 	f.SetOutput(out)
-	f.StringVar(&file, "config", "", "daemon TOML file (STARTSHIP_CONFIG, else /etc/startship/startship.toml if present)")
+	f.StringVar(&file, "config", "", "daemon TOML file (STARTSHIP_CONFIG, else "+DefaultPath+" if present)")
 	for key, p := range values.bools() {
 		f.BoolVar(p, strings.ReplaceAll(key, "_", "-"), false, "override "+key+" ("+environment[key]+")")
 	}
@@ -112,6 +117,8 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 	}
 	d := Defaults()
 	path := Path(file)
+	d.ConfigPath = path
+	d.Overridden = map[string]bool{}
 	b, err := os.ReadFile(path)
 	if err != nil && !(errors.Is(err, os.ErrNotExist) && file == "" && os.Getenv("STARTSHIP_CONFIG") == "") {
 		return d, fmt.Errorf("config %s: %w", path, err)
@@ -122,11 +129,13 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 	for key, p := range d.strings() {
 		if s := os.Getenv(environment[key]); s != "" {
 			*p = s
+			d.Overridden[key] = true
 		}
 	}
 	for key, p := range d.lists() {
 		if s := os.Getenv(environment[key]); s != "" {
 			*p = strings.Split(s, ",")
+			d.Overridden[key] = true
 		}
 	}
 	for key, p := range d.bools() {
@@ -136,10 +145,14 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 				return d, fmt.Errorf("%s: %w", environment[key], err)
 			}
 			*p = value
+			d.Overridden[key] = true
 		}
 	}
 	f.Visit(func(v *flag.Flag) {
 		key := strings.ReplaceAll(v.Name, "-", "_")
+		if key != "config" {
+			d.Overridden[key] = true
+		}
 		if p, ok := d.bools()[key]; ok {
 			*p = *values.bools()[key]
 		}
@@ -165,7 +178,7 @@ func (d *Daemon) Validate() error {
 			}
 			continue
 		}
-		if len(*p) == 0 {
+		if len(*p) == 0 && !(d.RouterDisabled && (key == "http_listen" || key == "https_listen")) {
 			return fmt.Errorf("%s needs at least one listen address", key)
 		}
 		for i, s := range *p {
@@ -261,17 +274,42 @@ func Resolve(entries []string) ([]string, error) {
 
 // Export keeps URL generation, socket defaults and legacy integrations in sync.
 func (d *Daemon) Export() error {
+	return d.export()
+}
+
+func (d *Daemon) ExportRouter() error {
+	return d.export("http_listen", "https_listen", "router_disabled")
+}
+
+func (d *Daemon) export(keys ...string) error {
+	included := func(key string) bool {
+		for _, k := range keys {
+			if k == key {
+				return true
+			}
+		}
+		return len(keys) == 0
+	}
 	for key, p := range d.bools() {
+		if !included(key) {
+			continue
+		}
 		if err := os.Setenv(environment[key], strconv.FormatBool(*p)); err != nil {
 			return err
 		}
 	}
 	for key, p := range d.strings() {
+		if !included(key) {
+			continue
+		}
 		if err := os.Setenv(environment[key], *p); err != nil {
 			return err
 		}
 	}
 	for key, p := range d.lists() {
+		if !included(key) {
+			continue
+		}
 		value := ""
 		if key == "trusted_proxies" {
 			value = strings.Join(*p, ",")

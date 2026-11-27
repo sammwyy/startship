@@ -117,12 +117,13 @@ func (a *Server) watchUpdates(ctx context.Context) {
 	}
 }
 
-// systemAPI serves /api/system/version and /api/system/update.
 func (a *Server) systemAPI(w http.ResponseWriter, r *http.Request, p []string, uid string, x *access) bool {
 	if len(p) != 3 || p[1] != "system" {
 		return false
 	}
 	switch p[2] {
+	case "router":
+		a.routerSettingsAPI(w, r, uid, x)
 	case "version":
 		if r.Method != "GET" {
 			fail(w, 405, "method not allowed")

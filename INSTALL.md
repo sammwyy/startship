@@ -13,7 +13,7 @@ sudo sh install.sh
 sudo journalctl -u startshipd
 ```
 
-The installer verifies release checksums, installs `startship` and `startshipd` in `/usr/local/bin`, installs Nixpacks, and starts the daemon. It keeps existing settings in `/etc/startship/startshipd.env` and `/etc/startship/startship.toml`. By default, state lives in `/var/lib/startship`, including the SQLite database `startship.db`. The service runs as `startship` with Docker access. Without a running systemd, the script writes the units but cannot start them.
+The installer verifies release checksums, installs `startship` and `startshipd` in `/usr/local/bin`, installs Nixpacks, and starts the daemon. It keeps existing settings in the root-owned `/etc/startship/startshipd.env` and the daemon-writable `/etc/startship/config/startship.toml`. By default, state lives in `/var/lib/startship`, including the SQLite database `startship.db`. The service runs as `startship` with Docker access. Without a running systemd, the script writes the units but cannot start them.
 
 To install a specific release instead of the latest, replace `vX.Y.Z` with a tag from the [releases page](https://github.com/sammwyy/startship/releases). Use the installer from that tag and pass the same version through `sudo`:
 
@@ -76,6 +76,6 @@ Before changing versions, back up the daemon data directory, configuration, and 
 
 ## Uninstall
 
-For a systemd install, run `sudo sh install.sh --uninstall` using the installer script. It removes the Startship CLI, daemon, and systemd units, but preserves the data, configuration, service account, and Nixpacks binary. It does not remove deployed workloads.
+For a systemd install, run `sudo sh install.sh --uninstall` using the installer script. It removes the Startship CLI, daemon, and systemd units, but preserves the data, `/etc/startship/startshipd.env`, `/etc/startship/config/startship.toml`, the service account, and the Nixpacks binary. It does not remove deployed workloads.
 
 For Compose, run `docker compose down` from the checkout to stop and remove the daemon container while keeping its data volume. Do not add `--volumes` unless you intend to remove Compose-managed data. For a source build, stop the daemon and remove the binaries; keep the data directory if you want to reuse it.

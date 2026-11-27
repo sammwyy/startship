@@ -1,12 +1,13 @@
 # Daemon configuration
 
-Startship loads settings at startup. Precedence is **daemon flags → environment variables → TOML → defaults**, from highest to lowest. Select the TOML file with `startshipd --config PATH` or `STARTSHIP_CONFIG`; otherwise Startship uses `/etc/startship/startship.toml` if present. An explicitly selected file must exist and be valid.
+Startship loads settings at startup. Precedence is **daemon flags → environment variables → TOML → defaults**, from highest to lowest. Select the TOML file with `startshipd --config PATH` or `STARTSHIP_CONFIG`; otherwise Startship uses `/etc/startship/config/startship.toml` if present. An explicitly selected file must exist and be valid.
 
 | TOML key | Environment variable | Default |
 | --- | --- | --- |
 | `dashboard_listen` | `STARTSHIP_DASHBOARD_ADDR` | `:8080` |
 | `http_listen` | `STARTSHIP_HTTP_ADDR` | `:80` |
 | `https_listen` | `STARTSHIP_HTTPS_ADDR` | `:443` |
+| `router_disabled` | `STARTSHIP_ROUTER_DISABLED` | `false` |
 | `data_dir` | `STARTSHIP_DATA` | `./_data`; the systemd installer uses `/var/lib/startship` |
 | `dashboard_domain` | `STARTSHIP_DASHBOARD_DOMAIN` | Unset; dashboard not served on the application router |
 | `acme_email` | `STARTSHIP_ACME_EMAIL` | Unset |
@@ -27,6 +28,18 @@ dashboard_listen = ["127.0.0.1:8080"]
 ```
 
 On a systemd install, remove any corresponding `STARTSHIP_DASHBOARD_ADDR` setting from `/etc/startship/startshipd.env` if you want TOML to control the listener, then run `sudo systemctl restart startshipd`. With Compose, change the host port mapping instead; the host's network interfaces normally are not visible in the container. Restricting this listener does not restrict the application router: leave `dashboard_domain` unset if the dashboard should be reachable only through the private listener.
+
+## Change or disable the application router
+
+Use `startship router show` to see the active listeners, config path, and any settings overridden at startup. A Platform Admin can apply changes without restarting the daemon:
+
+```sh
+startship router set --http :8081 --https :8443
+startship router disable
+startship router enable
+```
+
+The application router is separate from the dashboard listener and admin socket. To start the dashboard on a host where another service already uses ports 80 or 443, set `router_disabled = true` in the daemon TOML before starting Startship. Compose publishes ports separately; remove or change its host port mappings if they conflict. Live changes are saved to the TOML and cannot modify a key overridden by an environment variable or daemon flag.
 
 ## HTTPS and certificates
 

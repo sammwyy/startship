@@ -530,7 +530,7 @@ describe("network firewall", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("network_firewall = true")).toBeInTheDocument();
     expect(
-      screen.getByText("/etc/startship/startship.toml"),
+      screen.getByText("/etc/startship/config/startship.toml"),
     ).toBeInTheDocument();
     expect(
       screen.getByText("STARTSHIP_NETWORK_FIREWALL=1"),

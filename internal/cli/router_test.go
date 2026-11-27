@@ -1,0 +1,112 @@
+package cli
+
+import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+func TestRouterCommands(t *testing.T) {
+	const initial = `{"enabled":false,"http_listen":[":80"],"https_listen":[":443"],"config_path":"/etc/startship/config/startship.toml","overridden":["https_listen"]}`
+	cases := []struct {
+		name string
+		args []string
+		put  string
+		want string
+	}{
+		{"default", nil, "", "enabled: false"},
+		{"show", []string{"show"}, "", "http_listen: [:80]\nhttps_listen: [:443]\noverridden: [https_listen]"},
+		{"show JSON", []string{"show", "--json"}, "", `"config_path": "/etc/startship/config/startship.toml"`},
+		{"set HTTP", []string{"set", "--http", " :8081, [::1]:8081 "}, `{"enabled":false,"http_listen":[":8081","[::1]:8081"],"https_listen":[":443"]}`, "enabled: true"},
+		{"set HTTPS", []string{"set", "--https=:8443"}, `{"enabled":false,"http_listen":[":80"],"https_listen":[":8443"]}`, "enabled: true"},
+		{"set both", []string{"set", "--http=:8081", "--https", ":8443"}, `{"enabled":false,"http_listen":[":8081"],"https_listen":[":8443"]}`, "enabled: true"},
+		{"disable", []string{"disable"}, `{"enabled":false,"http_listen":[":80"],"https_listen":[":443"]}`, "enabled: true"},
+		{"enable JSON", []string{"enable", "--json"}, `{"enabled":true,"http_listen":[":80"],"https_listen":[":443"]}`, `"enabled": true`},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			methods := make(chan string, 2)
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/system/router" {
+					t.Error(r.URL.Path)
+				}
+				select {
+				case methods <- r.Method:
+				default:
+					t.Error("unexpected extra request")
+				}
+				switch r.Method {
+				case http.MethodGet:
+					io.WriteString(w, initial)
+				case http.MethodPut:
+					var got, want map[string]any
+					err := json.NewDecoder(r.Body).Decode(&got)
+					if json.Unmarshal([]byte(tt.put), &want) != nil || err != nil || !reflect.DeepEqual(got, want) {
+						t.Errorf("PUT: got %v, want %s (decode error: %v)", got, tt.put, err)
+					}
+					io.WriteString(w, strings.Replace(initial, `"enabled":false`, `"enabled":true`, 1))
+				}
+			}))
+			defer s.Close()
+			var output bytes.Buffer
+			c := &cli{config: config{Server: s.URL}, out: &output, client: s.Client()}
+			if err := c.run(append([]string{"router"}, tt.args...)); err != nil || !strings.Contains(output.String(), tt.want) {
+				t.Fatal(output.String(), err)
+			}
+			if len(methods) == 0 || <-methods != http.MethodGet {
+				t.Fatal("expected GET first")
+			}
+			if tt.put != "" && (len(methods) == 0 || <-methods != http.MethodPut) {
+				t.Fatal("expected PUT after GET")
+			}
+			if len(methods) != 0 {
+				t.Fatal("unexpected requests")
+			}
+		})
+	}
+}
+
+func TestRouterArgumentsAndAPIErrors(t *testing.T) {
+	for _, args := range []string{
+		"set", "set --http", "set --http=bad", "set --http=:8081,", "set --http=:8081 --http=:8082",
+		"set --port=8081", "set extra --https=:8443", "enable extra", "disable --http=:8081", "show extra", "other",
+	} {
+		c := &cli{out: io.Discard}
+		if err := c.run(append([]string{"router"}, strings.Fields(args)...)); err == nil {
+			t.Errorf("expected validation error for router %s", args)
+		}
+	}
+	for _, tc := range []struct {
+		name, get, want string
+		status          int
+	}{
+		{"GET error", `{"error":"not authorized"}`, "not authorized", http.StatusForbidden},
+		{"malformed response", `{"enabled":true}`, "invalid router settings response", http.StatusOK},
+		{"PUT conflict", `{"enabled":true,"http_listen":[":80"],"https_listen":[":443"]}`, "STARTSHIP_HTTP_ADDR", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodGet {
+					w.WriteHeader(tc.status)
+					io.WriteString(w, tc.get)
+					return
+				}
+				if tc.name != "PUT conflict" || r.Method != http.MethodPut {
+					t.Errorf("unexpected %s", r.Method)
+				}
+				w.WriteHeader(http.StatusConflict)
+				io.WriteString(w, `{"error":"http_listen is overridden by STARTSHIP_HTTP_ADDR"}`)
+			}))
+			defer s.Close()
+			c := &cli{config: config{Server: s.URL}, out: io.Discard, client: s.Client()}
+			if err := c.run([]string{"router", "set", "--http", ":8081"}); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q, got %v", tc.want, err)
+			}
+		})
+	}
+}

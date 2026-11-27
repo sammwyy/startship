@@ -6,10 +6,12 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/sammwyy/startship/internal/config"
 	"github.com/sammwyy/startship/internal/netfw"
 )
 
@@ -39,6 +41,55 @@ func (f *networkTestExecutor) Run(input, name string, args ...string) ([]byte, e
 		f.restores++
 	}
 	return nil, nil
+}
+
+func TestNetworkRouterPortChanges(t *testing.T) {
+	a := testServer(t)
+	ex := &networkTestExecutor{}
+	a.network.enabled = true
+	manager := &netfw.Manager{Executor: ex, Ports: []string{"80", "443"}}
+	a.network.manager = manager
+	next := config.Defaults()
+	next.HTTPListen = []string{":8081"}
+	checkPorts := func(want ...string) {
+		t.Helper()
+		if !slices.Equal(manager.Ports, want) {
+			t.Fatalf("firewall ports: got %v, want %v", manager.Ports, want)
+		}
+	}
+	persistErr := errors.New("cannot persist")
+	err := a.withNetworkRouterPorts(next, func() error {
+		checkPorts("80", "443", "8081")
+		return persistErr
+	})
+	if !errors.Is(err, persistErr) {
+		t.Fatal(err)
+	}
+	checkPorts("80", "443")
+	ex.fail = true
+	if err := a.withNetworkRouterPorts(next, func() error {
+		t.Fatal("applied settings without protecting new ports")
+		return nil
+	}); err == nil {
+		t.Fatal("expected firewall error")
+	}
+	checkPorts("80", "443")
+	ex.fail = false
+	if err := a.withNetworkRouterPorts(next, func() error {
+		checkPorts("80", "443", "8081")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	checkPorts("443", "8081")
+	next.RouterDisabled = true
+	if err := a.withNetworkRouterPorts(next, func() error {
+		checkPorts("443", "8081")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	checkPorts()
 }
 
 func TestNetworkAPI(t *testing.T) {
