@@ -17,6 +17,7 @@ image references again.
     "id": "example",
     "name": "Example",
     "icon": "box",
+    "category": "dev-tools",
     "description": "A small HTTP server",
     "version": "1",
     "volumes": ["data"],

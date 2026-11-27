@@ -31,6 +31,8 @@ export type Recipe = {
   id: string;
   name: string;
   icon: string;
+  logo?: string;
+  category?: string;
   description: string;
   version: string;
   config_schema: Schema;

@@ -13,6 +13,7 @@ export interface ServiceField {
 export interface ServiceEngine {
   id: string;
   icon: string;
+  logo?: string;
   name: string;
   category: string;
   description: string;

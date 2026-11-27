@@ -27,6 +27,8 @@ type Recipe struct {
 	ID          string      `json:"id"`
 	Name        string      `json:"name"`
 	Icon        string      `json:"icon"`
+	Logo        string      `json:"logo,omitempty"`
+	Category    string      `json:"category,omitempty"`
 	Description string      `json:"description"`
 	Version     string      `json:"version"`
 	Containers  []Container `json:"containers"`

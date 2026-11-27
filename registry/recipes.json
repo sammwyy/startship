@@ -2,6 +2,8 @@
   "recipes": [
     {
       "id": "gitea",
+      "logo": "gitea",
+      "category": "dev-tools",
       "name": "Gitea",
       "icon": "git-branch",
       "description": "Self-hosted Git repositories and collaboration.",
@@ -44,6 +46,8 @@
     },
     {
       "id": "jellyfin",
+      "logo": "jellyfin",
+      "category": "media",
       "name": "Jellyfin",
       "icon": "film",
       "description": "A personal media server.",
@@ -79,6 +83,8 @@
     },
     {
       "id": "minecraft",
+      "logo": "minecraft",
+      "category": "games",
       "name": "Minecraft",
       "icon": "box",
       "description": "A Minecraft Java Edition server.",
@@ -189,6 +195,8 @@
     },
     {
       "id": "teamspeak",
+      "logo": "teamspeak",
+      "category": "communication",
       "name": "TeamSpeak",
       "icon": "headphones",
       "description": "TeamSpeak 3 voice chat server.",
