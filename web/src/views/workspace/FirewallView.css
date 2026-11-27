@@ -131,7 +131,7 @@
   box-shadow: 0 1px 3px #00000012;
 }
 .fw-mode button[aria-pressed="true"] {
-  color: var(--success);
+  color: var(--accent-ink);
 }
 .fw-mode-note {
   display: flex;
@@ -326,7 +326,7 @@
   gap: 16px;
 }
 .fw-options button[aria-selected="true"] {
-  color: var(--success);
+  color: var(--accent-ink);
   background: var(--accent-soft);
 }
 .fw-order {
@@ -558,7 +558,7 @@ fieldset.fw-form-grid {
 }
 .fw-status-icon.ready {
   color: var(--success);
-  background: var(--accent-soft);
+  background: var(--success-bg);
 }
 .fw-status-badges {
   display: flex;
@@ -594,7 +594,7 @@ fieldset.fw-form-grid {
 .fw-dialog :is(input:not([type="checkbox"]), button):focus-visible,
 .fw-stack :is(input:not([type="checkbox"]), button):focus-visible,
 .fw-options button:focus-visible {
-  outline: 2px solid var(--success);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 2px;
   box-shadow: none;
 }

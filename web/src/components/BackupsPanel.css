@@ -58,7 +58,7 @@
   overflow-wrap: anywhere;
 }
 .backup-main a:hover {
-  color: var(--success);
+  color: var(--accent-ink);
 }
 .backup-main > span {
   color: var(--muted);
@@ -184,7 +184,7 @@
   overflow-wrap: anywhere;
 }
 .backup-schedules a:hover strong {
-  color: var(--success);
+  color: var(--accent-ink);
 }
 @media (max-width: 800px) {
   .backups-layout aside {

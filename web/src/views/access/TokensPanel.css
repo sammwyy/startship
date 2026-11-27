@@ -83,8 +83,8 @@
 }
 .token-form input:focus-visible {
   outline: none;
-  border-color: var(--success);
-  box-shadow: inset 0 0 0 1px var(--success);
+  border-color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px var(--accent-ink);
 }
 .token-choice {
   min-width: 0;
@@ -142,7 +142,7 @@
   box-shadow: inset 0 0 0 1px var(--line);
 }
 .token-segments :focus-visible + span {
-  box-shadow: inset 0 0 0 1px var(--success);
+  box-shadow: inset 0 0 0 1px var(--accent-ink);
 }
 .token-workspaces {
   display: flex;
@@ -173,11 +173,11 @@
   background: var(--raised);
 }
 .token-check:has(:checked) {
-  border-color: var(--accent);
+  border-color: var(--accent-ink);
 }
 .token-check:has(:focus-visible) {
-  border-color: var(--success);
-  box-shadow: inset 0 0 0 1px var(--success);
+  border-color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px var(--accent-ink);
 }
 .token-check-box {
   display: grid;
@@ -193,8 +193,8 @@
   height: 11px;
 }
 .token-check :checked + .token-check-box {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--accent-ink);
+  background: var(--accent-ink);
   color: var(--bg, #fff);
 }
 .token-note {
@@ -205,7 +205,7 @@
   margin-top: 0;
 }
 .token-access {
-  color: var(--accent);
+  color: var(--accent-ink);
 }
 .token-activity {
   margin: 10px 0 0 48px;
@@ -236,15 +236,4 @@
   .token-segments span {
     padding-inline: 6px;
   }
-}
-:root[data-theme="light"] .token-access {
-  color: var(--success);
-}
-:root[data-theme="light"] .token-check:has(:checked) {
-  border-color: var(--success);
-}
-:root[data-theme="light"] .token-check :checked + .token-check-box {
-  border-color: var(--success);
-  background: var(--success);
-  color: #fff;
 }

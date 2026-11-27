@@ -77,8 +77,8 @@
 }
 .account-fields input:focus-visible {
   outline: none;
-  border-color: var(--success);
-  box-shadow: inset 0 0 0 1px var(--success);
+  border-color: var(--accent-ink);
+  box-shadow: inset 0 0 0 1px var(--accent-ink);
 }
 .account-password {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -237,7 +237,7 @@
   font-size: 11px;
 }
 .session-current {
-  color: var(--success);
+  color: var(--accent-ink);
 }
 .activity-feed time {
   font-size: 12px;
