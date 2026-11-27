@@ -554,7 +554,9 @@ export function MigrationsView() {
           </div>
         </div>
 
-        {jobsQuery.isLoading && <Loading />}
+        {jobsQuery.isLoading && (
+          <Loading layout="table" label="Loading migration jobs…" />
+        )}
         {jobsQuery.error && <ErrorMessage error={jobsQuery.error} />}
 
         {!jobsQuery.isLoading && jobs.length === 0 && (

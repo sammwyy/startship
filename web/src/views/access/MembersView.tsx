@@ -113,7 +113,7 @@ function OverrideEditor({
           </label>
         </div>
         {isPending ? (
-          <Loading />
+          <Loading layout="table" />
         ) : (
           <AsyncForm
             key={`${target}-${subject}-${JSON.stringify(current)}`}
@@ -373,7 +373,7 @@ export function MembersView() {
             members={data.members}
             permissions={catalog.permissions}
           />
-          <Suspense fallback={<Loading />}>
+          <Suspense fallback={<Loading layout="table" />}>
             <RecentAudit workspaceId={id} />
           </Suspense>
         </>

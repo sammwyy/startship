@@ -287,7 +287,7 @@ export function BackupsPanel({
       </div>
       <ErrorMessage error={data.error || data.liveError} />
       {data.isPending ? (
-        <Loading />
+        <Loading layout="table" label="Loading backups…" />
       ) : !rows.length ? (
         <Empty title="No backups yet">
           <p>

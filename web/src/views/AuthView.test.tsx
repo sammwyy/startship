@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { BootScreen } from "../components/InstanceScreen";
 import { AuthView } from "./AuthView";
 
 const state = vi.hoisted(() => ({
@@ -29,6 +30,36 @@ beforeEach(() => {
   state.setup = false;
 });
 describe("authentication forms", () => {
+  it("shows an accessible startup status without exposing sign-in fields", () => {
+    render(<BootScreen />);
+    expect(
+      screen.getByRole("status", { name: "Loading Startship" }),
+    ).toBeVisible();
+    expect(screen.queryByLabelText("Username")).not.toBeInTheDocument();
+  });
+  it("shows the instance host and signs in with the supplied account", async () => {
+    render(view());
+    expect(
+      screen.getByRole("heading", { name: "Sign in to Startship" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(window.location.host)).toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Username"), "admin");
+    await user.type(screen.getByLabelText("Password"), "admin-password");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(state.login).toHaveBeenCalledWith("admin", "admin-password", false);
+  });
+  it("uses the same instance screen to set up the first administrator", () => {
+    state.setup = true;
+    render(view());
+    expect(
+      screen.getByRole("heading", { name: "Create the administrator" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Password")).toHaveAttribute(
+      "autocomplete",
+      "new-password",
+    );
+  });
   it("starts rotation with empty fields instead of reusing the sign-in credentials", async () => {
     const { rerender } = render(view());
     const user = userEvent.setup();

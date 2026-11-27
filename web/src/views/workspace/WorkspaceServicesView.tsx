@@ -47,7 +47,10 @@ export function WorkspaceServicesView() {
       />
       <ErrorMessage error={services.error || services.liveError} />
       {services.isPending ? (
-        <Loading />
+        <Loading
+          layout={layout === "list" ? "table" : "cards"}
+          label="Loading services…"
+        />
       ) : !services.data?.services.length ? (
         <Empty title="A home for your data">
           <p>

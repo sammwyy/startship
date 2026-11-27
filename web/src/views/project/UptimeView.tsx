@@ -62,7 +62,7 @@ export function UptimeView() {
       />
       <ErrorMessage error={saveError || error} />
       {!data ? (
-        !error && <Loading />
+        !error && <Loading layout="stats" label="Loading uptime…" />
       ) : (
         <>
           <div className="uptime-kpis panel">

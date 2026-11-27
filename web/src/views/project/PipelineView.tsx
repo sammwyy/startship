@@ -119,7 +119,7 @@ export function PipelineView() {
     <>
       <ProjectHeading title="Pipeline" />
       {isPending ? (
-        <Loading />
+        <Loading layout="cards" label="Loading pipeline templates…" />
       ) : error ? (
         <ErrorMessage error={error} />
       ) : (

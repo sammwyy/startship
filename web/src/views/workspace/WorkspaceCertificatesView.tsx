@@ -103,7 +103,7 @@ export function WorkspaceCertificatesView() {
             )}
             <ErrorMessage error={error || liveError || domains.error} />
             {isPending ? (
-              <Loading />
+              <Loading layout="table" label="Loading certificates…" />
             ) : (
               data &&
               (data.certificates.length ? (

@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Link,
   NavLink,
@@ -15,17 +22,24 @@ import { useSession } from "../providers/SessionProvider";
 import { useUI } from "../providers/UIProvider";
 import { projectSections, text } from "../lib/project";
 import { Brand, Icon } from "../components/Icon";
-import { Badge, Field, ThemeButton } from "../components/ui";
+import { Badge, Field, Loading, ThemeButton } from "../components/ui";
 import { Popover } from "../components/Popover";
+import { ProjectLoading } from "../components/ProjectLoading";
+import { Skeleton } from "../components/Skeleton";
 import { SystemUpdateLink } from "../components/SystemUpdateLink";
 import { useLiveSubscription } from "../providers/LiveProvider";
 
 interface DashboardContext {
   workspace?: Workspace;
   workspaces: Workspace[];
+  workspacesPending: boolean;
+  workspacesError?: Error | null;
   project?: Project;
 }
-const Context = createContext<DashboardContext>({ workspaces: [] });
+const Context = createContext<DashboardContext>({
+  workspaces: [],
+  workspacesPending: false,
+});
 export const useDashboard = () => useContext(Context);
 
 export function DashboardLayout() {
@@ -36,15 +50,19 @@ export function DashboardLayout() {
     location = useLocation();
   const projectMatch = useMatch("/project/:projectId/*"),
     workspaceMatch = useMatch("/workspace/:workspaceId/*");
-  const { data: workspaces = [] } = useQuery(queries.workspaces());
-  const { data: project } = useQuery({
-    ...queries.project(projectMatch?.params.projectId || ""),
-    enabled: !!projectMatch,
+  const {
+    data: workspaces = [],
+    isPending: workspacesPending,
+    error: workspacesError,
+  } = useQuery(queries.workspaces());
+  const projectId = projectMatch?.params.projectId;
+  const projectSection = projectMatch?.params["*"]?.split("/")[0] || "overview";
+  const { data: project, isPending: projectPending } = useQuery({
+    ...queries.project(projectId || ""),
+    enabled: !!projectId,
   });
   useLiveSubscription(
-    projectMatch?.params.projectId
-      ? { topic: "project", project_id: projectMatch.params.projectId }
-      : null,
+    projectId ? { topic: "project", project_id: projectId } : null,
   );
   useLiveSubscription({ topic: "system_update" });
   useLiveSubscription({ topic: "workspaces" });
@@ -52,16 +70,18 @@ export function DashboardLayout() {
     () => localStorage.getItem("startship-sidebar-collapsed") === "true",
   );
   const drawer = useRef<HTMLDialogElement>(null);
-  const workspace =
-    workspaces.find(
-      (w) =>
-        w.id ===
-        (projectMatch
-          ? project?.workspace_id
-          : workspaceMatch?.params.workspaceId),
-    ) ||
-    workspaces.find((w) => w.id === localStorage.getItem("workspace")) ||
-    workspaces[0];
+  const matchedWorkspace = workspaces.find(
+    (w) =>
+      w.id ===
+      (projectId ? project?.workspace_id : workspaceMatch?.params.workspaceId),
+  );
+  const workspace = projectId
+    ? matchedWorkspace
+    : matchedWorkspace ||
+      workspaces.find((w) => w.id === localStorage.getItem("workspace")) ||
+      workspaces[0];
+  const projectWorkspacePending =
+    !!projectId && (projectPending || workspacesPending);
   useEffect(() => {
     if (workspace) localStorage.setItem("workspace", workspace.id);
   }, [workspace]);
@@ -88,7 +108,8 @@ export function DashboardLayout() {
       },
     });
   }
-  const url = workspace ? `/workspace/${workspace.id}` : "/workspaces";
+  const workspaceId = project?.workspace_id ?? workspace?.id;
+  const url = workspaceId ? `/workspace/${workspaceId}` : "/workspaces";
   const accountName = user?.display_name || user?.username || "Account";
   const navLink = (to: string, name: string, shape: string, end = false) => (
     <NavLink key={to} to={to} end={end} aria-label={name} title={name}>
@@ -130,12 +151,20 @@ export function DashboardLayout() {
       <Popover
         id={`workspace-menu-${mobile}`}
         className="sidebar-selector"
-        label={`Workspace: ${workspace?.name || "Choose workspace"}`}
+        label={
+          projectWorkspacePending
+            ? "Loading workspace"
+            : `Workspace: ${workspace?.name || "Choose workspace"}`
+        }
         trigger={
           <>
             <Icon name="layers" />
             <span className="selector-name">
-              {workspace?.name || "Choose workspace"}
+              {projectWorkspacePending ? (
+                <Skeleton width="5.5rem" />
+              ) : (
+                workspace?.name || "Choose workspace"
+              )}
             </span>
             <Icon name="chevron" />
           </>
@@ -178,27 +207,46 @@ export function DashboardLayout() {
             projectMatch ? "Project navigation" : "Workspace navigation"
           }
         >
-          {projectMatch && project ? (
+          {projectId ? (
             <>
               {navLink(url, "All projects", "back")}
               <div className="sidebar-project">
-                <strong>{project.name}</strong>
-                {project.sleeping && <Badge status="sleeping" />}
-                <Link
-                  className="sidebar-source"
-                  to={`/project/${project.id}/source`}
-                  title={project.branch || "Connect source"}
-                >
-                  <Icon name="branch" />
-                  <span>
-                    {project.git_url
-                      ? project.branch || "main"
-                      : "Connect source"}
-                  </span>
-                </Link>
+                {project ? (
+                  <>
+                    <strong>{project.name}</strong>
+                    {project.sleeping && <Badge status="sleeping" />}
+                    <Link
+                      className="sidebar-source"
+                      to={`/project/${projectId}/source`}
+                      title={project.branch || "Connect source"}
+                    >
+                      <Icon name="branch" />
+                      <span>
+                        {project.git_url
+                          ? project.branch || "main"
+                          : "Connect source"}
+                      </span>
+                    </Link>
+                  </>
+                ) : (
+                  <div role="status" aria-label="Loading project name">
+                    <strong>
+                      <span className="project-skeleton-line">
+                        <Skeleton width="6rem" />
+                      </span>
+                    </strong>
+                    <div
+                      className="sidebar-source sidebar-source-placeholder"
+                      aria-hidden="true"
+                    >
+                      <Icon name="branch" />
+                      <Skeleton width="3.5rem" height="0.55rem" />
+                    </div>
+                  </div>
+                )}
               </div>
               {projectSections.map(([section, label, icon]) =>
-                navLink(`/project/${project.id}/${section}`, label, icon),
+                navLink(`/project/${projectId}/${section}`, label, icon),
               )}
             </>
           ) : (
@@ -264,7 +312,15 @@ export function DashboardLayout() {
     </aside>
   );
   return (
-    <Context.Provider value={{ workspace, workspaces, project }}>
+    <Context.Provider
+      value={{
+        workspace,
+        workspaces,
+        workspacesPending,
+        workspacesError,
+        project,
+      }}
+    >
       <div
         className={`dashboard sidebar-layout${collapsed ? " sidebar-collapsed" : ""}`}
       >
@@ -281,11 +337,36 @@ export function DashboardLayout() {
           {ui.navigationOpen && sidebar(true)}
         </dialog>
         <div className="dashboard-body">
-          <main className="main">
+          <main className={projectId ? "main project-main" : "main"}>
             <div
               className={`content${/\/(source|environment|pipeline)$/.test(location.pathname) || /^\/system(?:\/|$)/.test(location.pathname) || /^\/workspace\/[^/]+\/settings$/.test(location.pathname) ? " content-compact" : ""}`}
             >
-              <Outlet />
+              <Suspense
+                fallback={
+                  projectId ? (
+                    <ProjectLoading
+                      section={projectSection}
+                      projectName={project?.name}
+                      showActivityTabs={
+                        !project || can("activity.view", project)
+                      }
+                      canEditSettings={
+                        !project || can("project.settings", project)
+                      }
+                    />
+                  ) : (
+                    <Loading
+                      layout={
+                        workspaceMatch && !workspaceMatch.params["*"]
+                          ? "workspace"
+                          : "page"
+                      }
+                    />
+                  )
+                }
+              >
+                <Outlet />
+              </Suspense>
             </div>
           </main>
         </div>

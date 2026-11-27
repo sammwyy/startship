@@ -230,7 +230,7 @@ export function VolumesPanel({
       {changed && <RedeployNote />}
       <ErrorMessage error={volumes.error || volumes.liveError} />
       {volumes.isPending ? (
-        <Loading />
+        <Loading layout="table" label="Loading volumes…" />
       ) : !rows.length ? (
         <Empty
           title={

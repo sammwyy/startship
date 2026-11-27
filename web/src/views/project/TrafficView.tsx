@@ -325,7 +325,11 @@ export function TrafficView() {
           </div>
         </div>
         <ErrorMessage error={query.error} />
-        {query.data ? <TrafficContent data={query.data} /> : <Loading />}
+        {query.data ? (
+          <TrafficContent data={query.data} />
+        ) : query.isPending ? (
+          <Loading layout="stats" label="Loading traffic…" />
+        ) : null}
         <div className="traffic-footnote">
           <span>
             <Icon name="lock" />

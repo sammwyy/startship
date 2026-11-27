@@ -170,7 +170,7 @@ export function FirewallView() {
       ) : !data ? (
         <>
           <ErrorMessage error={catalog.error} />
-          <Loading />
+          <Loading layout="stats" label="Loading firewall data…" />
         </>
       ) : (
         <>
