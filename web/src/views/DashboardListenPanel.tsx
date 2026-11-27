@@ -68,7 +68,7 @@ export function DashboardListenPanel() {
             <ListenAddressPicker
               id="dashboard-listen"
               label="Dashboard listen addresses"
-              defaultPort="8080"
+              defaultPort="9000"
               value={value}
               interfaces={interfaces}
               readOnly={!admin}

@@ -175,7 +175,7 @@ func (c *cli) runDashboard(args []string) error {
 		}
 		if opts.has("interface") {
 			ifaceValue = opts.value("interface")
-			if _, err := buildInterfaceListens(ifaceValue, "8080"); err != nil {
+			if _, err := buildInterfaceListens(ifaceValue, "9000"); err != nil {
 				return fmt.Errorf("--interface: %w", err)
 			}
 		}
@@ -202,7 +202,7 @@ func (c *cli) runDashboard(args []string) error {
 	if len(nextListen) == 0 {
 		port := portValue
 		if port == "" {
-			port = listenPort(currentListen, "8080")
+			port = listenPort(currentListen, "9000")
 		}
 		if ifaceValue != "" {
 			nextListen, err = buildInterfaceListens(ifaceValue, port)
