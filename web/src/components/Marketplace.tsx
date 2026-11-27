@@ -21,6 +21,7 @@ const categories = new Map([
   ["queue", "Messaging & queues"],
   ["search", "Search"],
   ["storage", "Object storage"],
+  ["observability", "Observability"],
   ["other", "Other"],
 ]);
 

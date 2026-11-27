@@ -3,11 +3,76 @@ package catalog
 import (
 	"encoding/json"
 	"net/url"
+	"reflect"
 	"strings"
 	"testing"
 )
 
+func TestEngineTemplates(t *testing.T) {
+	input := `{"engines":[{"id":"redis","name":"Redis","category":"cache","image":"redis","versions":["8"],"port":6379,
+		"fields":[{"key":"password","label":"Password","type":"password"}],
+		"env":{"PASSWORD":"prefix-${password}"},"command":["--password","${password}"],"scheme":"rediss"}]}`
+	index, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, _ := index.Lookup("redis")
+	e.EnvTemplate["PASSWORD"] = "changed"
+	e.ArgsTemplate[0] = "changed"
+	e = index.All()[0]
+	v := map[string]string{"password": "$spaces ; ${unchanged}"}
+	if got := e.Env(v)["PASSWORD"]; got != "prefix-"+v["password"] {
+		t.Fatalf("expanded env = %q", got)
+	}
+	if got := e.Command(v); !reflect.DeepEqual(got, []string{"--password", v["password"]}) {
+		t.Fatalf("expanded command = %q", got)
+	}
+	if got := e.Connection("cache", 6379, nil)["CACHE_URL"]; got != "rediss://cache.local:6379" {
+		t.Fatalf("connection URL = %q", got)
+	}
+	if got := e.Env(nil)["PASSWORD"]; got != "prefix-" {
+		t.Fatalf("empty field expansion = %q", got)
+	}
+
+	for _, invalid := range []string{
+		strings.Replace(input, "prefix-${password}", "${undeclared}", 1),
+		strings.Replace(input, `"${password}"`, `"${password"`, 1),
+		strings.Replace(input, `"rediss"`, `"http://"`, 1),
+		strings.Replace(input, `"scheme":"rediss"`, `"scheme":"rediss","entrypoint":"relative"`, 1),
+	} {
+		if _, err := Parse([]byte(invalid)); err == nil {
+			t.Fatalf("accepted invalid engine: %s", invalid)
+		}
+	}
+
+	e.EnvTemplate, e.ArgsTemplate = map[string]string{}, []string{}
+	body, err := json.Marshal(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved Engine
+	if err := json.Unmarshal(body, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Command(v)) != 0 || saved.ArgsTemplate == nil || saved.EnvTemplate == nil {
+		t.Fatal("explicit empty templates were not preserved")
+	}
+}
+
 func TestCatalog(t *testing.T) {
+	schemes := map[string]string{
+		"postgresql": "postgres", "mysql": "mysql", "mariadb": "mysql", "mongodb": "mongodb", "redis": "redis", "valkey": "redis", "memcached": "memcached", "rabbitmq": "amqp", "kafka": "kafka", "nats": "nats", "clickhouse": "http", "seaweedfs": "http", "opensearch": "https",
+		"cockroachdb": "postgres", "tidb": "mysql", "yugabytedb": "postgres", "percona": "mysql",
+		"couchdb": "http", "ferretdb": "mongodb", "arangodb": "http", "neo4j": "bolt",
+		"surrealdb": "ws", "questdb": "http", "timescaledb": "postgres", "influxdb": "http",
+		"victoriametrics": "http", "dragonflydb": "redis", "keydb": "redis", "foundationdb": "foundationdb",
+		"firebird": "firebird", "cassandra": "cassandra", "scylladb": "cassandra", "pulsar": "pulsar",
+		"activemq": "tcp", "artemis": "tcp", "redpanda": "kafka", "emqx": "mqtt",
+		"mosquitto": "mqtt", "vernemq": "mqtt", "minio": "http", "meilisearch": "http",
+		"typesense": "http", "solr": "http", "elasticsearch": "http", "grafana": "http",
+		"prometheus": "http", "loki": "http", "jaeger": "http", "opentelemetry-collector": "http",
+		"vector": "tcp",
+	}
 	for _, e := range All() {
 		t.Run(e.ID, func(t *testing.T) {
 			v, err := Validate(e, e.Versions[0], nil)
@@ -15,7 +80,6 @@ func TestCatalog(t *testing.T) {
 				t.Fatal(err)
 			}
 			c := e.Connection("my_db", e.Port, v)
-			schemes := map[string]string{"postgresql": "postgres", "mysql": "mysql", "mariadb": "mysql", "mongodb": "mongodb", "redis": "redis", "valkey": "redis", "memcached": "memcached", "rabbitmq": "amqp", "kafka": "kafka", "nats": "nats", "clickhouse": "http", "seaweedfs": "http", "opensearch": "https"}
 			u, err := url.Parse(c["MY_DB_URL"])
 			if err != nil || u.Hostname() != "my_db.local" || c["MY_DB_HOST"] != "my_db.local" || u.Scheme != schemes[e.ID] {
 				t.Fatal(c, err)

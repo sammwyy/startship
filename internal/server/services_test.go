@@ -127,6 +127,31 @@ func TestServiceLifecycle(t *testing.T) {
 	}
 }
 
+func TestServiceRuntimeOverrides(t *testing.T) {
+	f := newRBACFixture(t)
+	var run string
+	f.a.dockerService = func(args ...string) (string, error) {
+		if args[0] == "run" {
+			run = strings.Join(args, " ")
+		}
+		return "ok", nil
+	}
+	e, _ := catalog.Lookup("minio")
+	e.Entrypoint = "/bin/sh"
+	s := Service{ID: "objects", WorkspaceID: f.workspace.ID, Name: "objects", Engine: e.ID, Definition: &e, Version: e.Versions[0], Config: map[string]string{"access_key": "access", "secret_key": "fixture-secret"}}
+	if err := f.a.saveService(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.a.serviceAction(s.ID, "recreate"); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"-e MINIO_ROOT_USER=access", "-e MINIO_ROOT_PASSWORD=fixture-secret", "--entrypoint /bin/sh " + e.Image + ":" + s.Version + " server /data"} {
+		if !strings.Contains(run, want) {
+			t.Errorf("Docker run did not include %q", want)
+		}
+	}
+}
+
 func TestSeaweedSecretVisibility(t *testing.T) {
 	f := newRBACFixture(t)
 	e, _ := catalog.Lookup("seaweedfs")

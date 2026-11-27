@@ -103,6 +103,13 @@ describe("service catalog", () => {
               category: "cache",
               description: "In-memory data store.",
             },
+            {
+              ...engine,
+              id: "prometheus",
+              name: "Prometheus",
+              category: "observability",
+              description: "Time-series monitoring.",
+            },
           ],
     );
     catalog();
@@ -116,6 +123,13 @@ describe("service catalog", () => {
     expect(
       screen.queryByRole("button", { name: /PostgreSQL/ }),
     ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Observability" }),
+    );
+    expect(
+      screen.getByRole("button", { name: /Prometheus/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Redis/ })).toBeNull();
   });
   it("refreshes the catalog and shows the cached source and timestamp", async () => {
     const updated = "2026-01-01T12:00:00Z";

@@ -108,6 +108,15 @@ describe("connection previews", () => {
     expect(secretValue("OBJECTS_ACCESS_KEY")).toBe(false);
     expect(secretValue("OBJECTS_ENDPOINT")).toBe(false);
   });
+  it("uses declarative connection schemes and previews the MinIO endpoint", () => {
+    const env = connectionEnv(
+      { config: {} } as Service,
+      { id: "minio", port: 9000, scheme: "http" } as ServiceEngine,
+      "objects",
+    );
+    expect(env.OBJECTS_URL).toBe("http://objects.local:9000");
+    expect(env.OBJECTS_ENDPOINT).toBe(env.OBJECTS_URL);
+  });
   it("includes password-only cache authentication and secure OpenSearch URLs", () => {
     expect(
       connectionEnv(

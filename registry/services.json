@@ -367,6 +367,1058 @@
           "generate": true
         }
       ]
+    },
+    {
+      "id": "cockroachdb",
+      "logo": "cockroachdb",
+      "description": "Distributed SQL in single-node development mode without TLS or authentication.",
+      "name": "CockroachDB",
+      "category": "database",
+      "image": "cockroachdb/cockroach",
+      "versions": [
+        "v25.4.2",
+        "v25.4.1"
+      ],
+      "port": 26257,
+      "data_path": "/cockroach/cockroach-data",
+      "scheme": "postgres",
+      "command": [
+        "start-single-node",
+        "--insecure",
+        "--cache=128MiB",
+        "--max-sql-memory=128MiB"
+      ]
+    },
+    {
+      "id": "tidb",
+      "logo": "tidb",
+      "description": "MySQL-compatible SQL with a local, single-node UniStore backend.",
+      "name": "TiDB",
+      "category": "database",
+      "image": "pingcap/tidb",
+      "versions": [
+        "v8.5.4",
+        "v8.5.3"
+      ],
+      "port": 4000,
+      "data_path": "/data",
+      "scheme": "mysql",
+      "command": [
+        "--store=unistore",
+        "--path=/data/tidb",
+        "--host=0.0.0.0"
+      ]
+    },
+    {
+      "id": "yugabytedb",
+      "logo": "yugabytedb",
+      "description": "Distributed PostgreSQL-compatible SQL. A single node may require raising the service memory limit.",
+      "name": "YugabyteDB",
+      "category": "database",
+      "image": "yugabytedb/yugabyte",
+      "versions": [
+        "2025.1.0.0-b168",
+        "2024.2.3.2-b6"
+      ],
+      "port": 5433,
+      "data_path": "/home/yugabyte/yb_data",
+      "scheme": "postgres",
+      "command": [
+        "bin/yugabyted",
+        "start",
+        "--base_dir=/home/yugabyte/yb_data",
+        "--background=false"
+      ]
+    },
+    {
+      "id": "percona",
+      "logo": "percona",
+      "description": "MySQL-compatible relational database.",
+      "name": "Percona Server",
+      "category": "database",
+      "image": "percona/percona-server",
+      "versions": [
+        "8.4.7",
+        "8.4.6"
+      ],
+      "port": 3306,
+      "data_path": "/var/lib/mysql",
+      "scheme": "mysql",
+      "env": {
+        "MYSQL_USER": "${user}",
+        "MYSQL_PASSWORD": "${password}",
+        "MYSQL_ROOT_PASSWORD": "${password}",
+        "MYSQL_DATABASE": "${database}"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "Database",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "couchdb",
+      "logo": "couchdb",
+      "description": "HTTP-based document database with replication.",
+      "name": "CouchDB",
+      "category": "database",
+      "image": "couchdb",
+      "versions": [
+        "3.5.1",
+        "3.5.0"
+      ],
+      "port": 5984,
+      "data_path": "/opt/couchdb/data",
+      "scheme": "http",
+      "env": {
+        "COUCHDB_USER": "${user}",
+        "COUCHDB_PASSWORD": "${password}"
+      },
+      "command": [
+        "sh",
+        "-ec",
+        "printf '[couchdb]\\nsingle_node = true\\n' > /opt/couchdb/etc/local.d/single-node.ini; exec /docker-entrypoint.sh couchdb"
+      ],
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "ferretdb",
+      "logo": "ferretdb",
+      "description": "MongoDB-compatible API with bundled PostgreSQL and DocumentDB for evaluation.",
+      "name": "FerretDB",
+      "category": "database",
+      "image": "ghcr.io/ferretdb/ferretdb-eval",
+      "versions": [
+        "2.7.0",
+        "2.5.0"
+      ],
+      "port": 27017,
+      "data_path": "/var/lib/postgresql/data",
+      "scheme": "mongodb",
+      "env": {
+        "POSTGRES_USER": "${user}",
+        "POSTGRES_PASSWORD": "${password}"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "arangodb",
+      "logo": "arangodb",
+      "description": "Multi-model database for documents and graphs. Sign in as root.",
+      "name": "ArangoDB",
+      "category": "database",
+      "image": "arangodb",
+      "versions": [
+        "3.12.7",
+        "3.12.6"
+      ],
+      "port": 8529,
+      "data_path": "/var/lib/arangodb3",
+      "scheme": "http",
+      "env": {
+        "ARANGO_ROOT_PASSWORD": "${password}"
+      },
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "neo4j",
+      "logo": "neo4j",
+      "description": "Property graph database queried with Cypher. Sign in as neo4j.",
+      "name": "Neo4j",
+      "category": "database",
+      "image": "neo4j",
+      "versions": [
+        "5.26.19",
+        "5.26.17"
+      ],
+      "port": 7687,
+      "data_path": "/data",
+      "scheme": "bolt",
+      "env": {
+        "NEO4J_AUTH": "neo4j/${password}",
+        "NEO4J_server_memory_heap_initial__size": "256m",
+        "NEO4J_server_memory_heap_max__size": "384m",
+        "NEO4J_server_memory_pagecache_size": "128m"
+      },
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "surrealdb",
+      "logo": "surrealdb",
+      "description": "Multi-model database with a persistent SurrealKV store.",
+      "name": "SurrealDB",
+      "category": "database",
+      "image": "surrealdb/surrealdb",
+      "versions": [
+        "v3.0.0",
+        "v2.6.2"
+      ],
+      "port": 8000,
+      "data_path": "/tmp",
+      "scheme": "ws",
+      "env": {
+        "SURREAL_USER": "${user}",
+        "SURREAL_PASS": "${password}"
+      },
+      "command": [
+        "start",
+        "--bind",
+        "0.0.0.0:8000",
+        "surrealkv:/tmp/surrealdb"
+      ],
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "questdb",
+      "logo": "questdb",
+      "description": "Time-series database exposing its SQL HTTP API and web console.",
+      "name": "QuestDB",
+      "category": "database",
+      "image": "questdb/questdb",
+      "versions": [
+        "9.3.0",
+        "9.2.3"
+      ],
+      "port": 9000,
+      "data_path": "/var/lib/questdb",
+      "scheme": "http"
+    },
+    {
+      "id": "timescaledb",
+      "logo": "timescaledb",
+      "description": "PostgreSQL with the Timescale extension for time-series data.",
+      "name": "TimescaleDB",
+      "category": "database",
+      "image": "timescale/timescaledb",
+      "versions": [
+        "2.24.0-pg17",
+        "2.23.1-pg17"
+      ],
+      "port": 5432,
+      "data_path": "/var/lib/postgresql/data",
+      "scheme": "postgres",
+      "env": {
+        "POSTGRES_USER": "${user}",
+        "POSTGRES_PASSWORD": "${password}",
+        "POSTGRES_DB": "${database}"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "Database",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "influxdb",
+      "logo": "influxdb",
+      "description": "Time-series database with a preconfigured organization and bucket.",
+      "name": "InfluxDB",
+      "category": "database",
+      "image": "influxdb",
+      "versions": [
+        "2.8.0",
+        "2.7.12"
+      ],
+      "port": 8086,
+      "data_path": "/var/lib/influxdb2",
+      "scheme": "http",
+      "env": {
+        "DOCKER_INFLUXDB_INIT_MODE": "setup",
+        "DOCKER_INFLUXDB_INIT_USERNAME": "${user}",
+        "DOCKER_INFLUXDB_INIT_PASSWORD": "${password}",
+        "DOCKER_INFLUXDB_INIT_ORG": "${organization}",
+        "DOCKER_INFLUXDB_INIT_BUCKET": "${bucket}"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "organization",
+          "label": "Organization",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "bucket",
+          "label": "Bucket",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "victoriametrics",
+      "logo": "victoriametrics",
+      "description": "Single-node time-series storage compatible with Prometheus.",
+      "name": "VictoriaMetrics",
+      "category": "database",
+      "image": "victoriametrics/victoria-metrics",
+      "versions": [
+        "v1.136.0",
+        "v1.135.0"
+      ],
+      "port": 8428,
+      "data_path": "/victoria-metrics-data",
+      "scheme": "http",
+      "command": [
+        "-storageDataPath=/victoria-metrics-data"
+      ]
+    },
+    {
+      "id": "dragonflydb",
+      "logo": "dragonflydb",
+      "description": "In-memory Redis-compatible datastore with disk snapshots.",
+      "name": "DragonflyDB",
+      "category": "cache",
+      "image": "ghcr.io/dragonflydb/dragonfly",
+      "versions": [
+        "v1.35.0",
+        "v1.34.1"
+      ],
+      "port": 6379,
+      "data_path": "/data",
+      "scheme": "redis",
+      "command": [
+        "--requirepass=${password}",
+        "--dir=/data",
+        "--snapshot_cron=*/5 * * * *",
+        "--maxmemory=512mb",
+        "--proactor_threads=1"
+      ],
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "keydb",
+      "logo": "keydb",
+      "description": "Redis-compatible, multithreaded datastore (amd64 image).",
+      "name": "KeyDB",
+      "category": "cache",
+      "image": "eqalpha/keydb",
+      "versions": [
+        "x86_64_v6.3.4",
+        "x86_64_v6.3.3"
+      ],
+      "port": 6379,
+      "data_path": "/data",
+      "scheme": "redis",
+      "command": [
+        "keydb-server",
+        "--appendonly",
+        "yes",
+        "--requirepass",
+        "${password}"
+      ],
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "foundationdb",
+      "logo": "foundationdb",
+      "description": "Transactional key-value store. Clients need a FoundationDB cluster file.",
+      "name": "FoundationDB",
+      "category": "database",
+      "image": "foundationdb/foundationdb",
+      "versions": [
+        "7.3.69",
+        "7.3.63"
+      ],
+      "port": 4500,
+      "data_path": "/var/fdb/data",
+      "scheme": "foundationdb",
+      "env": {
+        "FDB_NETWORKING_MODE": "container"
+      }
+    },
+    {
+      "id": "firebird",
+      "logo": "firebird",
+      "description": "Relational database with an initial database and user.",
+      "name": "Firebird",
+      "category": "database",
+      "image": "firebirdsql/firebird",
+      "versions": [
+        "5.0.4",
+        "5.0.3"
+      ],
+      "port": 3050,
+      "data_path": "/var/lib/firebird/data",
+      "scheme": "firebird",
+      "env": {
+        "FIREBIRD_ROOT_PASSWORD": "${password}",
+        "FIREBIRD_USER": "${user}",
+        "FIREBIRD_PASSWORD": "${password}",
+        "FIREBIRD_DATABASE": "${database}"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "Database",
+          "type": "text",
+          "required": true,
+          "default": "startship.fdb"
+        }
+      ]
+    },
+    {
+      "id": "cassandra",
+      "logo": "cassandra",
+      "description": "Wide-column database with a native CQL interface.",
+      "name": "Cassandra",
+      "category": "database",
+      "image": "cassandra",
+      "versions": [
+        "5.0.6",
+        "5.0.5"
+      ],
+      "port": 9042,
+      "data_path": "/var/lib/cassandra",
+      "scheme": "cassandra",
+      "env": {
+        "MAX_HEAP_SIZE": "384M",
+        "HEAP_NEWSIZE": "100M"
+      }
+    },
+    {
+      "id": "scylladb",
+      "logo": "scylladb",
+      "description": "Cassandra-compatible wide-column database.",
+      "name": "ScyllaDB",
+      "category": "database",
+      "image": "scylladb/scylla",
+      "versions": [
+        "2025.4.1",
+        "2025.4.0"
+      ],
+      "port": 9042,
+      "data_path": "/var/lib/scylla",
+      "scheme": "cassandra",
+      "command": [
+        "--smp",
+        "1",
+        "--memory",
+        "512M",
+        "--overprovisioned",
+        "1"
+      ]
+    },
+    {
+      "id": "pulsar",
+      "logo": "pulsar",
+      "description": "Persistent pub/sub messaging in standalone mode.",
+      "name": "Apache Pulsar",
+      "category": "queue",
+      "image": "apachepulsar/pulsar",
+      "versions": [
+        "4.0.9",
+        "4.0.8"
+      ],
+      "port": 6650,
+      "data_path": "/pulsar/data",
+      "scheme": "pulsar",
+      "env": {
+        "PULSAR_MEM": "-Xms256m -Xmx384m -XX:MaxDirectMemorySize=256m"
+      },
+      "command": [
+        "bin/pulsar",
+        "standalone"
+      ]
+    },
+    {
+      "id": "activemq",
+      "logo": "activemq",
+      "description": "ActiveMQ Classic broker using the OpenWire protocol.",
+      "name": "ActiveMQ",
+      "category": "queue",
+      "image": "apache/activemq-classic",
+      "versions": [
+        "6.2.0",
+        "6.1.8"
+      ],
+      "port": 61616,
+      "data_path": "/opt/apache-activemq/data",
+      "scheme": "tcp",
+      "env": {
+        "ACTIVEMQ_CONNECTION_USER": "${user}",
+        "ACTIVEMQ_CONNECTION_PASSWORD": "${password}"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "artemis",
+      "logo": "artemis",
+      "description": "Persistent multiprotocol message broker.",
+      "name": "Artemis",
+      "category": "queue",
+      "image": "apache/activemq-artemis",
+      "versions": [
+        "2.44.0",
+        "2.43.0"
+      ],
+      "port": 61616,
+      "data_path": "/var/lib/artemis-instance",
+      "scheme": "tcp",
+      "env": {
+        "ARTEMIS_USER": "${user}",
+        "ARTEMIS_PASSWORD": "${password}",
+        "ANONYMOUS_LOGIN": "false",
+        "EXTRA_ARGS": "--http-host 0.0.0.0 --relax-jolokia --java-memory 512M"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "redpanda",
+      "logo": "redpanda",
+      "description": "Kafka-compatible single-node broker for clients on the Startship network.",
+      "name": "Redpanda",
+      "category": "queue",
+      "image": "docker.redpanda.com/redpandadata/redpanda",
+      "versions": [
+        "v25.3.4",
+        "v25.2.12"
+      ],
+      "port": 9092,
+      "data_path": "/var/lib/redpanda/data",
+      "scheme": "kafka",
+      "entrypoint": "/bin/sh",
+      "command": [
+        "-ec",
+        "exec rpk redpanda start --mode dev-container --smp 1 --memory 512M --kafka-addr 0.0.0.0:9092 --advertise-kafka-addr \"$HOSTNAME:9092\""
+      ]
+    },
+    {
+      "id": "emqx",
+      "logo": "emqx",
+      "description": "MQTT broker with anonymous clients by default; configure authentication before exposing it.",
+      "name": "EMQX",
+      "category": "queue",
+      "image": "emqx/emqx",
+      "versions": [
+        "5.8.9",
+        "5.8.8"
+      ],
+      "port": 1883,
+      "data_path": "/opt/emqx/data",
+      "scheme": "mqtt",
+      "env": {
+        "EMQX_NODE__NAME": "emqx@127.0.0.1"
+      }
+    },
+    {
+      "id": "mosquitto",
+      "logo": "mosquitto",
+      "description": "MQTT broker with password authentication and persistent sessions.",
+      "name": "Mosquitto",
+      "category": "queue",
+      "image": "eclipse-mosquitto",
+      "versions": [
+        "2.0.22",
+        "2.0.21"
+      ],
+      "port": 1883,
+      "data_path": "/mosquitto/data",
+      "scheme": "mqtt",
+      "env": {
+        "MOSQUITTO_USER": "${user}",
+        "MOSQUITTO_PASSWORD": "${password}"
+      },
+      "command": [
+        "sh",
+        "-ec",
+        "umask 077; mosquitto_passwd -b -c /tmp/startship.passwd \"$MOSQUITTO_USER\" \"$MOSQUITTO_PASSWORD\"; printf 'listener 1883\\nallow_anonymous false\\npassword_file /tmp/startship.passwd\\npersistence true\\npersistence_location /mosquitto/data/\\n' > /tmp/startship-mosquitto.conf; chown mosquitto:mosquitto /tmp/startship.passwd /tmp/startship-mosquitto.conf /mosquitto/data; exec mosquitto -c /tmp/startship-mosquitto.conf"
+      ],
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "vernemq",
+      "logo": "vernemq",
+      "description": "MQTT broker. Using its image accepts the VerneMQ end-user license.",
+      "name": "VerneMQ",
+      "category": "queue",
+      "image": "vernemq/vernemq",
+      "versions": [
+        "2.1.1",
+        "2.0.1"
+      ],
+      "port": 1883,
+      "data_path": "/vernemq/data",
+      "scheme": "mqtt",
+      "env": {
+        "DOCKER_VERNEMQ_ACCEPT_EULA": "yes",
+        "DOCKER_VERNEMQ_USER__startship": "${password}",
+        "DOCKER_VERNEMQ_ALLOW_ANONYMOUS": "off"
+      },
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "minio",
+      "logo": "minio",
+      "description": "S3-compatible object storage built from MinIO Community source.",
+      "name": "MinIO",
+      "category": "storage",
+      "image": "ghcr.io/coollabsio/minio",
+      "versions": [
+        "RELEASE.2025-10-15T17-29-55Z"
+      ],
+      "port": 9000,
+      "data_path": "/data",
+      "scheme": "http",
+      "env": {
+        "MINIO_ROOT_USER": "${access_key}",
+        "MINIO_ROOT_PASSWORD": "${secret_key}"
+      },
+      "command": [
+        "server",
+        "/data"
+      ],
+      "fields": [
+        {
+          "key": "access_key",
+          "label": "Access key",
+          "type": "text",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "secret_key",
+          "label": "Secret key",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "meilisearch",
+      "logo": "meilisearch",
+      "description": "Search API with typo tolerance and instant results.",
+      "name": "Meilisearch",
+      "category": "search",
+      "image": "getmeili/meilisearch",
+      "versions": [
+        "v1.35.0",
+        "v1.34.3"
+      ],
+      "port": 7700,
+      "data_path": "/meili_data",
+      "scheme": "http",
+      "env": {
+        "MEILI_ENV": "production",
+        "MEILI_MASTER_KEY": "${secret_key}"
+      },
+      "fields": [
+        {
+          "key": "secret_key",
+          "label": "API key",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "typesense",
+      "logo": "typesense",
+      "description": "Typo-tolerant search API with a persistent index.",
+      "name": "Typesense",
+      "category": "search",
+      "image": "typesense/typesense",
+      "versions": [
+        "30.1",
+        "30.0"
+      ],
+      "port": 8108,
+      "data_path": "/data",
+      "scheme": "http",
+      "env": {
+        "TYPESENSE_API_KEY": "${secret_key}",
+        "TYPESENSE_DATA_DIR": "/data"
+      },
+      "fields": [
+        {
+          "key": "secret_key",
+          "label": "API key",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "solr",
+      "logo": "solr",
+      "description": "Lucene-powered search platform in standalone mode.",
+      "name": "Apache Solr",
+      "category": "search",
+      "image": "solr",
+      "versions": [
+        "9.10.1",
+        "9.10.0"
+      ],
+      "port": 8983,
+      "data_path": "/var/solr",
+      "scheme": "http",
+      "env": {
+        "SOLR_HEAP": "512m"
+      },
+      "command": [
+        "solr-precreate",
+        "startship"
+      ]
+    },
+    {
+      "id": "elasticsearch",
+      "logo": "elasticsearch",
+      "description": "Single-node search and analytics with password authentication. HTTP is not encrypted.",
+      "name": "Elasticsearch",
+      "category": "search",
+      "image": "elasticsearch",
+      "versions": [
+        "8.19.12",
+        "8.19.11"
+      ],
+      "port": 9200,
+      "data_path": "/usr/share/elasticsearch/data",
+      "scheme": "http",
+      "env": {
+        "discovery.type": "single-node",
+        "xpack.security.enabled": "true",
+        "xpack.security.http.ssl.enabled": "false",
+        "node.store.allow_mmap": "false",
+        "ES_JAVA_OPTS": "-Xms512m -Xmx512m",
+        "ELASTIC_PASSWORD": "${password}"
+      },
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "grafana",
+      "logo": "grafana",
+      "description": "Dashboards and exploration across observability data sources.",
+      "name": "Grafana",
+      "category": "observability",
+      "image": "grafana/grafana",
+      "versions": [
+        "12.4.0",
+        "12.3.3"
+      ],
+      "port": 3000,
+      "data_path": "/var/lib/grafana",
+      "scheme": "http",
+      "env": {
+        "GF_SECURITY_ADMIN_USER": "${user}",
+        "GF_SECURITY_ADMIN_PASSWORD": "${password}"
+      },
+      "fields": [
+        {
+          "key": "user",
+          "label": "User",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "prometheus",
+      "logo": "prometheus",
+      "description": "Metrics collection, time-series storage and PromQL.",
+      "name": "Prometheus",
+      "category": "observability",
+      "image": "prom/prometheus",
+      "versions": [
+        "v3.10.0",
+        "v3.9.1"
+      ],
+      "port": 9090,
+      "data_path": "/prometheus",
+      "scheme": "http"
+    },
+    {
+      "id": "loki",
+      "logo": "loki",
+      "description": "Single-node log aggregation with a local filesystem store.",
+      "name": "Loki",
+      "category": "observability",
+      "image": "grafana/loki",
+      "versions": [
+        "3.6.5",
+        "3.6.4"
+      ],
+      "port": 3100,
+      "data_path": "/tmp/loki",
+      "scheme": "http"
+    },
+    {
+      "id": "jaeger",
+      "logo": "jaeger",
+      "description": "Trace exploration UI with local Badger storage and OTLP HTTP ingestion on port 4318.",
+      "name": "Jaeger",
+      "category": "observability",
+      "image": "jaegertracing/jaeger",
+      "versions": [
+        "2.15.0",
+        "2.14.1"
+      ],
+      "port": 16686,
+      "data_path": "/tmp",
+      "scheme": "http",
+      "env": {
+        "STARTSHIP_JAEGER_CONFIG": "{\"service\":{\"extensions\":[\"jaeger_storage\",\"jaeger_query\"],\"pipelines\":{\"traces\":{\"receivers\":[\"otlp\"],\"processors\":[\"batch\"],\"exporters\":[\"jaeger_storage_exporter\"]}}},\"extensions\":{\"jaeger_storage\":{\"backends\":{\"local\":{\"badger\":{\"directories\":{\"keys\":\"/tmp/jaeger\",\"values\":\"/tmp/jaeger\"},\"ephemeral\":false,\"ttl\":{\"spans\":\"48h\"}}}}},\"jaeger_query\":{\"storage\":{\"traces\":\"local\"}}},\"receivers\":{\"otlp\":{\"protocols\":{\"http\":{\"endpoint\":\"0.0.0.0:4318\"}}}},\"processors\":{\"batch\":{}},\"exporters\":{\"jaeger_storage_exporter\":{\"trace_storage\":\"local\"}}}"
+      },
+      "command": [
+        "--config=env:STARTSHIP_JAEGER_CONFIG"
+      ]
+    },
+    {
+      "id": "opentelemetry-collector",
+      "logo": "opentelemetry-collector",
+      "description": "OTLP HTTP collection for logs, metrics, and traces with a rotating file export.",
+      "name": "OpenTelemetry Collector",
+      "category": "observability",
+      "image": "otel/opentelemetry-collector-contrib",
+      "versions": [
+        "0.146.0",
+        "0.145.0"
+      ],
+      "port": 4318,
+      "data_path": "/tmp",
+      "scheme": "http",
+      "env": {
+        "STARTSHIP_OTEL_CONFIG": "{\"receivers\":{\"otlp\":{\"protocols\":{\"http\":{\"endpoint\":\"0.0.0.0:4318\"}}}},\"processors\":{\"batch\":{}},\"exporters\":{\"file\":{\"path\":\"/tmp/telemetry.jsonl\",\"rotation\":{\"max_megabytes\":50,\"max_days\":7,\"max_backups\":5}}},\"service\":{\"pipelines\":{\"traces\":{\"receivers\":[\"otlp\"],\"processors\":[\"batch\"],\"exporters\":[\"file\"]},\"metrics\":{\"receivers\":[\"otlp\"],\"processors\":[\"batch\"],\"exporters\":[\"file\"]},\"logs\":{\"receivers\":[\"otlp\"],\"processors\":[\"batch\"],\"exporters\":[\"file\"]}}}}"
+      },
+      "command": [
+        "--config=env:STARTSHIP_OTEL_CONFIG"
+      ]
+    },
+    {
+      "id": "vector",
+      "logo": "vector",
+      "description": "Receives newline-delimited JSON over TCP and archives it in daily log files.",
+      "name": "Vector",
+      "category": "observability",
+      "image": "timberio/vector",
+      "versions": [
+        "0.53.0-debian",
+        "0.52.0-debian"
+      ],
+      "port": 9000,
+      "data_path": "/var/lib/vector",
+      "scheme": "tcp",
+      "env": {
+        "STARTSHIP_VECTOR_CONFIG": "{\"data_dir\":\"/var/lib/vector\",\"sources\":{\"logs\":{\"type\":\"socket\",\"mode\":\"tcp\",\"address\":\"0.0.0.0:9000\",\"framing\":{\"method\":\"newline_delimited\"},\"decoding\":{\"codec\":\"json\"}}},\"sinks\":{\"archive\":{\"type\":\"file\",\"inputs\":[\"logs\"],\"path\":\"/var/lib/vector/logs-%Y-%m-%d.jsonl\",\"encoding\":{\"codec\":\"json\"}}}}"
+      },
+      "entrypoint": "/bin/sh",
+      "command": [
+        "-ec",
+        "printf '%s\\n' \"$STARTSHIP_VECTOR_CONFIG\" > /tmp/startship-vector.json; exec /usr/bin/vector --config-json /tmp/startship-vector.json"
+      ]
     }
   ]
 }

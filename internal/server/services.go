@@ -222,7 +222,9 @@ func (a *Server) serviceAction(id, action string) error {
 		for k, v := range env {
 			args = append(args, "-e", k+"="+v)
 		}
-		if e.ID == "seaweedfs" {
+		if e.Entrypoint != "" {
+			args = append(args, "--entrypoint", e.Entrypoint)
+		} else if e.ID == "seaweedfs" {
 			args = append(args, "--entrypoint", "/bin/sh")
 		}
 		args = append(args, e.Image+":"+s.Version)
