@@ -1,10 +1,12 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -158,6 +160,51 @@ func request(r *Router, method, path, body, ct string) *httptest.ResponseRecorde
 	r.ServeHTTP(w, req)
 	return w
 }
+
+func TestUpstreamFailureLog(t *testing.T) {
+	var logs bytes.Buffer
+	previousOutput := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previousOutput) })
+
+	r, _, snapshot := setup(t, activePolicy(), Hooks{}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/fail" {
+			fmt.Fprint(w, "ok")
+			return
+		}
+		conn, _, err := http.NewResponseController(w).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn.Close()
+	}))
+	if w := request(r, "GET", "/", "", ""); w.Code != http.StatusOK || logs.Len() != 0 {
+		t.Fatalf("healthy upstream: status = %d, logs = %q", w.Code, logs.String())
+	}
+	target := &snapshot.Targets[0]
+	address := "http://" + net.JoinHostPort(target.Deployment.IP, strconv.Itoa(target.Port))
+	for _, tc := range []struct {
+		routeProject, deploymentProject, deployment, wantProject string
+	}{
+		{"project", "deployment-project", "deployment", "project"},
+		{"", "deployment-project", "deployment", "deployment-project"},
+		{},
+	} {
+		target.Route.ProjectID, target.Deployment.ProjectID, target.Deployment.ID = tc.routeProject, tc.deploymentProject, tc.deployment
+		r.Update(snapshot)
+		logs.Reset()
+		w := request(r, "GET", "/fail", "", "")
+		if w.Code != http.StatusBadGateway || w.Body.String() != "Startship: upstream unavailable.\n" {
+			t.Fatalf("upstream failure: status = %d, body = %q", w.Code, w.Body.String())
+		}
+		want := fmt.Sprintf("proxy: upstream unavailable: host=%q target=%q project=%q deployment=%q: %q\n", "app.test", address, tc.wantProject, tc.deployment, "EOF")
+		if got := logs.String(); strings.Count(got, "\n") != 1 || !strings.HasSuffix(got, want) {
+			t.Fatalf("log = %q, want one line ending with %q", got, want)
+		}
+	}
+}
+
 func TestFirewallBlockAndBodyRestoration(t *testing.T) {
 	var events []firewall.Event
 	var observed []firewall.Decision

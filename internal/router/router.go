@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -211,6 +212,11 @@ func (a *Router) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			blocked(w, 413, 0)
 			return
 		}
+		projectID := target.Route.ProjectID
+		if projectID == "" {
+			projectID = d.ProjectID
+		}
+		log.Printf("proxy: upstream unavailable: host=%q target=%q project=%q deployment=%q: %q", r.Host, upstream.String(), projectID, d.ID, err)
 		http.Error(w, "Startship: upstream unavailable.", 502)
 	}
 	proxy.ServeHTTP(w, r)
