@@ -1,0 +1,54 @@
+{
+  "id": "teamspeak",
+  "name": "TeamSpeak",
+  "icon": "headphones",
+  "description": "TeamSpeak 3 voice chat server.",
+  "version": "3.13",
+  "containers": [
+    {
+      "id": "teamspeak",
+      "image": "teamspeak:3.13",
+      "env": {
+        "TS3SERVER_LICENSE": "${license}"
+      },
+      "mounts": {
+        "data": "/var/ts3server"
+      }
+    }
+  ],
+  "volumes": [
+    "data"
+  ],
+  "ports": [
+    {
+      "id": "voice",
+      "container": "teamspeak",
+      "protocol": "udp",
+      "port": 9987,
+      "host_port": 9987
+    },
+    {
+      "id": "files",
+      "container": "teamspeak",
+      "protocol": "tcp",
+      "port": 30033,
+      "host_port": 30033
+    }
+  ],
+  "config_schema": {
+    "type": "object",
+    "required": [
+      "license"
+    ],
+    "properties": {
+      "license": {
+        "type": "string",
+        "title": "Accept the TeamSpeak license",
+        "description": "Use the applicable TeamSpeak server license terms.",
+        "enum": [
+          "accept"
+        ]
+      }
+    }
+  }
+}

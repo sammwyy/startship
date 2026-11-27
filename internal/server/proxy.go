@@ -165,6 +165,10 @@ func (a *Server) refreshLocked() error {
 			}
 		}
 	}
+	for _, t := range a.recipeAppTargets() {
+		targets = append(targets, t)
+		routeWorkspace[t.Route.ID] = t.Route.WorkspaceID
+	}
 	sort.Slice(targets, func(i, j int) bool { return targets[i].Route.ID < targets[j].Route.ID })
 	policies := map[string]*firewall.Engine{}
 	for _, ws := range routeWorkspace {
@@ -219,7 +223,7 @@ func (a *Server) certAllowed(host string) bool {
 	if a.dashboardDomain != "" && host == routing.NormalizeHost(a.dashboardDomain) {
 		return true
 	}
-	for _, r := range a.store.List("routes", "") {
+	for _, r := range a.publicRouteRecords() {
 		if routing.NormalizeHost(r.Host) == host {
 			return true
 		}

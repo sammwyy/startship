@@ -303,5 +303,12 @@ func (a *Server) checkRouterPortConflicts(settings config.Daemon) error {
 			return fmt.Errorf("router port %d is used by a service external_port", service.ExternalPort)
 		}
 	}
+	for _, app := range listResources[recipeApp](a, "recipe_apps", "") {
+		for _, port := range app.Ports {
+			if routerPorts[port] {
+				return fmt.Errorf("router port %d is used by an app", port)
+			}
+		}
+	}
 	return nil
 }

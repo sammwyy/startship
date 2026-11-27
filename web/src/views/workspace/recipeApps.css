@@ -1,0 +1,119 @@
+.recipe-page .recipe-back,
+.recipe-runtime > div:first-child,
+.recipe-actions,
+.recipe-section h2,
+.recipe-check {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+.recipe-page .recipe-back {
+  width: fit-content;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+.recipe-list {
+  overflow: hidden;
+}
+.recipe-list-head,
+.recipe-list-row {
+  display: grid;
+  grid-template-columns: minmax(11rem, 2fr) minmax(5.5rem, 1fr) 1fr 1fr;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.8rem 1.15rem;
+}
+.recipe-list-head {
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+.recipe-list-row {
+  border-top: 1px solid var(--line);
+  color: inherit;
+}
+.recipe-list-row:hover {
+  background: var(--raised);
+}
+.recipe-list-row .badge {
+  justify-self: start;
+}
+.recipe-list-row small,
+.recipe-row code {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.recipe-runtime,
+.recipe-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.recipe-runtime {
+  flex-wrap: wrap;
+  padding: 0.85rem 1.15rem;
+  margin-bottom: 1rem;
+}
+.recipe-actions {
+  flex-wrap: wrap;
+}
+.recipe-detail-grid,
+.recipe-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.recipe-section {
+  padding: 1rem 1.15rem;
+  min-width: 0;
+}
+.recipe-section h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+.recipe-row {
+  min-height: 2.75rem;
+  border-top: 1px solid var(--line);
+  padding: 0.55rem 0;
+}
+.recipe-editor .form-fields {
+  display: grid;
+  gap: 1rem;
+}
+.recipe-editor .recipe-actions {
+  justify-content: flex-end;
+}
+.recipe-field p,
+.recipe-fields > p,
+.recipe-actions > p {
+  margin: 0.35rem 0 0;
+}
+.recipe-fields > p {
+  grid-column: 1 / -1;
+}
+.recipe-check input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+.recipe-install-form {
+  overflow: auto;
+}
+.recipe-install-form .service-config-body {
+  overflow: visible;
+}
+@media (max-width: 620px) {
+  .recipe-detail-grid,
+  .recipe-fields {
+    grid-template-columns: 1fr;
+  }
+  .recipe-list-head,
+  .recipe-list-row {
+    grid-template-columns: minmax(8rem, 1fr) auto;
+  }
+  .recipe-list-head > :nth-child(n + 3),
+  .recipe-list-row > :nth-child(n + 3) {
+    display: none;
+  }
+}

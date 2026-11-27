@@ -45,16 +45,22 @@ func (a *Server) validateService(s Service) error {
 		}
 	}
 	if s.ExternalPort != 0 {
-		if a.serviceReservedPorts[s.ExternalPort] {
+		if a.daemonPortReserved(s.ExternalPort) {
 			return fmt.Errorf("daemon port is reserved")
 		}
-		if a.serviceReservedPorts == nil {
-			if listenPorts([]string{":8080", ":80", ":443", os.Getenv("STARTSHIP_DASHBOARD_ADDR"), os.Getenv("STARTSHIP_HTTP_ADDR"), os.Getenv("STARTSHIP_HTTPS_ADDR")})[s.ExternalPort] {
-				return fmt.Errorf("daemon port is reserved")
+		for _, app := range listResources[recipeApp](a, "recipe_apps", "") {
+			if recipePortUsed(app, s.ExternalPort, "tcp") {
+				return fmt.Errorf("port already used by an app")
 			}
 		}
 	}
 	return nil
+}
+func (a *Server) daemonPortReserved(n int) bool {
+	if a.serviceReservedPorts != nil {
+		return a.serviceReservedPorts[n]
+	}
+	return listenPorts([]string{":8080", ":80", ":443", os.Getenv("STARTSHIP_DASHBOARD_ADDR"), os.Getenv("STARTSHIP_HTTP_ADDR"), os.Getenv("STARTSHIP_HTTPS_ADDR")})[n]
 }
 func (a *Server) resourceProject(x *access, ws, id, mount string) bool {
 	if id == "" {

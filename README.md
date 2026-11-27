@@ -26,6 +26,7 @@ Startship is a self-hosted deployment platform for web apps, APIs, and static si
 | **Route traffic with HTTPS** | Route by hostname and path. Issue Let's Encrypt certificates or upload your own, and optionally redirect HTTP to HTTPS. |
 | **Run services alongside your apps** | Choose from 13 service engines, including PostgreSQL, Redis, and S3-compatible SeaweedFS. Attach them through project Connections so applications can use their connection settings. |
 | **Keep application data** | Mount persistent Volumes and schedule service backups. Download backups or restore a service from the dashboard or CLI. |
+| **Install self-hosted apps** | Run Jellyfin, Gitea, Minecraft, TeamSpeak or your own recipes. Each install has its own Docker network, persistent volumes and app configuration. |
 | **See what's running** | Use the workspace Map to see how projects, services, and volumes connect. Follow deployment activity, build and runtime logs, and routed traffic in the live dashboard. |
 | **Control traffic and access** | Use workspace Firewall and WAF rules to monitor or block HTTP traffic. Native Linux deployments can opt in to the platform network firewall. Scope roles and permissions to teams and projects, and review changes in the audit log. |
 | **Operate Startship** | Use the CLI locally or over HTTPS. Install the daemon as a system service or run it with Docker Compose. The systemd installer enables self-updates from the dashboard or CLI. |
@@ -41,6 +42,30 @@ sudo journalctl -u startshipd
 ```
 
 Find the temporary administrator credentials in the logs. Open `http://localhost:8080` on the host or through a private tunnel, sign in, and change the temporary password. Keep the dashboard port off the public internet. The [installation guide](INSTALL.md) covers Docker Compose, source builds, and private remote access.
+
+## Self-hosted apps
+
+Open **Apps** in a workspace and select **Install app** to choose a recipe. App
+management requires the workspace **Manage apps** permission. Each app's
+containers can communicate by service name on their own bridge and are not
+attached to projects, managed services or other apps' private networks. Apps
+can still reach public endpoints, including ports deliberately published to
+the host.
+
+Connect a workspace domain to an app's HTTP endpoint. Non-HTTP endpoints such
+as Minecraft and TeamSpeak use host ports instead; set a host port to `0` to
+leave it unpublished. **Configure** edits install settings and any files
+declared by the recipe. Updating re-pulls the recipe's images without replacing
+volumes. Deleting keeps the Docker volumes unless **Purge** is selected.
+
+```sh
+startship apps recipes list
+startship apps install WORKSPACE gitea git --config '{"root_url":"https://git.example.com/"}'
+startship apps domains add WORKSPACE git web git.example.com
+startship apps ls WORKSPACE
+```
+
+See [the recipe format and remote registry setup](docs/recipes.md).
 
 ## Documentation
 

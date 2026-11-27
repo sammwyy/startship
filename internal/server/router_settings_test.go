@@ -158,6 +158,10 @@ func TestSystemRouterSettings(t *testing.T) {
 	if os.Getenv("STARTSHIP_HTTP_ADDR") != newHTTP || !a.serviceReservedPorts[port] {
 		t.Fatal("new port not exported and reserved")
 	}
+	app := recipeApp{ID: "router-app", Name: "game", Recipe: builtinRecipes["minecraft"], Ports: map[string]int{"game": port}}
+	if err := a.validateRecipePorts(app); err == nil {
+		t.Fatal("app allowed to use the active router port")
+	}
 	call(true, "PUT", put(false, newHTTP, "127.0.0.1:0"), 200)
 	checkProxy("http://"+newHTTP, false)
 	checkProxy(httpsURL, false)
@@ -168,6 +172,21 @@ func TestSystemRouterSettings(t *testing.T) {
 	saved := config.Defaults()
 	if err != nil || config.Parse(b, &saved) != nil || !saved.RouterDisabled || saved.HTTPListen[0] != newHTTP {
 		t.Fatal(string(b), err)
+	}
+	if err := a.validateRecipePorts(app); err != nil {
+		t.Fatal("app cannot use the disabled router port:", err)
+	}
+	if err := a.saveRecipeApp(app); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.validateService(Service{Name: "app-port-test", ExternalPort: port}); err == nil || !strings.Contains(err.Error(), "port already used by an app") {
+		t.Fatal("expected service to reject app port:", err)
+	}
+	if msg := call(true, "PUT", put(true, newHTTP, "127.0.0.1:0"), 409); !strings.Contains(msg, "is used by an app") {
+		t.Fatal(msg)
+	}
+	if _, err := a.store.DB.Exec("DELETE FROM recipe_apps WHERE id=?", app.ID); err != nil {
+		t.Fatal(err)
 	}
 	call(true, "PUT", put(true, newHTTP, "127.0.0.1:0"), 200)
 	checkProxy("http://"+newHTTP, true)
