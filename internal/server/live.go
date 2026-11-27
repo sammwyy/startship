@@ -172,6 +172,11 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 			return x, Record{}, "forbidden"
 		}
 		return x, Record{}, ""
+	case "system_migrations":
+		if !x.admin {
+			return x, Record{}, "forbidden"
+		}
+		return x, Record{}, ""
 	case "system_router", "system_update", "account_activity", "account_sessions", "account_tokens", "workspaces", "recipes_catalog", "services_catalog":
 		return x, Record{}, ""
 	default:
@@ -214,6 +219,8 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return map[string]any{"entries": entries, "metadata": meta}, nil, r, ""
 	case "system_router":
 		return a.routerConfig(), nil, r, ""
+	case "system_migrations":
+		return map[string]any{"jobs": a.listMigrationJobs()}, nil, r, ""
 	case "workspaces":
 		out := []apiRecord{}
 		for _, v := range a.store.List("workspaces", "") {
@@ -568,7 +575,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				periodic = periodic || s.Topic == "firewall" && s.firewallDirty && !now.Before(s.next)
 				key := s.activityKey(uid)
 				switch s.Topic {
-				case "system_router", "recipes_catalog", "services_catalog":
+				case "system_router", "system_migrations", "recipes_catalog", "services_catalog":
 					key = s.Topic
 				case "uptime":
 					key = "uptime:" + s.ProjectID

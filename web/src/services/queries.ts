@@ -13,6 +13,8 @@ import type {
   Workspace,
   UpdateInfo,
   RouterConfig,
+  MigrationDetectedPlatform,
+  MigrationJob,
   SystemVersion,
   PipelineTemplate,
   ServiceEngine,
@@ -44,6 +46,16 @@ export const queries = {
     retry: false,
   }),
   router: () => resource<RouterConfig>("system/router"),
+  migrationDetect: () => ({
+    ...resource<{ platforms: MigrationDetectedPlatform[] }>(
+      "system/migrations/detect",
+    ),
+    retry: false,
+  }),
+  migrationJobs: () => ({
+    ...resource<{ jobs: MigrationJob[] }>("system/migrations/jobs"),
+    retry: false,
+  }),
   version: () => ({
     ...resource<SystemVersion>("system/version"),
     retry: false,

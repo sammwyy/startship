@@ -10,6 +10,7 @@ import type {
   Release,
   SystemVersion,
   RouterConfig,
+  MigrationJob,
   UpdateInfo,
   Service,
   Workspace,
@@ -39,6 +40,7 @@ export type LiveSubscription =
   | { topic: "project_activity"; project_id: string }
   | { topic: "system_update" }
   | { topic: "system_router" }
+  | { topic: "system_migrations" }
   | { topic: "workspaces" };
 export interface LiveMessage {
   type: "snapshot" | "upsert" | "delete" | "log" | "error";
@@ -371,6 +373,13 @@ export function applyLiveMessage(
     const queryKey = queries.router().queryKey;
     void client.cancelQueries({ queryKey, exact: true });
     client.setQueryData<RouterConfig>(queryKey, event.data as RouterConfig);
+  } else if (spec.topic === "system_migrations" && event.type === "snapshot") {
+    const queryKey = queries.migrationJobs().queryKey;
+    void client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData<{ jobs: MigrationJob[] }>(
+      queryKey,
+      event.data as { jobs: MigrationJob[] },
+    );
   } else if (spec.topic === "system_update" && event.type === "snapshot") {
     void client.cancelQueries({
       queryKey: queries.updates().queryKey,

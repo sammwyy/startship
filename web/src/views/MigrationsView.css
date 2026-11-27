@@ -1,0 +1,153 @@
+.migrations-stack {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.migration-platforms {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.migration-platform-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.9rem 1rem;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.migration-platform-card:hover {
+  border-color: var(--border-strong, var(--accent));
+}
+
+.migration-platform-card.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.migration-platform-card.not-found {
+  opacity: 0.72;
+}
+
+.migration-platform-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.migration-platform-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.migration-controls {
+  display: grid;
+  gap: 1rem;
+}
+
+.migration-mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.migration-target-row {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+
+.migration-options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.migration-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.migration-items-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.migration-item-row {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr) minmax(180px, 240px);
+  align-items: center;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--surface-alt, var(--surface));
+}
+
+.migration-item-row.no-check {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
+}
+
+.migration-item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+}
+
+.migration-item-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  font-weight: 500;
+}
+
+.migration-job-card {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+}
+
+.migration-job-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.migration-job-logs {
+  font-family: var(--mono, monospace);
+  font-size: 0.78rem;
+  background: var(--code-bg, rgba(0, 0, 0, 0.2));
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 720px) {
+  .migration-item-row,
+  .migration-item-row.no-check {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

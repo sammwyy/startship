@@ -387,6 +387,9 @@ const usage = `startship [--json] COMMAND
   router [show]                  show active router settings and startup overrides
   router set [--http ADDR[,ADDR]] [--https ADDR[,ADDR]]
   router disable | router enable  apply and save changes without a restart (Platform Admin)
+  migrate detect [--platform P]  detect Openship, Dokploy, and Coolify installations (Platform Admin)
+  migrate import PLATFORM (--all | --project ID[:NAME]...) (--workspace WS | --create-workspace NAME) [options]
+  migrate jobs [JOB_ID]          list or inspect competitor migration jobs (Platform Admin)
   status-page show WORKSPACE
   status-page set WORKSPACE [--slug SLUG] [--title TITLE] [--projects ID,NAME,...] [--enable|--disable]
   update check                   CLI, daemon and latest release versions
@@ -442,6 +445,9 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "router" {
 		return c.runRouter(a)
+	}
+	if cmd == "migrate" {
+		return c.runMigrate(a)
 	}
 	if cmd == "catalog" {
 		return c.runCatalog(a)

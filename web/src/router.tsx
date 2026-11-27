@@ -76,6 +76,13 @@ export const router = createHashRouter([
                 }),
               },
               {
+                path: "migrations",
+                lazy: async () => ({
+                  Component: (await import("./views/MigrationsView"))
+                    .MigrationsView,
+                }),
+              },
+              {
                 index: true,
                 lazy: async () => ({
                   Component: (await import("./views/NodeSettingsView"))
