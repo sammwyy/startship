@@ -8,11 +8,11 @@ export function Heading({
   actions,
   project,
 }: {
-  title: string;
+  title: ReactNode;
   kicker?: string;
-  subtitle?: string;
+  subtitle?: ReactNode;
   actions?: ReactNode;
-  project?: string;
+  project?: ReactNode;
 }) {
   const { openNavigation } = useUI();
   return (

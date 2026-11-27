@@ -47,6 +47,44 @@
 .skeleton-row + .skeleton-row {
   border-top: 1px solid var(--line);
 }
+.project-skeleton-line {
+  display: flex;
+  align-items: center;
+  min-height: 1lh;
+}
+.project-skeleton-tabs {
+  align-items: center;
+  min-height: 45px;
+}
+.project-skeleton-form,
+.project-skeleton-field {
+  display: grid;
+  gap: 14px;
+}
+.log.project-skeleton-field {
+  align-content: start;
+}
+.project-skeleton-form .split {
+  margin-block: 10px 4px;
+}
+.project-skeleton-option,
+.sidebar-nav .sidebar-source-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-nav .sidebar-source-placeholder {
+  min-height: 20px;
+  color: var(--muted);
+}
+@media (min-width: 761px) {
+  .sidebar-collapsed .sidebar-source-placeholder {
+    justify-content: center;
+  }
+  .sidebar-collapsed .sidebar-source-placeholder .skeleton {
+    display: none;
+  }
+}
 @keyframes skeleton-pulse {
   to {
     opacity: 0.54;

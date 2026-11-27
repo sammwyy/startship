@@ -858,6 +858,9 @@
 .sidebar-layout .content-compact {
   max-width: 960px;
 }
+.sidebar-layout .project-main {
+  scrollbar-gutter: stable;
+}
 .sidebar-layout .heading {
   margin-bottom: 28px;
 }
@@ -1272,6 +1275,7 @@
   line-height: 1.8;
 }
 .logs-toolbar {
+  --logs-control-height: 38px;
   display: flex;
   justify-content: flex-end;
   padding-bottom: 16px;
@@ -1279,6 +1283,9 @@
 .logs-toolbar .runtime-selector {
   flex-wrap: wrap;
   font-size: 11px;
+}
+.logs-toolbar .runtime-selector select {
+  min-height: var(--logs-control-height);
 }
 .sidebar-layout .main:has(.logs-view) {
   overflow: hidden;

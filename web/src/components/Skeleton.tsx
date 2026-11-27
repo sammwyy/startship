@@ -14,7 +14,7 @@ export function Skeleton({
 }
 
 export type LoadingLayout =
-  "rows" | "table" | "cards" | "stats" | "workspace" | "project" | "page";
+  "rows" | "table" | "cards" | "stats" | "workspace" | "page";
 
 const slots = [0, 1, 2];
 
@@ -104,14 +104,6 @@ export function Loading({
           <Page>
             <Stats />
             <Cards />
-          </Page>
-        )}
-        {layout === "project" && (
-          <Page>
-            <div className="project-overview">
-              <Rows table />
-              <Rows table />
-            </div>
           </Page>
         )}
         {layout === "page" && (
