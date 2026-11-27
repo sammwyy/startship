@@ -283,6 +283,10 @@ func (d *Daemon) ExportRouter() error {
 	return d.export("http_listen", "https_listen", "router_disabled")
 }
 
+func (d *Daemon) ExportDashboard() error {
+	return d.export("dashboard_listen")
+}
+
 func (d *Daemon) export(keys ...string) error {
 	included := func(key string) bool {
 		for _, k := range keys {

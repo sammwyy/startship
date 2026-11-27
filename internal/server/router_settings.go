@@ -63,11 +63,38 @@ func (b *boundServer) drain() {
 }
 
 type routerListeners struct {
-	mu          sync.Mutex
-	settings    config.Daemon
-	httpHandler http.Handler
-	active      map[listenerKey]*boundServer
-	stopped     bool
+	mu               sync.Mutex
+	settings         config.Daemon
+	dashboardHandler http.Handler
+	httpHandler      http.Handler
+	active           map[listenerKey]*boundServer
+	stopped          bool
+}
+
+// prepareDashboardListeners retains unchanged dashboard endpoints and binds all others before any old listener is closed.
+func (a *Server) prepareDashboardListeners(settings config.Daemon) (map[listenerKey]*boundServer, []*boundServer, error) {
+	next := map[listenerKey]*boundServer{}
+	addresses, err := config.Resolve(settings.DashboardListen)
+	if err != nil {
+		return nil, nil, err
+	}
+	var opened []*boundServer
+	for _, addr := range addresses {
+		key := listenerKey{0, addr}
+		if old := a.routerListeners.active[key]; old != nil {
+			next[key] = old
+			continue
+		}
+		srv := &http.Server{Addr: addr, Handler: a.routerListeners.dashboardHandler, ReadHeaderTimeout: 10 * time.Second}
+		b, err := bindServer(srv, 0)
+		if err != nil {
+			closeBoundServers(opened)
+			return nil, nil, err
+		}
+		next[key] = b
+		opened = append(opened, b)
+	}
+	return next, opened, nil
 }
 
 // prepareRouterListeners retains unchanged endpoints and binds all others before any old listener is closed.
@@ -131,7 +158,16 @@ func (a *Server) setRouterPorts(settings config.Daemon) {
 func (a *Server) commitRouterListeners(settings config.Daemon, next map[listenerKey]*boundServer) {
 	rt := &a.routerListeners
 	old := rt.active
-	rt.settings, rt.active = settings, next
+	merged := map[listenerKey]*boundServer{}
+	for key, b := range old {
+		if key.group == 0 {
+			merged[key] = b
+		}
+	}
+	for key, b := range next {
+		merged[key] = b
+	}
+	rt.settings, rt.active = settings, merged
 	a.setRouterPorts(settings)
 	for key, b := range next {
 		if old[key] != b {
@@ -139,11 +175,39 @@ func (a *Server) commitRouterListeners(settings config.Daemon, next map[listener
 		}
 	}
 	for key, b := range old {
-		if next[key] != b {
+		if key.group != 0 && merged[key] != b {
 			b.listener.Close()
 			go b.drain()
 		}
 	}
+}
+
+func (a *Server) commitDashboardListeners(settings config.Daemon, next map[listenerKey]*boundServer) []*boundServer {
+	rt := &a.routerListeners
+	old := rt.active
+	merged := map[listenerKey]*boundServer{}
+	for key, b := range old {
+		if key.group != 0 {
+			merged[key] = b
+		}
+	}
+	for key, b := range next {
+		merged[key] = b
+	}
+	rt.settings, rt.active = settings, merged
+	a.setRouterPorts(settings)
+	for key, b := range next {
+		if old[key] != b {
+			b.start()
+		}
+	}
+	var removed []*boundServer
+	for key, b := range old {
+		if key.group == 0 && merged[key] != b {
+			removed = append(removed, b)
+		}
+	}
+	return removed
 }
 
 func (a *Server) stopRouterListeners() {
@@ -311,4 +375,160 @@ func (a *Server) checkRouterPortConflicts(settings config.Daemon) error {
 		}
 	}
 	return nil
+}
+
+type dashboardConfig struct {
+	DashboardListen []string `json:"dashboard_listen"`
+	ConfigPath      string   `json:"config_path"`
+	Overridden      []string `json:"overridden"`
+}
+
+func (a *Server) dashboardConfig() dashboardConfig {
+	rt := &a.routerListeners
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	return dashboardConfigFrom(rt.settings)
+}
+
+func dashboardConfigFrom(settings config.Daemon) dashboardConfig {
+	overridden := []string{}
+	if settings.Overridden["dashboard_listen"] {
+		overridden = append(overridden, "dashboard_listen")
+	}
+	return dashboardConfig{
+		DashboardListen: append([]string{}, settings.DashboardListen...),
+		ConfigPath:      settings.ConfigPath,
+		Overridden:      overridden,
+	}
+}
+
+func (a *Server) dashboardSettingsAPI(w http.ResponseWriter, r *http.Request, uid string, x *access) {
+	switch r.Method {
+	case http.MethodGet:
+		reply(w, http.StatusOK, a.dashboardConfig())
+	case http.MethodPut:
+		if !x.admin {
+			fail(w, http.StatusForbidden, "only Platform Admins can configure the dashboard")
+			return
+		}
+		var input struct {
+			DashboardListen []string `json:"dashboard_listen"`
+		}
+		if err := decode(w, r, &input); err != nil || input.DashboardListen == nil {
+			fail(w, http.StatusBadRequest, "dashboard_listen is required")
+			return
+		}
+		a.updateDashboardSettings(w, r, uid, input.DashboardListen)
+	default:
+		w.Header().Set("Allow", "GET, PUT")
+		fail(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (a *Server) updateDashboardSettings(w http.ResponseWriter, r *http.Request, uid string, dashboardListen []string) {
+	rt := &a.routerListeners
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.stopped {
+		fail(w, http.StatusServiceUnavailable, "daemon is shutting down")
+		return
+	}
+	current := rt.settings
+	next := current
+	next.DashboardListen = dashboardListen
+	next.HTTPListen = slices.Clone(current.HTTPListen)
+	next.HTTPSListen = slices.Clone(current.HTTPSListen)
+	next.TrustedProxies = slices.Clone(current.TrustedProxies)
+	if err := next.Validate(); err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if slices.Equal(next.DashboardListen, current.DashboardListen) {
+		reply(w, http.StatusOK, dashboardConfigFrom(current))
+		return
+	}
+	if current.Overridden["dashboard_listen"] {
+		fail(w, http.StatusConflict, fmt.Sprintf("dashboard_listen is overridden by %s or --dashboard-listen; change the daemon startup configuration", config.EnvironmentKey("dashboard_listen")))
+		return
+	}
+	a.resourcesMu.Lock()
+	defer a.resourcesMu.Unlock()
+	if err := a.checkDashboardPortConflicts(next); err != nil {
+		fail(w, http.StatusConflict, err.Error())
+		return
+	}
+	listeners, opened, err := a.prepareDashboardListeners(next)
+	if err != nil {
+		fail(w, http.StatusConflict, err.Error())
+		return
+	}
+	changes := map[string][]string{"dashboard_listen": next.DashboardListen}
+	if err := config.EditSettings(current.ConfigPath, changes); err != nil {
+		closeBoundServers(opened)
+		log.Printf("apply dashboard configuration: %v", err)
+		fail(w, http.StatusInternalServerError, fmt.Errorf("cannot save dashboard configuration: %w", err).Error())
+		return
+	}
+	if err := next.ExportDashboard(); err != nil {
+		log.Printf("export dashboard configuration: %v", err)
+	}
+	removed := a.commitDashboardListeners(next, listeners)
+	a.audit(r.Context(), uid, "system.dashboard", "dashboard", scopePlatform, "", map[string]string{
+		"dashboard_listen": strings.Join(next.DashboardListen, ","),
+	})
+	a.live.publish(liveEvent{id: "system_dashboard", changeKey: "system_dashboard"})
+	reply(w, http.StatusOK, dashboardConfigFrom(next))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	for _, b := range removed {
+		b.listener.Close()
+		go b.drain()
+	}
+}
+
+func (a *Server) checkDashboardPortConflicts(settings config.Daemon) error {
+	dashboardPorts := listenPorts(settings.DashboardListen)
+	if !settings.RouterDisabled {
+		routerPorts := listenPorts(settings.HTTPListen, settings.HTTPSListen)
+		for port := range dashboardPorts {
+			if routerPorts[port] {
+				return fmt.Errorf("dashboard port %d is reserved by the public router", port)
+			}
+		}
+	}
+	for _, service := range listResources[Service](a, "services", "") {
+		if dashboardPorts[service.ExternalPort] {
+			return fmt.Errorf("dashboard port %d is used by a service external_port", service.ExternalPort)
+		}
+	}
+	for _, app := range listResources[recipeApp](a, "recipe_apps", "") {
+		for _, port := range app.Ports {
+			if dashboardPorts[port] {
+				return fmt.Errorf("dashboard port %d is used by an app", port)
+			}
+		}
+	}
+	return nil
+}
+
+func (a *Server) hostInterfaces() ([]config.NetworkInterface, error) {
+	if a.listInterfaces != nil {
+		return a.listInterfaces()
+	}
+	return config.NetworkInterfaces()
+}
+
+func (a *Server) interfacesAPI(w http.ResponseWriter, r *http.Request, _ string, _ *access) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", "GET")
+		fail(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	ifaces, err := a.hostInterfaces()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, fmt.Sprintf("cannot list network interfaces: %v", err))
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"interfaces": ifaces})
 }

@@ -122,6 +122,10 @@ func (a *Server) systemAPI(w http.ResponseWriter, r *http.Request, p []string, u
 		return false
 	}
 	switch p[2] {
+	case "dashboard":
+		a.dashboardSettingsAPI(w, r, uid, x)
+	case "interfaces":
+		a.interfacesAPI(w, r, uid, x)
 	case "router":
 		a.routerSettingsAPI(w, r, uid, x)
 	case "version":

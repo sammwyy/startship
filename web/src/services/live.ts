@@ -9,6 +9,7 @@ import type {
   Preview,
   Release,
   SystemVersion,
+  DashboardConfig,
   RouterConfig,
   MigrationJob,
   UpdateInfo,
@@ -39,6 +40,7 @@ export type LiveSubscription =
   | { topic: "workspace_activity"; workspace_id: string }
   | { topic: "project_activity"; project_id: string }
   | { topic: "system_update" }
+  | { topic: "system_dashboard" }
   | { topic: "system_router" }
   | { topic: "system_migrations" }
   | { topic: "workspaces" };
@@ -369,6 +371,13 @@ export function applyLiveMessage(
       exact: true,
     });
     client.setQueryData(["traffic", spec.project_id, spec.window], event.data);
+  } else if (spec.topic === "system_dashboard" && event.type === "snapshot") {
+    const queryKey = queries.dashboard().queryKey;
+    void client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData<DashboardConfig>(
+      queryKey,
+      event.data as DashboardConfig,
+    );
   } else if (spec.topic === "system_router" && event.type === "snapshot") {
     const queryKey = queries.router().queryKey;
     void client.cancelQueries({ queryKey, exact: true });

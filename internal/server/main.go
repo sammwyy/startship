@@ -104,42 +104,31 @@ func Run(settings config.Daemon) {
 	go a.scheduleBackups(metricsContext)
 	go a.watchIdle(metricsContext)
 	go a.watchUptime(metricsContext)
-	var servers []*http.Server
-	var groups []int
-	addresses, err := config.Resolve(settings.DashboardListen)
-	if err != nil {
-		log.Fatal(err)
-	}
-	handler := a.api()
-	for _, addr := range addresses {
-		servers = append(servers, &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second})
-		groups = append(groups, 0)
-	}
-	next, _, e := a.prepareRouterListeners(settings)
+	a.routerListeners.dashboardHandler = a.api()
+	nextRouter, _, e := a.prepareRouterListeners(settings)
 	if e != nil {
 		log.Fatal(e)
 	}
-	a.commitRouterListeners(settings, next)
+	a.commitRouterListeners(settings, nextRouter)
 	if settings.RouterDisabled {
 		log.Print("Startship public router is disabled")
 	}
-	if e := serve(servers, groups...); e != nil {
+	nextDashboard, _, e := a.prepareDashboardListeners(settings)
+	if e != nil {
 		log.Fatal(e)
 	}
+	a.commitDashboardListeners(settings, nextDashboard)
 	socket, e := a.serveSocket(socketPath(data))
 	if e != nil {
 		log.Fatal(e)
 	}
-	servers = append(servers, socket)
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	<-c
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	a.stopRouterListeners()
-	for _, srv := range servers {
-		srv.Shutdown(ctx)
-	}
+	socket.Shutdown(ctx)
 }
 
 func (a *Server) configureRouterProxy(settings config.Daemon) http.Handler {

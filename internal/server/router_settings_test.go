@@ -193,3 +193,126 @@ func TestSystemRouterSettings(t *testing.T) {
 	reboundHTTPS := a.routerListeners.active[listenerKey{2, "127.0.0.1:0"}].listener.Addr().String()
 	checkProxy("https://"+reboundHTTPS, true)
 }
+
+func TestSystemDashboardAndInterfaces(t *testing.T) {
+	t.Setenv("STARTSHIP_DASHBOARD_ADDR", "")
+	a := testServer(t)
+	if _, err := a.createUserPending("admin", "password123", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.createUser("bob", "password123"); err != nil {
+		t.Fatal(err)
+	}
+	settings := config.Defaults()
+	settings.ConfigPath = filepath.Join(t.TempDir(), "startship.toml")
+	settings.DashboardListen = []string{"127.0.0.1:0"}
+	settings.HTTPListen = []string{"127.0.0.1:18081"}
+	settings.HTTPSListen = []string{"127.0.0.1:18443"}
+	settings.RouterDisabled = false
+	settings.Overridden = map[string]bool{}
+	a.routerListeners.dashboardHandler = a.api()
+	a.listInterfaces = func() ([]config.NetworkInterface, error) {
+		return []config.NetworkInterface{
+			{Name: "tailscale0", Addresses: []string{"100.64.0.5"}, Up: true},
+			{Name: "lo", Addresses: []string{"127.0.0.1", "::1"}, Up: true, Loopback: true},
+		}, nil
+	}
+	initial, _, err := a.prepareDashboardListeners(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.commitDashboardListeners(settings, initial)
+	t.Cleanup(a.stopRouterListeners)
+	oldAddr := initial[listenerKey{0, "127.0.0.1:0"}].listener.Addr().String()
+	h := a.api()
+	login := httptest.NewRecorder()
+	h.ServeHTTP(login, httptest.NewRequest("POST", "/api/login", strings.NewReader(`{"username":"bob","password":"password123"}`)))
+	if login.Code != 200 {
+		t.Fatal(login.Code, login.Body.String())
+	}
+	bob := login.Result().Cookies()[0]
+	call := func(local bool, method, path, body string, status int) string {
+		t.Helper()
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		if local {
+			r = r.WithContext(context.WithValue(r.Context(), socketContextKey{}, true))
+		} else {
+			r.AddCookie(bob)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		if w.Code != status {
+			t.Fatalf("%s %s %s: got %d want %d: %s", method, path, body, w.Code, status, w.Body.String())
+		}
+		return w.Body.String()
+	}
+	var ifacesResp struct {
+		Interfaces []config.NetworkInterface `json:"interfaces"`
+	}
+	if err := json.Unmarshal([]byte(call(false, "GET", "/api/system/interfaces", "", 200)), &ifacesResp); err != nil || len(ifacesResp.Interfaces) != 2 || ifacesResp.Interfaces[0].Name != "tailscale0" {
+		t.Fatal(ifacesResp, err)
+	}
+	var got dashboardConfig
+	if err := json.Unmarshal([]byte(call(false, "GET", "/api/system/dashboard", "", 200)), &got); err != nil || len(got.DashboardListen) != 1 || got.DashboardListen[0] != "127.0.0.1:0" || len(got.Overridden) != 0 {
+		t.Fatal(got, err)
+	}
+	call(false, "PUT", "/api/system/dashboard", `{"dashboard_listen":["127.0.0.1:0"]}`, 403)
+	call(true, "PUT", "/api/system/dashboard", `{}`, 400)
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":[]}`, 400)
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["bad"]}`, 400)
+	if msg := call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["127.0.0.1:18081"]}`, 409); !strings.Contains(msg, "public router") {
+		t.Fatal(msg)
+	}
+	if err := a.saveService(Service{ID: "dash-service", Name: "cache", ExternalPort: 16380}); err != nil {
+		t.Fatal(err)
+	}
+	if msg := call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["127.0.0.1:16380"]}`, 409); !strings.Contains(msg, "external_port") {
+		t.Fatal(msg)
+	}
+	occupied := routerTestListener(t)
+	if msg := call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["`+occupied.Addr().String()+`"]}`, 409); !strings.Contains(msg, "pick a free port") {
+		t.Fatal(msg)
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	checkDashboard := func(addr string, running bool) {
+		t.Helper()
+		client.CloseIdleConnections()
+		resp, err := client.Get("http://" + addr + "/api/system/version")
+		if resp != nil {
+			resp.Body.Close()
+		}
+		if running && err != nil || !running && err == nil {
+			t.Fatalf("dashboard %s, expected running=%t, got resp=%v err=%v", addr, running, resp, err)
+		}
+	}
+	checkDashboard(oldAddr, true)
+	candidate := routerTestListener(t)
+	newAddr := candidate.Addr().String()
+	candidate.Close()
+	if err := os.Mkdir(settings.ConfigPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["`+newAddr+`"]}`, 500)
+	checkDashboard(oldAddr, true)
+	checkDashboard(newAddr, false)
+	if err := os.Remove(settings.ConfigPath); err != nil {
+		t.Fatal(err)
+	}
+	call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":["`+newAddr+`"]}`, 200)
+	checkDashboard(oldAddr, false)
+	checkDashboard(newAddr, true)
+	if os.Getenv("STARTSHIP_DASHBOARD_ADDR") != newAddr {
+		t.Fatalf("STARTSHIP_DASHBOARD_ADDR=%q, want %q", os.Getenv("STARTSHIP_DASHBOARD_ADDR"), newAddr)
+	}
+	b, err := os.ReadFile(settings.ConfigPath)
+	saved := config.Defaults()
+	if err != nil || config.Parse(b, &saved) != nil || len(saved.DashboardListen) != 1 || saved.DashboardListen[0] != newAddr {
+		t.Fatal(string(b), err)
+	}
+	a.routerListeners.mu.Lock()
+	a.routerListeners.settings.Overridden["dashboard_listen"] = true
+	a.routerListeners.mu.Unlock()
+	if msg := call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":[":18099"]}`, 409); !strings.Contains(msg, "STARTSHIP_DASHBOARD_ADDR") {
+		t.Fatal(msg)
+	}
+}

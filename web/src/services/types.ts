@@ -278,6 +278,20 @@ export interface SystemVersion {
   commit: string;
   unavailable_engines?: Record<string, string>;
 }
+export interface NetworkInterface {
+  name: string;
+  addresses: string[];
+  up: boolean;
+  loopback: boolean;
+}
+export interface DashboardSettings {
+  dashboard_listen: string[];
+}
+export type DashboardOverride = "dashboard_listen";
+export interface DashboardConfig extends DashboardSettings {
+  config_path: string;
+  overridden: DashboardOverride[];
+}
 export interface RouterSettings {
   enabled: boolean;
   http_listen: string[];
