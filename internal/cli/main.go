@@ -327,6 +327,16 @@ const usage = `startship [--json] COMMAND
   routes list [PROJECT] | routes add PROJECT CONTAINER HOST [PATH] | routes rm ID
   routes update ID JSON          edit an existing route
   catalog                        service engines, versions and ports
+  apps recipes [list|show RECIPE]
+  apps ls WORKSPACE | apps show WORKSPACE APP
+  apps install WORKSPACE RECIPE NAME [--config JSON] [--ports JSON]
+  apps start|stop|restart|update WORKSPACE APP
+  apps delete WORKSPACE APP [--purge]
+  apps config get WORKSPACE APP [--file ID]
+  apps config set WORKSPACE APP [--config JSON] [--ports JSON] [--file ID --restart]
+  apps domains list WORKSPACE APP
+  apps domains add WORKSPACE APP ENDPOINT HOST [--certificate ID] [--force-https]
+  apps domains rm WORKSPACE APP HOST
   services [list] WORKSPACE
   services create WORKSPACE ENGINE NAME [--version V] [--set KEY=VALUE]... [--port N] [--volume ID]
   services show ID | services patch ID [--version V] [--set KEY=VALUE]... [--port N]
@@ -428,6 +438,9 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "services" {
 		return c.runServices(a)
+	}
+	if cmd == "apps" {
+		return c.runApps(a)
 	}
 	if cmd == "volumes" {
 		return c.runVolumes(a)

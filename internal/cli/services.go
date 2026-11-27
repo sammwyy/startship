@@ -20,7 +20,7 @@ func parseResourceArgs(args []string, allowed string) (accessArgs, error) {
 		if !strings.Contains(" "+allowed+" ", " "+key+" ") || key == "" {
 			return a, fmt.Errorf("unknown option --%s", key)
 		}
-		if key == "delete-volume" && !hasValue {
+		if (key == "delete-volume" || key == "purge" || key == "restart" || key == "force-https") && !hasValue {
 			value = "true"
 		} else if !hasValue {
 			i++

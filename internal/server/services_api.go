@@ -38,25 +38,36 @@ func (a *Server) validateService(s Service) error {
 		}
 	}
 	if s.ExternalPort != 0 {
-		if a.serviceReservedPorts[s.ExternalPort] {
+		if a.daemonPortReserved(s.ExternalPort) {
 			return fmt.Errorf("daemon port is reserved")
 		}
-		ports := []string{}
-		if a.serviceReservedPorts == nil {
-			ports = []string{"8080", "80", "443"}
-		}
-		for _, key := range []string{"STARTSHIP_DASHBOARD_ADDR", "STARTSHIP_HTTP_ADDR", "STARTSHIP_HTTPS_ADDR"} {
-			if v := os.Getenv(key); v != "" {
-				ports = append(ports, v[strings.LastIndex(v, ":")+1:])
-			}
-		}
-		for _, p := range ports {
-			if strconv.Itoa(s.ExternalPort) == p {
-				return fmt.Errorf("daemon port is reserved")
+		for _, app := range listResources[recipeApp](a, "recipe_apps", "") {
+			if recipePortUsed(app, s.ExternalPort, "tcp") {
+				return fmt.Errorf("port already used by an app")
 			}
 		}
 	}
 	return nil
+}
+func (a *Server) daemonPortReserved(n int) bool {
+	if a.serviceReservedPorts[n] {
+		return true
+	}
+	ports := []string{}
+	if a.serviceReservedPorts == nil {
+		ports = []string{"8080", "80", "443"}
+	}
+	for _, key := range []string{"STARTSHIP_DASHBOARD_ADDR", "STARTSHIP_HTTP_ADDR", "STARTSHIP_HTTPS_ADDR"} {
+		if v := os.Getenv(key); v != "" {
+			ports = append(ports, v[strings.LastIndex(v, ":")+1:])
+		}
+	}
+	for _, p := range ports {
+		if strconv.Itoa(n) == p {
+			return true
+		}
+	}
+	return false
 }
 func (a *Server) resourceProject(x *access, ws, id, mount string) bool {
 	if id == "" {
