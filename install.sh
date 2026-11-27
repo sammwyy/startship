@@ -177,7 +177,6 @@ elif [ ! -f "$env_file" ]; then
 fi
 if [ ! -f "$env_file" ]; then
     printf 'STARTSHIP_DATA=%s\n' "$data" > "$env_file"
-    if [ -z "$dashboard_listen" ]; then printf '%s\n' 'STARTSHIP_DASHBOARD_ADDR=:9000' >> "$env_file"; fi
     chmod 0600 "$env_file"
 fi
 if [ ! -f "$config" ]; then

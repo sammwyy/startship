@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { queries } from "../services/queries";
 import { ErrorMessage, Loading, ThemeButton } from "../components/ui";
 import { useLiveStatus } from "../providers/LiveProvider";
+import { DashboardListenPanel } from "./DashboardListenPanel";
 import { RouterPanel } from "./RouterPanel";
 
 export function NodeSettingsView() {
@@ -56,6 +57,7 @@ export function NodeSettingsView() {
           </dl>
         )}
       </section>
+      <DashboardListenPanel />
       <RouterPanel />
       <section className="panel panel-pad" aria-labelledby="appearance-title">
         <div className="section-head">

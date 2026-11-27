@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/sammwyy/startship/internal/catalog"
+	"github.com/sammwyy/startship/internal/config"
 	"github.com/sammwyy/startship/internal/detect"
 	"github.com/sammwyy/startship/internal/migrate"
 	"github.com/sammwyy/startship/internal/pipeline"
@@ -47,6 +48,7 @@ type Server struct {
 	router               *router.Router
 	routerOptions        router.Options
 	routerListeners      routerListeners
+	listInterfaces       func() ([]config.NetworkInterface, error)
 	firewall             firewallRuntime
 	network              networkRuntime
 	traffic              trafficMetrics

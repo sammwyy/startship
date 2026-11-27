@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ListenAddressPicker } from "../components/ListenAddressPicker";
 import { ErrorMessage, Loading } from "../components/ui";
 import { useLiveSubscription } from "../providers/LiveProvider";
 import { useSession } from "../providers/SessionProvider";
@@ -17,8 +18,8 @@ const overrides: Record<RouterOverride, [string, string]> = {
   https_listen: ["STARTSHIP_HTTPS_ADDR", "--https-listen"],
 };
 const listenFields = [
-  ["http_listen", "HTTP listen addresses"],
-  ["https_listen", "HTTPS listen addresses"],
+  ["http_listen", "HTTP listen addresses", "80"],
+  ["https_listen", "HTTPS listen addresses", "443"],
 ] as const;
 
 function OverrideNote({ field }: { field: RouterOverride }) {
@@ -45,6 +46,7 @@ export function RouterPanel() {
   const client = useQueryClient();
   const query = queries.router();
   const status = useQuery(query);
+  const interfacesQuery = useQuery(queries.interfaces());
   useLiveSubscription({ topic: "system_router" });
   const [draft, setDraft] = useState<RouterDraft>({});
   const save = useMutation({
@@ -57,6 +59,7 @@ export function RouterPanel() {
     },
   });
   const cfg = status.data;
+  const interfaces = interfacesQuery.data?.interfaces ?? [];
   const overridden = (field: RouterOverride) => cfg?.overridden.includes(field);
   const editable = (field: RouterOverride) => admin && !overridden(field);
   const enabled =
@@ -143,30 +146,24 @@ export function RouterPanel() {
               being served. The dashboard stays available on its own port.
             </p>
           )}
-          {listenFields.map(([field, label]) => (
+          {listenFields.map(([field, label, defaultPort]) => (
             <div key={field} className="router-listen">
-              <label htmlFor={`router-${field}`}>
-                {label}
-                <input
-                  id={`router-${field}`}
-                  value={value(field)}
-                  readOnly={!admin}
-                  disabled={save.isPending || overridden(field)}
-                  aria-describedby={
-                    overridden(field) ? `router-${field}-override` : undefined
-                  }
-                  spellCheck={false}
-                  onChange={(event) => edit({ [field]: event.target.value })}
-                />
-              </label>
+              <ListenAddressPicker
+                id={`router-${field}`}
+                label={label}
+                defaultPort={defaultPort}
+                value={value(field)}
+                interfaces={interfaces}
+                readOnly={!admin}
+                disabled={save.isPending || overridden(field)}
+                describedBy={
+                  overridden(field) ? `router-${field}-override` : undefined
+                }
+                onChange={(next) => edit({ [field]: next })}
+              />
               {overridden(field) && <OverrideNote field={field} />}
             </div>
           ))}
-          {admin && (
-            <p className="small muted">
-              Separate multiple listen addresses with commas.
-            </p>
-          )}
           <dl className="kv">
             <dt>Config path</dt>
             <dd>

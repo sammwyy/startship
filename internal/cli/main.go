@@ -388,8 +388,11 @@ const usage = `startship [--json] COMMAND
   notifications add WORKSPACE --name NAME --kind discord|slack|webhook --url URL [--events EVENT,...] [--enable]
   notifications update WORKSPACE CHANNEL_ID [--name NAME] [--kind KIND] [--url URL] [--events EVENT,...] [--enable|--disable]
   notifications remove|test WORKSPACE CHANNEL_ID
+  interfaces                     list host network interfaces available for listening
+  dashboard [show]               show active dashboard listen addresses and startup overrides
+  dashboard set [--listen ADDR[,ADDR]] [--interface IFACE[,IFACE]|any] [--port PORT]
   router [show]                  show active router settings and startup overrides
-  router set [--http ADDR[,ADDR]] [--https ADDR[,ADDR]]
+  router set [--http ADDR[,ADDR]] [--https ADDR[,ADDR]] [--interface IFACE[,IFACE]|any] [--http-port PORT] [--https-port PORT]
   router disable | router enable  apply and save changes without a restart (Platform Admin)
   migrate detect [--platform P]  detect Openship, Dokploy, and Coolify installations (Platform Admin)
   migrate import PLATFORM (--all | --project ID[:NAME]...) (--workspace WS | --create-workspace NAME) [options]
@@ -449,6 +452,12 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "network" {
 		return c.runNetwork(a)
+	}
+	if cmd == "interfaces" {
+		return c.runInterfaces(a)
+	}
+	if cmd == "dashboard" {
+		return c.runDashboard(a)
 	}
 	if cmd == "router" {
 		return c.runRouter(a)

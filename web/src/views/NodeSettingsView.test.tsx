@@ -5,7 +5,13 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveProvider } from "../providers/LiveProvider";
 import { request } from "../services/api";
-import type { RouterConfig, RouterSettings } from "../services/types";
+import type {
+  DashboardConfig,
+  DashboardSettings,
+  NetworkInterface,
+  RouterConfig,
+  RouterSettings,
+} from "../services/types";
 import { NodeSettingsView } from "./NodeSettingsView";
 
 const session = vi.hoisted(() => ({ user: { platform_admin: true } }));
@@ -15,10 +21,16 @@ vi.mock("../services/api", async (original) => ({
   request: vi.fn(),
 }));
 
+let dashboardConfig: DashboardConfig;
 let config: RouterConfig;
+let interfaces: NetworkInterface[];
 let error: Error | undefined;
+let dashboardError: Error | undefined;
 
-function renderView(live = false) {
+function renderView(
+  live = false,
+  regionName: "Router" | "Dashboard" = "Router",
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -30,11 +42,16 @@ function renderView(live = false) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
-  return within(screen.getByRole("region", { name: "Router" }));
+  return within(screen.getByRole("region", { name: regionName }));
 }
 
 beforeEach(() => {
   session.user.platform_admin = true;
+  dashboardConfig = {
+    dashboard_listen: [":8080"],
+    config_path: "/etc/startship/config/startship.toml",
+    overridden: [],
+  };
   config = {
     enabled: true,
     http_listen: [":80"],
@@ -42,9 +59,43 @@ beforeEach(() => {
     config_path: "/etc/startship/config/startship.toml",
     overridden: [],
   };
+  interfaces = [
+    {
+      name: "tailscale0",
+      addresses: ["100.64.0.5"],
+      up: true,
+      loopback: false,
+    },
+    {
+      name: "eth0",
+      addresses: ["192.168.1.20"],
+      up: true,
+      loopback: false,
+    },
+    {
+      name: "lo",
+      addresses: ["127.0.0.1", "::1"],
+      up: true,
+      loopback: true,
+    },
+  ];
   error = undefined;
+  dashboardError = undefined;
   vi.mocked(request).mockReset();
   vi.mocked(request).mockImplementation(async (path, body, method) => {
+    if (path === "system/interfaces") {
+      return { interfaces };
+    }
+    if (path === "system/dashboard") {
+      if (method === "PUT") {
+        if (dashboardError) throw dashboardError;
+        dashboardConfig = {
+          ...dashboardConfig,
+          ...(body as DashboardSettings),
+        };
+      }
+      return dashboardConfig;
+    }
     if (path === "system/router") {
       if (method === "PUT") {
         if (error) throw error;
@@ -59,16 +110,125 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+describe("node dashboard listen settings", () => {
+  it("switches between a detected interface, any interface, and custom addresses", async () => {
+    const panel = renderView(false, "Dashboard");
+    const user = userEvent.setup();
+    const trigger = await panel.findByRole("button", {
+      name: "Dashboard listen addresses interface",
+    });
+    expect(trigger).toHaveTextContent("Any interface");
+    const save = panel.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+
+    await user.click(trigger);
+    await user.click(
+      panel.getByRole("option", { name: /tailscale0.*100\.64\.0\.5/ }),
+    );
+    expect(trigger).toHaveTextContent("tailscale0");
+    expect(
+      panel.getByText(/Saving closes the previous dashboard listener/),
+    ).toBeInTheDocument();
+    await user.click(save);
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "system/dashboard",
+        { dashboard_listen: ["tailscale0:8080"] },
+        "PUT",
+      ),
+    );
+
+    const port = panel.getByRole("textbox", {
+      name: "Dashboard listen addresses port",
+    });
+    await user.clear(port);
+    await user.type(port, "9090");
+    await user.click(trigger);
+    await user.click(panel.getByRole("option", { name: /Any interface/ }));
+    await user.click(save);
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "system/dashboard",
+        { dashboard_listen: [":9090"] },
+        "PUT",
+      ),
+    );
+
+    await user.click(trigger);
+    await user.click(panel.getByRole("option", { name: /Custom addresses/ }));
+    const customInput = panel.getByRole("textbox", {
+      name: "Dashboard listen addresses",
+    });
+    await user.clear(customInput);
+    await user.type(customInput, "tailscale0:8080, 127.0.0.1:8080");
+    await user.click(save);
+    await waitFor(() =>
+      expect(request).toHaveBeenCalledWith(
+        "system/dashboard",
+        { dashboard_listen: ["tailscale0:8080", "127.0.0.1:8080"] },
+        "PUT",
+      ),
+    );
+  });
+
+  it("locks overridden dashboard_listen and renders read-only for non-admins", async () => {
+    dashboardConfig.overridden = ["dashboard_listen"];
+    const panel = renderView(false, "Dashboard");
+    const trigger = await panel.findByRole("button", {
+      name: "Dashboard listen addresses interface",
+    });
+    expect(trigger).toBeDisabled();
+    const port = panel.getByRole("textbox", {
+      name: "Dashboard listen addresses port",
+    });
+    expect(port).toBeDisabled();
+    expect(port).toHaveAccessibleDescription(
+      /STARTSHIP_DASHBOARD_ADDR.*--dashboard-listen/,
+    );
+  });
+
+  it("renders dashboard settings read-only for non-admins", async () => {
+    session.user.platform_admin = false;
+    dashboardConfig = {
+      ...dashboardConfig,
+      dashboard_listen: ["tailscale0:8080"],
+    };
+    const panel = renderView(false, "Dashboard");
+    const trigger = await panel.findByRole("button", {
+      name: "Dashboard listen addresses interface",
+    });
+    expect(trigger).toBeDisabled();
+    expect(trigger).toHaveTextContent("tailscale0");
+    expect(
+      panel.getByRole("textbox", { name: "Dashboard listen addresses port" }),
+    ).toHaveAttribute("readonly");
+    expect(
+      panel.queryByRole("button", { name: "Save" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("node router settings", () => {
-  it("saves comma-separated listens and disables and re-enables the router", async () => {
+  it("selects an interface, saves custom listens, and disables and re-enables the router", async () => {
     const panel = renderView();
     const user = userEvent.setup();
-    const http = await panel.findByRole("textbox", {
-      name: "HTTP listen addresses",
+    const httpTrigger = await panel.findByRole("button", {
+      name: "HTTP listen addresses interface",
     });
     expect(panel.getByText(config.config_path)).toBeInTheDocument();
     const save = panel.getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();
+
+    await user.click(httpTrigger);
+    const httpMenu = panel.getByRole("listbox", {
+      name: "HTTP listen addresses interface",
+    });
+    await user.click(
+      within(httpMenu).getByRole("option", { name: /Custom addresses/ }),
+    );
+    const http = panel.getByRole("textbox", {
+      name: "HTTP listen addresses",
+    });
     await user.clear(http);
     await user.type(http, "127.0.0.1:8081, eth0:8082");
     await user.click(save);
@@ -130,22 +290,22 @@ describe("node router settings", () => {
       expect(toggle).toHaveAccessibleDescription(
         /STARTSHIP_ROUTER_DISABLED.*--router-disabled/,
       );
-      const https = panel.getByRole("textbox", {
-        name: "HTTPS listen addresses",
+      const httpsPort = panel.getByRole("textbox", {
+        name: "HTTPS listen addresses port",
       });
-      expect(https).toBeDisabled();
-      expect(https).toHaveAccessibleDescription(
+      expect(httpsPort).toBeDisabled();
+      expect(httpsPort).toHaveAccessibleDescription(
         /STARTSHIP_HTTPS_ADDR.*--https-listen/,
       );
       const user = userEvent.setup();
-      const http = panel.getByRole("textbox", {
-        name: "HTTP listen addresses",
+      const httpPort = panel.getByRole("textbox", {
+        name: "HTTP listen addresses port",
       });
-      await user.clear(http);
-      await user.type(http, ":8888");
+      await user.clear(httpPort);
+      await user.type(httpPort, "8888");
       await user.click(panel.getByRole("button", { name: "Save" }));
       expect(await panel.findByRole("alert")).toHaveTextContent(error.message);
-      expect(http).toHaveValue(":8888");
+      expect(httpPort).toHaveValue("8888");
     },
   );
 
@@ -166,31 +326,41 @@ describe("node router settings", () => {
     }
     vi.stubGlobal("WebSocket", Socket);
     const panel = renderView(true);
-    const http = await panel.findByRole("textbox", {
-      name: "HTTP listen addresses",
+    const httpPort = await panel.findByRole("textbox", {
+      name: "HTTP listen addresses port",
     });
     const user = userEvent.setup();
-    await user.clear(http);
-    await user.type(http, ":8081");
+    await user.clear(httpPort);
+    await user.type(httpPort, "8081");
     act(() => socket.receive({ type: "ready" }));
-    const subscription = JSON.parse(socket!.send.mock.calls[0][0]);
-    expect(subscription).toMatchObject({
+    const subscriptions = socket!.send.mock.calls.map(([msg]) =>
+      JSON.parse(msg as string),
+    );
+    const routerSub = subscriptions.find((s) => s.topic === "system_router");
+    const dashboardSub = subscriptions.find(
+      (s) => s.topic === "system_dashboard",
+    );
+    expect(routerSub).toMatchObject({
       type: "subscribe",
       topic: "system_router",
+    });
+    expect(dashboardSub).toMatchObject({
+      type: "subscribe",
+      topic: "system_dashboard",
     });
     act(() =>
       socket.receive({
         type: "snapshot",
-        id: subscription.id,
+        id: routerSub.id,
         topic: "system_router",
         data: { ...config, enabled: false, https_listen: [":8443"] },
       }),
     );
     expect(await panel.findByText("Disabled")).toBeInTheDocument();
-    expect(http).toHaveValue(":8081");
+    expect(httpPort).toHaveValue("8081");
     expect(
-      panel.getByRole("textbox", { name: "HTTPS listen addresses" }),
-    ).toHaveValue(":8443");
+      panel.getByRole("textbox", { name: "HTTPS listen addresses port" }),
+    ).toHaveValue("8443");
     expect(
       vi
         .mocked(request)

@@ -12,6 +12,8 @@ import type {
   User,
   Workspace,
   UpdateInfo,
+  DashboardConfig,
+  NetworkInterface,
   RouterConfig,
   MigrationDetectedPlatform,
   MigrationJob,
@@ -45,6 +47,9 @@ export const queries = {
     ...resource<UpdateInfo>("system/update"),
     retry: false,
   }),
+  dashboard: () => resource<DashboardConfig>("system/dashboard"),
+  interfaces: () =>
+    resource<{ interfaces: NetworkInterface[] }>("system/interfaces"),
   router: () => resource<RouterConfig>("system/router"),
   migrationDetect: () => ({
     ...resource<{ platforms: MigrationDetectedPlatform[] }>(
