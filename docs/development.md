@@ -12,7 +12,7 @@ go test -race ./...
 
 Run `./scripts/e2e.sh` for Docker-backed deployment tests. They need Python 3, curl, Git, and a running Docker Engine and buildx. Use a development host: the tests start real containers and builders. Set `STARTSHIP_E2E_SERVICES=1` to also exercise the service catalog; this pulls additional images.
 
-For dashboard development, run the daemon with its dashboard bound to port 8080 and start `npm run dev --prefix web`. Vite forwards HTTP and WebSocket API requests to the daemon.
+For dashboard development, run the daemon with its dashboard bound to port 9000 and start `npm run dev --prefix web`. Vite forwards HTTP and WebSocket API requests to the daemon.
 
 | Path | Contents |
 | --- | --- |

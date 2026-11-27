@@ -114,7 +114,7 @@ func TestSystemRouterSettings(t *testing.T) {
 	if msg := call(true, "PUT", put(true, "127.0.0.1:0", ":18443"), 409); !strings.Contains(msg, "STARTSHIP_HTTPS_ADDR") {
 		t.Fatal(msg)
 	}
-	if msg := call(true, "PUT", put(true, "127.0.0.1:8080", "127.0.0.1:0"), 409); !strings.Contains(msg, "dashboard_listen") {
+	if msg := call(true, "PUT", put(true, "127.0.0.1:9000", "127.0.0.1:0"), 409); !strings.Contains(msg, "dashboard_listen") {
 		t.Fatal(msg)
 	}
 	if err := a.saveService(Service{ID: "router-service", Name: "cache", ExternalPort: 16379}); err != nil {

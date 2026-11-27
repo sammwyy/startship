@@ -40,7 +40,7 @@ func TestSocketTransport(t *testing.T) {
 	t.Setenv("STARTSHIP_SOCKET", filepath.Join(t.TempDir(), "absent"))
 	c.Server = ""
 	server, _, err = c.transport()
-	if err != nil || server != "http://localhost:8080" {
+	if err != nil || server != "http://localhost:9000" {
 		t.Fatal(server, err)
 	}
 	c.Server = "unix://host/not-allowed"

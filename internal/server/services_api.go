@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sammwyy/startship/internal/catalog"
+	"github.com/sammwyy/startship/internal/config"
 )
 
 func (a *Server) reserveServicePorts(groups ...[]string) {
@@ -61,7 +62,8 @@ func (a *Server) daemonPortReserved(n int) bool {
 	if a.serviceReservedPorts != nil {
 		return a.serviceReservedPorts[n]
 	}
-	return listenPorts([]string{":8080", ":80", ":443", os.Getenv("STARTSHIP_DASHBOARD_ADDR"), os.Getenv("STARTSHIP_HTTP_ADDR"), os.Getenv("STARTSHIP_HTTPS_ADDR")})[n]
+	defaults := config.Defaults()
+	return listenPorts(defaults.DashboardListen, defaults.HTTPListen, defaults.HTTPSListen, []string{os.Getenv("STARTSHIP_DASHBOARD_ADDR"), os.Getenv("STARTSHIP_HTTP_ADDR"), os.Getenv("STARTSHIP_HTTPS_ADDR")})[n]
 }
 func (a *Server) resourceProject(x *access, ws, id, mount string) bool {
 	if id == "" {

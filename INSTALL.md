@@ -4,7 +4,7 @@ Use the **systemd installer** for a Linux server, **Docker Compose** to run the 
 
 ## Linux with systemd
 
-Use Linux amd64 or arm64 with systemd, Docker Engine and the Buildx plugin, Git, curl, and standard Linux account and archive utilities. Check that Docker is running, `docker buildx version` works, and ports 80, 443, and 8080 are free. Docker Engine must provide the `docker` group. Restrict inbound TCP 8080 to trusted clients before installing: the daemon starts immediately and the default dashboard listener binds on all interfaces.
+Use Linux amd64 or arm64 with systemd, Docker Engine and the Buildx plugin, Git, curl, and standard Linux account and archive utilities. Check that Docker is running, `docker buildx version` works, and ports 80, 443, and 9000 are free. Docker Engine must provide the `docker` group. Restrict inbound TCP 9000 to trusted clients before installing: the daemon starts immediately and the default dashboard listener binds on all interfaces.
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/sammwyy/startship/main/install.sh -o install.sh
@@ -32,7 +32,7 @@ Run `sh install.sh --help` for the full list. Values accept `--option VALUE` or 
 | `--version TAG` | Install release `TAG` instead of the latest (also `STARTSHIP_VERSION`). |
 | `--download-url URL` | Fetch the release assets and `checksums.txt` from `URL` (also `STARTSHIP_DOWNLOAD_URL`). |
 | `--data-dir DIR` | Data directory, chosen on first install (also `STARTSHIP_DATA`; default `/var/lib/startship`). |
-| `--dashboard-listen ADDRS` | Dashboard and API listeners, comma-separated, such as `127.0.0.1:8080`. |
+| `--dashboard-listen ADDRS` | Dashboard and API listeners, comma-separated, such as `127.0.0.1:9000`. |
 | `--http-listen ADDRS`, `--https-listen ADDRS` | Application router listeners, comma-separated. |
 | `--no-router` | Disable the application router, leaving ports 80 and 443 free. Enable it later with `startship router enable`. |
 | `--dashboard-domain HOST` | Also serve the dashboard through the router at `HOST`. |
@@ -44,7 +44,7 @@ Run `sh install.sh --help` for the full list. Values accept `--option VALUE` or 
 For example, to keep the dashboard local and leave ports 80 and 443 to another web server:
 
 ```sh
-sudo sh install.sh --dashboard-listen 127.0.0.1:8080 --no-router
+sudo sh install.sh --dashboard-listen 127.0.0.1:9000 --no-router
 ```
 
 Settings options are validated, then written to `/etc/startship/config/startship.toml`; a matching variable in `/etc/startship/startshipd.env` is removed so the file setting takes effect. Running the installer again upgrades the binaries and applies only the options you pass, keeping the other settings and the data directory.
@@ -60,7 +60,7 @@ docker compose up --build -d
 docker compose logs startship
 ```
 
-Before running on a remote host, change the dashboard mapping in [compose.yaml](compose.yaml) from `8080:8080` to `127.0.0.1:8080:8080` (or otherwise restrict access to port 8080). Keep the 80 and 443 mappings if Startship should serve public projects directly. Compose builds the daemon, not the CLI; use a separately built or installed CLI if needed.
+Before running on a remote host, change the dashboard mapping in [compose.yaml](compose.yaml) from `9000:9000` to `127.0.0.1:9000:9000` (or otherwise restrict access to port 9000). Keep the 80 and 443 mappings if Startship should serve public projects directly. Compose builds the daemon, not the CLI; use a separately built or installed CLI if needed.
 
 ## Build from source
 
@@ -70,7 +70,7 @@ Install Go 1.26+, Node.js 22.12+ with npm, Make, Git, Docker Engine, and Buildx.
 git clone https://github.com/sammwyy/startship.git
 cd startship
 make build
-STARTSHIP_DASHBOARD_ADDR=127.0.0.1:8080 STARTSHIP_HTTP_ADDR=127.0.0.1:8081 STARTSHIP_HTTPS_ADDR=127.0.0.1:8443 ./startshipd
+STARTSHIP_DASHBOARD_ADDR=127.0.0.1:9000 STARTSHIP_HTTP_ADDR=127.0.0.1:8081 STARTSHIP_HTTPS_ADDR=127.0.0.1:8443 ./startshipd
 ```
 
 The example keeps all three listeners local and avoids privileged ports. For this run, the application HTTP router is on port 8081. Native source builds do not install Nixpacks; see [Project pipelines](docs/pipelines.md#build-engines) if you plan to use it. For build and test commands, see [Development](docs/development.md).
@@ -78,12 +78,12 @@ The example keeps all three listeners local and avoids privileged ports. For thi
 ## Sign in and secure access
 
 1. Find the temporary administrator credentials in the daemon logs. For a foreground source build, check the terminal you started it in. Treat these logs as sensitive.
-2. Open `http://localhost:8080` from the host (or through a private tunnel), sign in, and change the temporary password. Restarting before setup is complete issues a new temporary password; use the most recent one.
+2. Open `http://localhost:9000` from the host (or through a private tunnel), sign in, and change the temporary password. Restarting before setup is complete issues a new temporary password; use the most recent one.
 3. Continue to [your first deployment](docs/getting-started.md).
 
 | Default TCP port | Purpose | Exposure |
 | --- | --- | --- |
-| 8080 | Dashboard and API | Limit to localhost, a trusted private network, or a secured gateway. Do not expose first-run setup. |
+| 9000 | Dashboard and API | Limit to localhost, a trusted private network, or a secured gateway. Do not expose first-run setup. |
 | 80 | Application HTTP and ACME HTTP-01 validation | Public if serving public HTTP routes or issuing Let's Encrypt certificates. |
 | 443 | Application HTTPS | Public if serving public HTTPS routes. A certificate must match the requested host. |
 

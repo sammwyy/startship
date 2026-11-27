@@ -17,6 +17,8 @@ import (
 )
 
 const DefaultPath = "/etc/startship/config/startship.toml"
+const DefaultDashboardPort = "9000"
+const DefaultDashboardURL = "http://localhost:" + DefaultDashboardPort
 
 type Daemon struct {
 	DashboardListen []string        `toml:"dashboard_listen"`
@@ -56,7 +58,7 @@ func (d *Daemon) lists() map[string]*[]string {
 	return map[string]*[]string{"dashboard_listen": &d.DashboardListen, "http_listen": &d.HTTPListen, "https_listen": &d.HTTPSListen, "trusted_proxies": &d.TrustedProxies}
 }
 func Defaults() Daemon {
-	return Daemon{DashboardListen: []string{":8080"}, HTTPListen: []string{":80"}, HTTPSListen: []string{":443"}, DataDir: DataDirectory(), ACMEDirectory: "https://acme-v02.api.letsencrypt.org/directory"}
+	return Daemon{DashboardListen: []string{":" + DefaultDashboardPort}, HTTPListen: []string{":80"}, HTTPSListen: []string{":443"}, DataDir: DataDirectory(), ACMEDirectory: "https://acme-v02.api.letsencrypt.org/directory"}
 }
 func Path(explicit string) string {
 	if explicit != "" {
@@ -106,7 +108,7 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 		f.Var((*listenFlag)(p), strings.ReplaceAll(key, "_", "-"), "listen host:port or interface:port; comma-separated/repeatable ("+environment[key]+")")
 	}
 	f.Usage = func() {
-		fmt.Fprintln(out, "Usage: startshipd [flags]\nPrecedence: flags > environment > TOML file > defaults.\nDefaults: dashboard :8080; HTTP :80; HTTPS :443; data ./_data.\n--version prints the build version.")
+		fmt.Fprintln(out, "Usage: startshipd [flags]\nPrecedence: flags > environment > TOML file > defaults.\nDefaults: dashboard :"+DefaultDashboardPort+"; HTTP :80; HTTPS :443; data ./_data.\n--version prints the build version.")
 		f.PrintDefaults()
 	}
 	if err := f.Parse(args); err != nil {

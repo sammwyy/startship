@@ -4,7 +4,7 @@ Startship loads settings at startup. Precedence is **daemon flags → environmen
 
 | TOML key | Environment variable | Default |
 | --- | --- | --- |
-| `dashboard_listen` | `STARTSHIP_DASHBOARD_ADDR` | `:8080` |
+| `dashboard_listen` | `STARTSHIP_DASHBOARD_ADDR` | `:9000` |
 | `http_listen` | `STARTSHIP_HTTP_ADDR` | `:80` |
 | `https_listen` | `STARTSHIP_HTTPS_ADDR` | `:443` |
 | `router_disabled` | `STARTSHIP_ROUTER_DISABLED` | `false` |
@@ -17,14 +17,14 @@ Startship loads settings at startup. Precedence is **daemon flags → environmen
 | `geoip_database` | `STARTSHIP_GEOIP_DB` | Unset |
 | `network_firewall` | `STARTSHIP_NETWORK_FIREWALL` | Off; see [Firewall and WAF](firewall.md#network-firewall-l4) before enabling |
 
-Run `startshipd --help` for the corresponding flags. Listeners accept `host:port`, `[IPv6]:port`, `:port` for all interfaces, or a name such as `eth0:8080` to bind the interface's current addresses. Environment variables accept comma-separated entries and listener flags can be repeated.
+Run `startshipd --help` for the corresponding flags. Listeners accept `host:port`, `[IPv6]:port`, `:port` for all interfaces, or a name such as `eth0:9000` to bind the interface's current addresses. Environment variables accept comma-separated entries and listener flags can be repeated.
 
 ## Bind the dashboard privately
 
-For a native install, set `STARTSHIP_DASHBOARD_ADDR=127.0.0.1:8080` in the service environment or add this to the TOML file:
+For a native install, set `STARTSHIP_DASHBOARD_ADDR=127.0.0.1:9000` in the service environment or add this to the TOML file:
 
 ```toml
-dashboard_listen = ["127.0.0.1:8080"]
+dashboard_listen = ["127.0.0.1:9000"]
 ```
 
 On a systemd install, remove any corresponding `STARTSHIP_DASHBOARD_ADDR` setting from `/etc/startship/startshipd.env` if you want TOML to control the listener, then run `sudo systemctl restart startshipd`. With Compose, change the host port mapping instead; the host's network interfaces normally are not visible in the container. Restricting this listener does not restrict the application router: leave `dashboard_domain` unset if the dashboard should be reachable only through the private listener.
@@ -46,7 +46,7 @@ The application router is separate from the dashboard listener and admin socket.
 The router listens on both HTTP and HTTPS. To serve TLS, the request's hostname must have a usable certificate; simply opening port 443 is not enough.
 
 - **Application domains:** Add the hostname to the workspace and point its DNS at Startship. Under workspace **Certificates**, request a Let's Encrypt certificate or upload your own. Set an ACME account email before requesting certificates, and make sure public port 80 reaches Startship for HTTP-01 validation. HTTP-01 cannot issue wildcard certificates. In a project's **Domains**, choose a matching certificate or let the router select one, and enable HTTPS redirection if you want it.
-- **Dashboard hostname:** Set `STARTSHIP_DASHBOARD_DOMAIN` and `STARTSHIP_ACME_EMAIL`, point the hostname at the server, and allow public TCP 80 and 443. These settings enable the automatic certificate flow and expose the panel through the application router. Keep raw dashboard port 8080 private.
+- **Dashboard hostname:** Set `STARTSHIP_DASHBOARD_DOMAIN` and `STARTSHIP_ACME_EMAIL`, point the hostname at the server, and allow public TCP 80 and 443. These settings enable the automatic certificate flow and expose the panel through the application router. Keep raw dashboard port 9000 private.
 
 Store the daemon's data directory and any copies of it securely: it contains the SQLite database, including private certificate material. Keep copies of service and application volumes separately.
 
