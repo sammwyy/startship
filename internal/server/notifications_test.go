@@ -3,11 +3,13 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,6 +31,166 @@ func notificationReceiver(t *testing.T) (string, <-chan notificationPayload) {
 	t.Cleanup(receiver.Close)
 	t.Setenv("STARTSHIP_NOTIFICATION_LOCAL_HOST", strings.TrimPrefix(receiver.URL, "http://"))
 	return receiver.URL, incoming
+}
+
+func TestNotificationSlackPayload(t *testing.T) {
+	a := testServer(t)
+	incoming := make(chan map[string]string, 1)
+	receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || r.Method != "POST" || r.Header.Get("Content-Type") != "application/json" {
+			t.Errorf("unexpected Slack request: %s %v", r.Method, err)
+		}
+		incoming <- body
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer receiver.Close()
+	t.Setenv("STARTSHIP_NOTIFICATION_LOCAL_HOST", strings.TrimPrefix(receiver.URL, "http://"))
+	ws := Record{ID: "ws", Kind: "workspaces", Name: "Team"}
+	if err := a.store.Save(ws); err != nil {
+		t.Fatal(err)
+	}
+	name, kind, enabled := "Slack", "slack", true
+	events := []string{deployFailed}
+	_, _, err := a.mutateNotificationChannel(ws.ID, nil, notificationPatch{Name: &name, Kind: &kind, URL: &receiver.URL, Events: &events, Enabled: &enabled}, true, false, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a.dispatchNotification(Record{WorkspaceID: ws.ID, Name: "API & <!channel>"}, deployFailed, time.Now())
+	select {
+	case body := <-incoming:
+		if len(body) != 1 || body["text"] != "API &amp; &lt;!channel&gt;: deployment failed" {
+			t.Fatalf("unexpected incoming webhook payload: %v", body)
+		}
+	default:
+		t.Fatal("receiver did not get a Slack notification")
+	}
+	rows, err := a.notificationDeliveries(ws.ID)
+	if err != nil || len(rows) != 1 || rows[0].Status != "ok" || rows[0].HTTPStatus != 200 {
+		t.Fatalf("Slack delivery: %+v, %v", rows, err)
+	}
+}
+
+func TestNotificationDeliveryErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		error  string
+	}{
+		{"timeout", 0, "webhook request timed out"},
+		{"server error", 500, "webhook returned a non-success status"},
+		{"refused", 0, "could not reach webhook"},
+		{"redirect", 307, "webhook returned a non-success status"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := testServer(t)
+			var followed atomic.Bool
+			receiver := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/followup" {
+					followed.Store(true)
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				switch tc.name {
+				case "timeout":
+					if _, err := io.Copy(io.Discard, r.Body); err != nil {
+						t.Error(err)
+					}
+					// Let the client timeout before the receiver sends headers.
+					select {
+					case <-r.Context().Done():
+					case <-time.After(15 * time.Second):
+						t.Error("client did not cancel the request")
+					}
+				case "redirect":
+					w.Header().Set("Location", "/followup?redirect-secret=1")
+					w.WriteHeader(http.StatusTemporaryRedirect)
+				default:
+					w.WriteHeader(http.StatusInternalServerError)
+					w.Write([]byte("private-path secret-query"))
+				}
+			}))
+			defer receiver.Close()
+			if tc.name == "refused" {
+				receiver.Close()
+			}
+			t.Setenv("STARTSHIP_NOTIFICATION_LOCAL_HOST", strings.TrimPrefix(receiver.URL, "http://"))
+			ws := Record{ID: "ws", Kind: "workspaces"}
+			if err := a.store.Save(ws); err != nil {
+				t.Fatal(err)
+			}
+			name, kind := "Receiver", "webhook"
+			target := receiver.URL + "/private-path?token=secret-query"
+			c, _, err := a.mutateNotificationChannel(ws.ID, nil, notificationPatch{Name: &name, Kind: &kind, URL: &target}, true, false, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			start := time.Now()
+			a.deliverNotification(ws.ID, c, notificationPayload{Event: "test", At: time.Now()})
+			if tc.name == "timeout" && time.Since(start) < 9*time.Second {
+				t.Fatalf("unexpected timeout duration: %s", time.Since(start))
+			}
+			data, err := a.notificationsData(ws.ID)
+			if err != nil || len(data.Deliveries) != 1 {
+				t.Fatalf("delivery results: %+v, %v", data, err)
+			}
+			d := data.Deliveries[0]
+			if d.Status != "failed" || d.HTTPStatus != tc.status || d.Error != tc.error || followed.Load() {
+				t.Fatalf("unexpected delivery: %+v (redirect followed: %t)", d, followed.Load())
+			}
+			encoded, err := json.Marshal(data)
+			if err != nil || strings.Contains(string(encoded), "private-path") || strings.Contains(string(encoded), "secret-query") || strings.Contains(string(encoded), "redirect-secret") {
+				t.Fatal("snapshot exposes destination secrets")
+			}
+		})
+	}
+}
+
+func TestNotificationRestrictedAccess(t *testing.T) {
+	f := newRBACFixture(t)
+	f.assign(t, f.alice, f.bobID, "member", scopeWorkspace, f.workspace.ID, 201)
+	workspace := "workspaces/" + f.workspace.ID
+	accountRequest(t, f.h, "GET", workspace, "", f.bob, 200)
+	base := workspace + "/notifications/"
+	channelBody := `{"name":"private channel","kind":"webhook","url":"https://hooks.example/private-path?token=private-query"}`
+	channel := decodeBody[notificationChannel](t, accountRequest(t, f.h, "POST", base+"channels", channelBody, f.alice, 201).Body.Bytes())
+	if _, err := f.a.store.DB.Exec("INSERT INTO notification_deliveries(channel_id,workspace_id,event,status,http_status,error,created_at) VALUES(?,?,'test','ok',204,'','now')", channel.ID, f.workspace.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, req := range []struct{ method, path, body string }{
+		{"GET", "channels", ""},
+		{"POST", "channels", channelBody},
+		{"PATCH", "channels/" + channel.ID, `{"enabled":true}`},
+		{"DELETE", "channels/" + channel.ID, ""},
+		{"POST", "channels/" + channel.ID + "/test", ""},
+		{"GET", "deliveries", ""},
+	} {
+		body := accountRequest(t, f.h, req.method, base+req.path, req.body, f.bob, 403).Body.String()
+		if strings.Contains(body, "private") || strings.Contains(body, channel.ID) {
+			t.Fatal("restricted response disclosed channel data")
+		}
+	}
+	srv := httptest.NewServer(f.h)
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	headers := http.Header{"Origin": {srv.URL}, "Cookie": {f.bob.Name + "=" + f.bob.Value}}
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http")+"/api/live", &websocket.DialOptions{HTTPHeader: headers})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	var ready map[string]any
+	if err = wsjson.Read(ctx, conn, &ready); err != nil || ready["type"] != "ready" {
+		t.Fatalf("live ready: %v %v", ready, err)
+	}
+	if err := wsjson.Write(ctx, conn, map[string]string{"type": "subscribe", "id": "notify", "topic": "notifications", "workspace_id": f.workspace.ID}); err != nil {
+		t.Fatal(err)
+	}
+	var msg map[string]any
+	if err = wsjson.Read(ctx, conn, &msg); err != nil || msg["type"] != "error" || msg["error"] != "forbidden" || msg["data"] != nil {
+		t.Fatalf("expected forbidden without a snapshot, got %v: %v", msg, err)
+	}
 }
 
 func awaitNotification(t *testing.T, incoming <-chan notificationPayload, expected string) {

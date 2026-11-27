@@ -68,3 +68,46 @@ func TestNotificationsCommands(t *testing.T) {
 		t.Errorf("output exposed the webhook path: %s", out.String())
 	}
 }
+
+func TestNotificationsUpdateURLAndMutationErrors(t *testing.T) {
+	const base = "/api/workspaces/ws/notifications/channels/"
+	const target = "https://hooks.example/private-path?token=query-secret"
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.Method + " " + r.URL.Path {
+		case "GET /api/workspaces":
+			w.Write([]byte(`[{"id":"ws","name":"Team"}]`))
+		case "PATCH " + base + "channel":
+			var got map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Error(err)
+			}
+			want := map[string]any{"url": target, "name": "New name"}
+			if !reflect.DeepEqual(got, want) {
+				t.Error("update should send only the changed name and replacement URL")
+			}
+			w.Write([]byte(`{"id":"channel","name":"New name","host":"https://hooks.example"}`))
+		case "DELETE " + base + "missing", "POST " + base + "missing/test":
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":"notification channel not found"}`))
+		default:
+			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer s.Close()
+	var out bytes.Buffer
+	c := &cli{config: config{Server: s.URL}, out: &out, client: s.Client(), raw: true}
+	if err := c.run([]string{"notifications", "update", "Team", "channel", "--name", "New name", "--url", target}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "https://hooks.example") || strings.Contains(out.String(), "private-path") || strings.Contains(out.String(), "query-secret") {
+		t.Fatal("JSON output must include the host but not destination secrets")
+	}
+	for _, action := range []string{"remove", "test"} {
+		err := c.run([]string{"notifications", action, "Team", "missing"})
+		if err == nil || !strings.Contains(err.Error(), "notification channel not found") {
+			t.Fatalf("%s should return the API error: %v", action, err)
+		}
+	}
+}
