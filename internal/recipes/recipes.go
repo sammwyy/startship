@@ -42,6 +42,7 @@ type Recipe struct {
 type Container struct {
 	ID          string            `json:"id"`
 	Image       string            `json:"image"`
+	Entrypoint  string            `json:"entrypoint,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
 	Command     []string          `json:"command,omitempty"`
 	Mounts      map[string]string `json:"mounts,omitempty"`
@@ -185,6 +186,9 @@ func (r Recipe) validate() error {
 	for _, c := range r.Containers {
 		if !identifier.MatchString(c.ID) || containers[c.ID] || !imageName.MatchString(c.Image) {
 			return fmt.Errorf("invalid container %q", c.ID)
+		}
+		if c.Entrypoint != "" && (!path.IsAbs(c.Entrypoint) || path.Clean(c.Entrypoint) != c.Entrypoint || strings.ContainsAny(c.Entrypoint, "\x00\r\n")) {
+			return fmt.Errorf("invalid entrypoint for container %q", c.ID)
 		}
 		containers[c.ID] = true
 		for id, mount := range c.Mounts {

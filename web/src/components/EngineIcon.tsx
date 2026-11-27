@@ -43,6 +43,7 @@ import {
   siCoder,
   siUptimekuma,
   siMattermost,
+  siMatrix,
   siElement,
   siMumble,
   siJitsi,
@@ -132,6 +133,7 @@ const brands = {
   "code-server": siCoder,
   "uptime-kuma": siUptimekuma,
   mattermost: siMattermost,
+  "matrix-synapse": siMatrix,
   element: siElement,
   mumble: siMumble,
   "jitsi-meet": siJitsi,
@@ -234,6 +236,7 @@ const glyphs: Record<string, [string, string]> = {
   nocodb: ["database", "#4c80db"],
   flarum: ["users", "#de7550"],
   koel: ["headphones", "#57a18f"],
+  dendrite: ["server", "#4c8a78"],
 };
 
 export function EngineIcon({

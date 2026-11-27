@@ -3,11 +3,25 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/sammwyy/startship/internal/recipes"
 )
+
+func TestRecipeRunArgsEntrypoint(t *testing.T) {
+	c := recipes.Container{ID: "matrix", Image: "example/matrix:1", Command: []string{"-c", "exec server"}}
+	args := recipeRunArgs(recipeApp{ID: "test"}, c)
+	if slices.Contains(args, "--entrypoint") || !slices.Equal(args[len(args)-3:], []string{c.Image, "-c", "exec server"}) {
+		t.Fatal(args)
+	}
+	c.Entrypoint = "/bin/sh"
+	args = recipeRunArgs(recipeApp{ID: "test"}, c)
+	if !slices.Equal(args[len(args)-5:], []string{"--entrypoint", "/bin/sh", c.Image, "-c", "exec server"}) {
+		t.Fatal(args)
+	}
+}
 
 func TestRecipeAppIsolationAndMounts(t *testing.T) {
 	a := &Server{}

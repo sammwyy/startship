@@ -143,6 +143,9 @@ func recipeRunArgs(app recipeApp, c recipes.Container) []string {
 	if c.Healthcheck != "" {
 		args = append(args, "--health-cmd", c.Healthcheck, "--health-interval", "5s", "--health-timeout", "3s", "--health-start-period", "10s")
 	}
+	if c.Entrypoint != "" {
+		args = append(args, "--entrypoint", c.Entrypoint)
+	}
 	args = append(args, c.Image)
 	for _, v := range c.Command {
 		args = append(args, recipes.Expand(v, app.Config))

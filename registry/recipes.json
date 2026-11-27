@@ -5397,6 +5397,125 @@
           }
         }
       }
+    },
+    {
+      "id": "matrix-synapse",
+      "logo": "matrix-synapse",
+      "category": "communication",
+      "name": "Matrix Synapse",
+      "icon": "server",
+      "description": "Matrix homeserver with a private PostgreSQL database.",
+      "version": "v1.159.0",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "synapse",
+            "POSTGRES_DB": "synapse",
+            "POSTGRES_PASSWORD": "${db_password}",
+            "POSTGRES_INITDB_ARGS": "--encoding=UTF8 --locale=C"
+          },
+          "mounts": {
+            "database": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "synapse",
+          "image": "ghcr.io/element-hq/synapse:v1.159.0",
+          "entrypoint": "/bin/sh",
+          "env": {
+            "SYNAPSE_SERVER_NAME": "${server_name}",
+            "SYNAPSE_REPORT_STATS": "no",
+            "SYNAPSE_NO_TLS": "yes",
+            "POSTGRES_HOST": "postgres",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "command": [
+            "-ec",
+            "umask 077\ncase \"$SYNAPSE_SERVER_NAME\" in ''|*[!A-Za-z0-9.-]*) echo 'Set the Matrix server name to a hostname without a scheme or port.' >&2; exit 1;; esac\nif [ ! -s /data/homeserver.yaml ]; then\n  POSTGRES_PASSWORD=placeholder SYNAPSE_CONFIG_PATH=/data/homeserver.yaml.tmp /start.py migrate_config\n  python -c 'import os, sys, yaml; p = sys.argv[1]; config = yaml.safe_load(open(p)); config[\"database\"][\"args\"][\"password\"] = os.environ[\"POSTGRES_PASSWORD\"]; config[\"listeners\"][0][\"x_forwarded\"] = True; config[\"public_baseurl\"] = \"https://\" + os.environ[\"SYNAPSE_SERVER_NAME\"] + \"/\"; open(p, \"w\").write(yaml.safe_dump(config))' /data/homeserver.yaml.tmp\n  mv /data/homeserver.yaml.tmp /data/homeserver.yaml\nfi\nif [ ! -s \"/data/$SYNAPSE_SERVER_NAME.signing.key\" ]; then /start.py run --generate-keys; fi\nexec /start.py run"
+          ],
+          "mounts": {
+            "data": "/data"
+          }
+        }
+      ],
+      "volumes": ["data", "database"],
+      "http": [
+        {
+          "id": "web",
+          "container": "synapse",
+          "port": 8008
+        }
+      ],
+      "ports": [],
+      "config_schema": {
+        "type": "object",
+        "required": ["server_name", "db_password"],
+        "properties": {
+          "server_name": {
+            "type": "string",
+            "title": "Matrix server hostname",
+            "description": "Use the mapped HTTPS hostname without the scheme or port. This cannot be changed after initialization.",
+            "minLength": 1
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use a unique password and retain it for this database.",
+            "minLength": 16
+          }
+        }
+      },
+      "files": []
+    },
+    {
+      "id": "dendrite",
+      "logo": "dendrite",
+      "category": "communication",
+      "name": "Matrix Dendrite",
+      "icon": "server",
+      "description": "Lightweight Matrix homeserver with persistent SQLite storage.",
+      "version": "v0.15.1",
+      "containers": [
+        {
+          "id": "dendrite",
+          "image": "ghcr.io/element-hq/dendrite-monolith:v0.15.1",
+          "entrypoint": "/bin/sh",
+          "env": {
+            "SERVER_NAME": "${server_name}"
+          },
+          "command": [
+            "-ec",
+            "umask 077\ncd /data\nif [ ! -s matrix_key.pem ]; then generate-keys -private-key matrix_key.pem.tmp; mv matrix_key.pem.tmp matrix_key.pem; fi\nif [ ! -s dendrite.yaml ]; then generate-config -server \"$SERVER_NAME\" -dir /data > dendrite.yaml.tmp; mv dendrite.yaml.tmp dendrite.yaml; fi\nexec dendrite -config dendrite.yaml"
+          ],
+          "mounts": {
+            "data": "/data"
+          }
+        }
+      ],
+      "volumes": ["data"],
+      "http": [
+        {
+          "id": "web",
+          "container": "dendrite",
+          "port": 8008
+        }
+      ],
+      "ports": [],
+      "config_schema": {
+        "type": "object",
+        "required": ["server_name"],
+        "properties": {
+          "server_name": {
+            "type": "string",
+            "title": "Matrix server hostname",
+            "description": "Use the mapped HTTPS hostname. This cannot be changed after initialization.",
+            "minLength": 1
+          }
+        }
+      },
+      "files": []
     }
   ]
 }
