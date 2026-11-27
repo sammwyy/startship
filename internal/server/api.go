@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/sammwyy/startship/internal/catalog"
 	"github.com/sammwyy/startship/internal/detect"
+	"github.com/sammwyy/startship/internal/migrate"
 	"github.com/sammwyy/startship/internal/pipeline"
 	"github.com/sammwyy/startship/internal/recipes"
 	"github.com/sammwyy/startship/internal/router"
@@ -58,6 +59,10 @@ type Server struct {
 	challenges          sync.Map
 	issuing             sync.Map
 	legacyCertificate   func(*tls.ClientHelloInfo) (*tls.Certificate, error)
+	migrateHost         migrate.Host
+	migrationsMu        sync.Mutex
+	migrationJobs       []*migrate.MigrationJob
+	migrationJobsLoaded bool
 }
 
 // Response-only fields must not be persisted or accepted as app configuration.
@@ -384,7 +389,7 @@ func (a *Server) api() http.Handler {
 			a.detectAPI(w, r, x)
 			return
 		}
-		if a.activityAPI(w, r, p, x) || a.accessAPI(w, r, p, uid, x) || a.systemAPI(w, r, p, uid, x) {
+		if a.activityAPI(w, r, p, x) || a.accessAPI(w, r, p, uid, x) || a.migrateAPI(w, r, p, uid, x) || a.systemAPI(w, r, p, uid, x) {
 			return
 		}
 		kind := p[1]

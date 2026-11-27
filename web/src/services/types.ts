@@ -392,3 +392,151 @@ export interface Traffic {
     duration_ms: number;
   }[];
 }
+
+export type MigrationPlatform = "openship" | "dokploy" | "coolify";
+
+export interface MigrationDiscoveredDomain {
+  host: string;
+  https?: boolean;
+  path_prefix?: string;
+  strip_prefix?: boolean;
+  port?: number;
+}
+
+export interface MigrationDiscoveredVolume {
+  source_type: string;
+  source_name: string;
+  mount_path: string;
+  read_only?: boolean;
+}
+
+export interface MigrationDiscoveredProject {
+  id: string;
+  platform: MigrationPlatform;
+  source_org?: string;
+  source_project?: string;
+  environment?: string;
+  name: string;
+  description?: string;
+  source_kind: string;
+  git_url?: string;
+  branch?: string;
+  root_dir?: string;
+  build_type?: string;
+  dockerfile?: string;
+  docker_image?: string;
+  port?: number;
+  env_keys?: string[];
+  env_count: number;
+  domains?: MigrationDiscoveredDomain[];
+  volumes?: MigrationDiscoveredVolume[];
+  log_count: number;
+  linked_services?: string[];
+  compatible: boolean;
+  warnings?: string[];
+}
+
+export interface MigrationDiscoveredService {
+  id: string;
+  platform: MigrationPlatform;
+  source_org?: string;
+  source_project?: string;
+  environment?: string;
+  name: string;
+  engine?: string;
+  raw_engine?: string;
+  image?: string;
+  version?: string;
+  external_port?: number;
+  config_keys?: string[];
+  volumes?: MigrationDiscoveredVolume[];
+  compatible: boolean;
+  warnings?: string[];
+}
+
+export interface MigrationDetectedPlatform {
+  platform: MigrationPlatform;
+  name: string;
+  detected: boolean;
+  status: string;
+  data_dir?: string;
+  db_container?: string;
+  error?: string;
+  warnings?: string[];
+  projects: MigrationDiscoveredProject[];
+  services: MigrationDiscoveredService[];
+}
+
+export interface MigrationProjectSelection {
+  source_id: string;
+  target_workspace_id?: string;
+  target_name?: string;
+}
+
+export interface MigrationServiceSelection {
+  source_id: string;
+  target_workspace_id?: string;
+  target_name?: string;
+}
+
+export interface MigrationImportRequest {
+  platform: MigrationPlatform;
+  mode: "all" | "cherry_pick";
+  target_workspace_id?: string;
+  create_workspace_name?: string;
+  copy_volumes?: boolean;
+  import_domains?: boolean;
+  import_env?: boolean;
+  import_logs?: boolean;
+  start_services?: boolean;
+  deploy_projects?: boolean;
+  projects?: MigrationProjectSelection[];
+  services?: MigrationServiceSelection[];
+}
+
+export interface MigrationProjectResult {
+  source_id: string;
+  source_name: string;
+  project_id?: string;
+  project_name?: string;
+  workspace_id?: string;
+  volumes_copied: number;
+  domains_imported: number;
+  env_count: number;
+  logs_imported: number;
+  deployment_id?: string;
+  status: string;
+  warnings?: string[];
+  error?: string;
+}
+
+export interface MigrationServiceResult {
+  source_id: string;
+  source_name: string;
+  service_id?: string;
+  service_name?: string;
+  workspace_id?: string;
+  engine?: string;
+  volumes_copied: number;
+  attached_projects: number;
+  status: string;
+  warnings?: string[];
+  error?: string;
+}
+
+export interface MigrationJob {
+  id: string;
+  platform: MigrationPlatform;
+  mode: string;
+  status: string;
+  target_workspace_id?: string;
+  target_workspace_name?: string;
+  created_by?: string;
+  started_at: string;
+  finished_at?: string;
+  projects: MigrationProjectResult[];
+  services: MigrationServiceResult[];
+  logs: string[];
+  warnings?: string[];
+  error?: string;
+}

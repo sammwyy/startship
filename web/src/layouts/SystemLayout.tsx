@@ -6,20 +6,24 @@ import { Heading } from "../components/Heading";
 import { Icon } from "../components/Icon";
 
 export function SystemLayout() {
-  const { can } = useSession();
-  const network = useLocation().pathname.endsWith("/network-firewall");
+  const { user, can } = useSession();
+  const pathname = useLocation().pathname;
+  const network = pathname.endsWith("/network-firewall");
+  const migrations = pathname.endsWith("/migrations");
   const { data } = useQuery(queries.updates());
+  const title = network
+    ? "Network firewall"
+    : migrations
+      ? "Migrations"
+      : "Node settings";
+  const subtitle = network
+    ? "Host-wide packet filtering for IPv4 and IPv6."
+    : migrations
+      ? "Import projects, services, volumes, domains, and logs from Openship, Dokploy, or Coolify."
+      : "Manage this Startship installation and your dashboard preferences.";
   return (
     <>
-      <Heading
-        kicker="System"
-        title={network ? "Network firewall" : "Node settings"}
-        subtitle={
-          network
-            ? "Host-wide packet filtering for IPv4 and IPv6."
-            : "Manage this Startship installation and your dashboard preferences."
-        }
-      />
+      <Heading kicker="System" title={title} subtitle={subtitle} />
       <nav className="settings-navigation" aria-label="System navigation">
         <NavLink to="/system" end>
           <Icon name="settings" />
@@ -36,6 +40,12 @@ export function SystemLayout() {
           <NavLink to="/system/network-firewall">
             <Icon name="shield" />
             Network firewall
+          </NavLink>
+        )}
+        {user?.platform_admin && (
+          <NavLink to="/system/migrations">
+            <Icon name="download" />
+            Migrations
           </NavLink>
         )}
       </nav>
