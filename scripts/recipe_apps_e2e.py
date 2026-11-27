@@ -76,6 +76,18 @@ def wait(predicate, timeout=80):
     raise AssertionError("timed out waiting for " + str(predicate))
 
 
+def delete_app(request, path):
+    deadline = time.monotonic() + 15
+    while True:
+        try:
+            return request(path, method="DELETE")
+        except urllib.error.HTTPError as error:
+            with error:
+                if error.code != 409 or json.load(error).get("error") != "app is busy" or time.monotonic() >= deadline:
+                    raise
+            time.sleep(0.25)
+
+
 def run():
     docker("pull", IMAGE)
     if docker("image", "inspect", "busybox:1.37", check=False).returncode:
@@ -191,9 +203,9 @@ def run():
             assert [e["name"] for e in request("catalog")] == ["Remote Redis"]
             assert RegistryHandler.requests == ["/recipes", "/services", "/services", "/recipes"]
             assert wait(lambda: proxy_get(host))["message"] == "persisted"
-            request(path, method="DELETE")
+            delete_app(request, path)
             docker("volume", "inspect", one_network + "-vol-data")
-            request(f"{base}/{two}?purge=true", method="DELETE")
+            delete_app(request, f"{base}/{two}?purge=true")
             assert docker("volume", "inspect", two_network + "-vol-data", check=False).returncode
             print("Recipe apps E2E PASS: remote registry, private networks, public port, domain, config, lifecycle and volume retention")
         except Exception:
