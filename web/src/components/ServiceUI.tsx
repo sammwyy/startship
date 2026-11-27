@@ -35,7 +35,7 @@ export function ServiceModal({
     >
       <div className="service-modal-head">
         <div>
-          <span className="eyebrow">{eyebrow}</span>
+          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
           <h2 id={id}>{title}</h2>
           {description && <p>{description}</p>}
         </div>

@@ -6,7 +6,6 @@ import type { ServiceEngine } from "../services/types";
 import { ServiceModal } from "./ServiceUI";
 import { ServiceConfig } from "./ServiceConfig";
 import { ErrorMessage, Loading } from "./ui";
-import { Icon } from "./Icon";
 import { CatalogRefresh } from "./CatalogRefresh";
 import { Marketplace } from "./Marketplace";
 
@@ -27,11 +26,11 @@ export function NewServiceModal({
       description={
         engine
           ? "Make it yours. We’ll handle the container and persistent storage."
-          : "Databases, caches and queues. Ready for your next idea."
+          : undefined
       }
       onClose={onClose}
-      className="catalog-modal"
-      eyebrow={engine ? "CONFIGURATION" : "ADD SERVICE"}
+      className={engine ? "catalog-modal" : "catalog-modal service-marketplace"}
+      eyebrow={engine ? "CONFIGURATION" : ""}
     >
       {engine ? (
         <ServiceConfig
@@ -64,14 +63,9 @@ export function NewServiceModal({
                 </button>
               )}
             />
-            <CatalogRefresh path="catalog" workspaceId={workspaceId} />
           </div>
-          <div className="service-modal-foot">
-            <span className="muted small">
-              <Icon name="lock" /> Private by default. Persistent where it
-              matters.
-            </span>
-            <button onClick={onClose}>Cancel</button>
+          <div className="service-marketplace-footer">
+            <CatalogRefresh path="catalog" workspaceId={workspaceId} />
           </div>
         </>
       )}
