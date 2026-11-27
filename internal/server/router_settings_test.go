@@ -133,7 +133,10 @@ func TestSystemRouterSettings(t *testing.T) {
 	candidate := routerTestListener(t)
 	newHTTP := candidate.Addr().String()
 	candidate.Close()
-	call(true, "PUT", `{"enabled":true,"http_listen":["`+newHTTP+`","`+occupied.Addr().String()+`"],"https_listen":["127.0.0.1:0"]}`, 409)
+	bindError := call(true, "PUT", `{"enabled":true,"http_listen":["`+newHTTP+`","`+occupied.Addr().String()+`"],"https_listen":["127.0.0.1:0"]}`, 409)
+	if !strings.Contains(bindError, "pick a free port or stop the process using it") || strings.Contains(bindError, "CAP_NET_BIND_SERVICE") {
+		t.Fatal(bindError)
+	}
 	checkProxy(oldURL, true)
 	checkProxy(httpsURL, true)
 	checkProxy("http://"+newHTTP, false)

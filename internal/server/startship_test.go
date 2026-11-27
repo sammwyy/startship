@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -156,7 +157,7 @@ func TestListenerErrors(t *testing.T) {
 	defer l.Close()
 	for _, name := range []string{"dashboard", "proxy"} {
 		_, err := listen(name, l.Addr().String(), "TEST_ADDR", ":8081")
-		if err == nil || !strings.Contains(err.Error(), name+": cannot listen on "+l.Addr().String()) || !strings.Contains(err.Error(), "set TEST_ADDR=:8081") {
+		if !errors.Is(err, syscall.EADDRINUSE) || !strings.Contains(err.Error(), name+": cannot listen on "+l.Addr().String()) || !strings.Contains(err.Error(), "pick a free port or stop the process using it") || strings.Contains(err.Error(), "CAP_NET_BIND_SERVICE") {
 			t.Fatal(err)
 		}
 	}
@@ -166,7 +167,7 @@ func TestListenerErrors(t *testing.T) {
 	}
 	addr := first.Addr().String()
 	first.Close()
-	if err := serve([]*http.Server{{Addr: addr}, {Addr: l.Addr().String()}}); err == nil || !strings.Contains(err.Error(), "STARTSHIP_HTTP_ADDR=:8081") {
+	if err := serve([]*http.Server{{Addr: addr}, {Addr: l.Addr().String()}}); !errors.Is(err, syscall.EADDRINUSE) || !strings.Contains(err.Error(), "pick a free port or stop the process using it") {
 		t.Fatal(err)
 	}
 	reopened, err := net.Listen("tcp", addr)
@@ -174,6 +175,25 @@ func TestListenerErrors(t *testing.T) {
 		t.Fatal("listener leaked after startup failure:", err)
 	}
 	reopened.Close()
+}
+func TestRouterListenErrorGuidance(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		hint string
+	}{
+		{"permission", syscall.EACCES, "; set STARTSHIP_HTTP_ADDR=:8081 or run with CAP_NET_BIND_SERVICE for privileged ports"},
+		{"other", syscall.EADDRNOTAVAIL, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bindErr := &net.OpError{Op: "listen", Net: "tcp", Err: os.NewSyscallError("bind", tc.err)}
+			err := listenError("proxy", "127.0.0.1:80", "STARTSHIP_HTTP_ADDR", ":8081", bindErr)
+			want := "proxy: cannot listen on 127.0.0.1:80 (" + bindErr.Error() + ")" + tc.hint
+			if !errors.Is(err, tc.err) || err.Error() != want {
+				t.Fatalf("listen error = %q; want %q wrapping %v", err, want, tc.err)
+			}
+		})
+	}
 }
 func TestRouteNormalizationAPI(t *testing.T) {
 	a := testServer(t)

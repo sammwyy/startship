@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/sammwyy/startship/internal/config"
 	"github.com/sammwyy/startship/internal/firewall"
@@ -20,9 +21,19 @@ import (
 func listen(name, addr, variable, fallback string) (net.Listener, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
-		return nil, fmt.Errorf("%s: cannot listen on %s (%w); set %s=%s or run with CAP_NET_BIND_SERVICE for privileged ports", name, addr, err, variable, fallback)
+		return nil, listenError(name, addr, variable, fallback, err)
 	}
 	return l, nil
+}
+func listenError(name, addr, variable, fallback string, err error) error {
+	switch {
+	case errors.Is(err, os.ErrPermission):
+		return fmt.Errorf("%s: cannot listen on %s (%w); set %s=%s or run with CAP_NET_BIND_SERVICE for privileged ports", name, addr, err, variable, fallback)
+	case errors.Is(err, syscall.EADDRINUSE):
+		return fmt.Errorf("%s: cannot listen on %s (%w); pick a free port or stop the process using it", name, addr, err)
+	default:
+		return fmt.Errorf("%s: cannot listen on %s (%w)", name, addr, err)
+	}
 }
 func serve(servers []*http.Server, groups ...int) error {
 	listeners := make([]*boundServer, 0, len(servers))
