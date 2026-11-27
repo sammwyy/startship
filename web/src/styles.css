@@ -993,7 +993,7 @@
 }
 .listen-picker-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 110px;
+  grid-template-columns: minmax(0, 1fr) 116px;
   gap: 8px;
   align-items: stretch;
 }

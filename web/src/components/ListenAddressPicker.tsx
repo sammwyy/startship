@@ -156,8 +156,7 @@ export function ListenAddressPicker({
           </button>
         </Popover>
         {!customMode && (
-          <label className="listen-picker-port" htmlFor={`${id}-port`}>
-            <span className="sr-only">{`${label} port`}</span>
+          <div className="listen-picker-port">
             <input
               id={`${id}-port`}
               aria-label={`${label} port`}
@@ -172,7 +171,7 @@ export function ListenAddressPicker({
                 onChange(formatListen(currentIface, event.target.value))
               }
             />
-          </label>
+          </div>
         )}
       </div>
       {customMode && (
