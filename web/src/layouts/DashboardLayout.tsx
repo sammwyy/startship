@@ -18,7 +18,7 @@ import { Brand, Icon } from "../components/Icon";
 import { Badge, Field, ThemeButton } from "../components/ui";
 import { Popover } from "../components/Popover";
 import { SystemUpdateLink } from "../components/SystemUpdateLink";
-import { useLiveStatus, useLiveSubscription } from "../providers/LiveProvider";
+import { useLiveSubscription } from "../providers/LiveProvider";
 
 interface DashboardContext {
   workspace?: Workspace;
@@ -48,7 +48,6 @@ export function DashboardLayout() {
   );
   useLiveSubscription({ topic: "system_update" });
   useLiveSubscription({ topic: "workspaces" });
-  const liveStatus = useLiveStatus();
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem("startship-sidebar-collapsed") === "true",
   );
@@ -155,7 +154,7 @@ export function DashboardLayout() {
               </span>
               <span>{w.name}</span>
               {w.id === workspace?.id && (
-                <span className="current-dot" aria-label="Current workspace" />
+                <small className="current-workspace">Current</small>
               )}
             </Link>
           ))}
@@ -288,20 +287,6 @@ export function DashboardLayout() {
             >
               <Outlet />
             </div>
-            <footer className="app-footer">
-              <span>
-                Startship <span className="footer-separator">/</span> Deployment
-                platform
-              </span>
-              <span className={`live-connection ${liveStatus}`} role="status">
-                <span />
-                {liveStatus === "connected"
-                  ? "Live updates connected"
-                  : liveStatus === "disconnected"
-                    ? "Live updates disconnected"
-                    : "Connecting live updates…"}
-              </span>
-            </footer>
           </main>
         </div>
       </div>

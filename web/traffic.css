@@ -5,7 +5,6 @@
 .traffic-controls { display: flex; align-items: center; gap: 18px; }
 .traffic-live { font: 10px ui-monospace,monospace; color: var(--success); display: flex; align-items: center; gap: 7px; white-space: nowrap; }
 .traffic-live.offline { color: var(--error); }
-.traffic-dot { background: var(--traffic-lime); width: 5px; height: 5px; border-radius: 50%; display: inline-block; box-shadow: 0 0 0 3px var(--accent-soft); }
 .traffic-ranges { display: flex; border: 1px solid var(--line-strong); padding: 3px; border-radius: 7px; gap: 3px; }
 .traffic-ranges button { padding: 4px 11px; min-height: 25px; border-radius: 4px; border: 0; font: 10px ui-monospace,monospace; color: var(--muted); }
 .traffic-ranges button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }

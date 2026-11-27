@@ -65,15 +65,6 @@
   font-weight: 600;
 }
 
-.uptime-state::before {
-  content: "";
-  background: currentColor;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
 .uptime-operational {
   --state-ink: var(--success);
   --state-fill: var(--success-bg);

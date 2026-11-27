@@ -133,15 +133,6 @@
 .fw-mode button[aria-pressed="true"] {
   color: var(--success);
 }
-.fw-live {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--muted);
-}
-.fw-live.connected {
-  background: var(--success);
-}
 .fw-mode-note {
   display: flex;
   gap: 10px;

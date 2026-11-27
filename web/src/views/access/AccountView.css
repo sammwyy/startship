@@ -211,15 +211,13 @@
   font-size: inherit;
 }
 .activity-scope,
-.session-current,
-.activity-live {
+.session-current {
   padding: 2px 7px;
   border-radius: 5px;
   border: 1px solid var(--line);
   color: var(--muted);
   font-size: 11px;
 }
-.activity-live[data-connected="true"],
 .session-current {
   color: var(--success);
 }

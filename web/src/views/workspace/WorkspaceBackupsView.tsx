@@ -60,10 +60,6 @@ export function WorkspaceBackupsView() {
                               ` · last ${new Date(last.created).toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
                           </span>
                         </span>
-                        <span
-                          className={`backup-dot ${s.backup?.enabled ? "on" : ""}`}
-                          aria-hidden="true"
-                        />
                       </Link>
                     </li>
                   );

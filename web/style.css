@@ -135,7 +135,6 @@ tr.selected td:first-child { box-shadow: inset 2px 0 var(--success); }
 .select-deploy { padding: 3px 0; min-height: 25px; font: 10px ui-monospace, monospace; border: 0; border-radius: 3px; }
 .select-deploy .icon { width: 13px; height: 13px; color: var(--muted); }
 .badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 20px; padding: 3px 8px; font-size: 9px; text-transform: capitalize; background: var(--raised); color: var(--muted); white-space: nowrap; }
-.badge::before { content: ''; width: 4px; height: 4px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
 .badge.running { background: var(--success-bg); color: var(--success); }
 .badge.failed { background: var(--error-bg); color: var(--error); }
 .badge.building, .badge.queued, .badge.testing, .badge.starting { background: var(--warning-bg); color: var(--warning); }
@@ -154,7 +153,6 @@ tr.selected td:first-child { box-shadow: inset 2px 0 var(--success); }
 .log-title { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 .log-title .icon { width: 14px; height: 14px; color: var(--muted); }
 .live { color: var(--muted); font-size: 9px; white-space: nowrap; }
-.dot { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--success); margin-right: 6px; vertical-align: middle; }
 .log { background: var(--terminal); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); font: 10px/2 ui-monospace, SFMono-Regular, monospace; padding: 20px; margin: 0; min-height: 320px; max-height: 480px; overflow: auto; tab-size: 2; }
 .note { border: 1px solid var(--line); border-radius: 10px; background: var(--accent-soft); color: var(--muted); padding: 13px 16px; font-size: 10px; margin-top: 14px; overflow-wrap: anywhere; }
 .note summary { cursor: pointer; }
@@ -183,8 +181,6 @@ dialog form { display: flex; flex-direction: column; min-height: 0; overflow: hi
 dialog .modal-body { overflow-y: auto; min-height: 0; padding: 4px; }
 dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid var(--line); margin-top: 18px; }
 #toast { position: fixed; right: 28px; bottom: 28px; max-width: calc(100vw - 40px); border: 1px solid var(--line-strong); color: var(--text); background: var(--raised); border-radius: 12px; padding: 13px 20px; display: none; z-index: 1000; box-shadow: var(--shadow); font-size: 12px; overflow-wrap: anywhere; }
-.app-footer { display: flex; justify-content: space-between; gap: 16px; margin: 0 24px; padding: 14px 0; border-top: 1px solid var(--line); color: var(--faint); font-size: 9px; }
-.footer-separator { padding: 0 8px; color: var(--line-strong); }
 .auth { position: relative; width: calc(100% - 48px); max-width: 1440px; min-height: calc(100vh - 48px); margin: 24px auto; display: grid; grid-template-columns: 1.15fr 1fr; border: 1px solid var(--line-strong); border-radius: 22px; background: var(--bg); overflow: hidden; }
 .auth-header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 28px 38px; border-bottom: 1px solid var(--line); }
 .auth-story { padding: 36px 48px; background: var(--auth-block); display: flex; flex-direction: column; justify-content: space-between; gap: 36px; }
@@ -320,7 +316,6 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .dashboard-body { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; margin: 8px 8px 8px 0; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
 .sidebar-layout .main { min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; }
 .sidebar-layout .content { flex: 1; }
-.sidebar-layout .app-footer { flex-shrink: 0; }
 #desktop-sidebar { min-height: 0; height: 100%; background: var(--terminal); overflow: hidden; }
 .sidebar { max-height: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 14px 12px 10px; }
 .sidebar-top, .sidebar-selector, .sidebar-bottom { flex-shrink: 0; }
@@ -355,7 +350,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 :root:has(#navigation-drawer[open]) { overflow: hidden; }
 .sidebar-menu a, .sidebar-menu button { display: flex; align-items: center; justify-content: flex-start; gap: 9px; width: 100%; padding: 9px 10px; min-height: 36px; border: 0; border-radius: 7px; font-size: 11px; text-align: left; white-space: normal; }
 .sidebar-menu a:hover, .sidebar-menu button:hover, .sidebar-menu a[aria-current] { background: var(--raised); }
-.sidebar-menu a > span:not(.workspace-initial):not(.current-dot) { min-width: 0; overflow-wrap: anywhere; }
+.sidebar-menu a > span:not(.workspace-initial) { min-width: 0; overflow-wrap: anywhere; }
 .sidebar-menu .icon { width: 14px; height: 14px; }
 .sidebar-menu .theme-toggle span { display: inline; }
 .menu-caption { padding: 7px 10px; font-size: 9px; color: var(--muted); overflow-wrap: anywhere; }
@@ -363,7 +358,7 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
 .menu-divider { border-top: 1px solid var(--line); margin: 6px 0; }
 .workspace-options { max-height: 230px; overflow-y: auto; }
 .workspace-initial { display: grid; place-items: center; width: 24px; height: 24px; flex-shrink: 0; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--success); background: var(--accent-soft); font-size: 10px; }
-.current-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--success); margin-left: auto; flex-shrink: 0; }
+.current-workspace { color: var(--muted); margin-left: auto; flex-shrink: 0; }
 .account-details { display: flex; align-items: center; gap: 14px; margin: 24px 0; }
 .account-details .avatar { width: 42px; height: 42px; }
 .account-details p { margin: 0; }
@@ -433,8 +428,6 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
   .project-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat { padding: 0 18px; }
   .stat > .icon { display: none; }
-  .app-footer { margin: 0 20px; font-size: 8px; }
-  .app-footer > span:last-child { display: none; }
   .auth { grid-template-columns: minmax(0, 1fr); }
   .auth-header { padding: 24px; }
   .auth-story { padding: 30px; gap: 20px; }
@@ -496,5 +489,4 @@ dialog .form-actions { flex-shrink: 0; padding-top: 18px; border-top: 1px solid 
   .search-field { width: 175px; }
   .project-row { gap: 9px; padding: 13px; }
   .project-row-copy > span { font-size: 9px; }
-  .app-footer { padding: 12px 0; }
 }

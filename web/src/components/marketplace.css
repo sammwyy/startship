@@ -8,14 +8,6 @@
   color: var(--muted);
   font-size: 0.75rem;
 }
-.collection-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-left: 0.7rem;
-  padding-left: 0.7rem;
-  border-left: 1px solid var(--line);
-}
 .collection-switcher,
 .marketplace-filters {
   display: flex;

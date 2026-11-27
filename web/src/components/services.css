@@ -52,12 +52,6 @@
   align-items: center;
   gap: 6px;
 }
-.live-dot {
-  width: 5px;
-  height: 5px;
-  background: var(--success);
-  border-radius: 50%;
-}
 .services-table,
 .volumes-table {
   border: 1px solid var(--line);

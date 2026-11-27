@@ -208,17 +208,20 @@ export function FirewallView() {
                 </NavLink>
               ))}
             </div>
-            <span className="fw-meta">
-              <i
-                className={`fw-live ${status === "connected" ? "connected" : ""}`}
-              />
-              {status === "connected"
-                ? "Live updates"
-                : status === "disconnected"
-                  ? "Disconnected"
-                  : "Connecting…"}
-              {!manage ? " · Read only" : ""}
-            </span>
+            {(status !== "connected" || !manage) && (
+              <span className="fw-meta">
+                {[
+                  status === "disconnected"
+                    ? "Disconnected"
+                    : status !== "connected"
+                      ? "Connecting…"
+                      : null,
+                  !manage && "Read only",
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </span>
+            )}
           </div>
           {data.policy.mode !== "enforce" && (
             <p className="note fw-mode-note">
