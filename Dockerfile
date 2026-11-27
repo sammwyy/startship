@@ -28,5 +28,5 @@ RUN case "$TARGETARCH" in \
 COPY --from=build /startshipd /usr/local/bin/startshipd
 ENV STARTSHIP_DATA=/data
 VOLUME /data
-EXPOSE 8080 80 443
+EXPOSE 9000 80 443
 ENTRYPOINT ["startshipd"]

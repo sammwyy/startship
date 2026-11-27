@@ -118,6 +118,14 @@ func TestEditRouterSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+func TestDefaultDashboardListener(t *testing.T) {
+	cleanEnvironment(t)
+	d, err := Load([]string{"--config", configFile(t, "")}, io.Discard)
+	if err != nil || !reflect.DeepEqual(d.DashboardListen, []string{":9000"}) {
+		t.Fatal(d.DashboardListen, err)
+	}
+}
+
 func TestDaemonPrecedence(t *testing.T) {
 	cleanEnvironment(t)
 	path := configFile(t, "dashboard_listen = ['127.0.0.1:9000']\ndata_dir = '/file-data'\nacme_email = 'file@example.com'\n")
@@ -174,7 +182,7 @@ func TestDaemonErrorsAndHelp(t *testing.T) {
 		t.Fatal("missing env config accepted")
 	}
 	var out bytes.Buffer
-	if _, err := Load([]string{"--help"}, &out); !errors.Is(err, flag.ErrHelp) || !strings.Contains(out.String(), "dashboard-listen") || !strings.Contains(out.String(), "https-listen") {
+	if _, err := Load([]string{"--help"}, &out); !errors.Is(err, flag.ErrHelp) || !strings.Contains(out.String(), "dashboard-listen") || !strings.Contains(out.String(), "https-listen") || !strings.Contains(out.String(), "dashboard :9000") {
 		t.Fatal(err, out.String())
 	}
 }

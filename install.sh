@@ -1,9 +1,13 @@
 #!/bin/sh
 set -eu
 
-die() { printf '%s\n' "startship installer: $*" >&2; exit 1; }
+die() { printf '\nStartship: %s\n' "$*" >&2; exit 1; }
+section() { printf '\n%s\n' "$1"; }
+detail() { printf '  %s\n' "$@"; }
 usage() {
     cat <<'EOF'
+Startship installer
+
 Usage: sudo sh install.sh [options]
        sudo sh install.sh --uninstall
 
@@ -11,7 +15,7 @@ Install options:
   --version TAG             install release TAG instead of the latest (STARTSHIP_VERSION)
   --download-url URL        fetch release assets and checksums.txt from URL (STARTSHIP_DOWNLOAD_URL)
   --data-dir DIR            data directory, chosen on first install (STARTSHIP_DATA; default /var/lib/startship)
-  --dashboard-listen ADDRS  dashboard and API listeners, comma-separated (default :8080)
+  --dashboard-listen ADDRS  dashboard and API listeners, comma-separated (default :9000)
   --http-listen ADDRS       application router HTTP listeners, comma-separated (default :80)
   --https-listen ADDRS      application router HTTPS listeners, comma-separated (default :443)
   --no-router               disable the application router so ports 80 and 443 stay free
@@ -69,10 +73,12 @@ config=/etc/startship/config/startship.toml
 env_file=/etc/startship/startshipd.env
 if [ "$uninstall" = 1 ]; then
     [ "$options" = 1 ] || die '--uninstall takes no other options'
+    section 'Removing Startship'
     if [ -d /run/systemd/system ]; then systemctl disable --now startship-update.path startshipd.service || true; fi
     rm -f /etc/systemd/system/startshipd.service /etc/systemd/system/startship-update.path /etc/systemd/system/startship-update.service /usr/local/bin/startship /usr/local/bin/startshipd
     if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
-    printf '%s\n' "Uninstalled binaries and service; data, configuration ($config and $env_file), and service user preserved."
+    detail 'Binaries and systemd units removed.' 'Data, configuration, and the startship user were kept.'
+    detail "Configuration: $config" "Environment:   $env_file"
     exit 0
 fi
 installed_data=''
@@ -101,23 +107,30 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 fetch() { curl --fail --location --silent --show-error "$base/$1" -o "$tmp/$1"; }
+section 'Downloading Startship'
+detail "Platform: Linux $arch"
+if [ -n "$version" ]; then detail "Release: $version"; fi
 fetch checksums.txt
 for bin in startship startshipd; do
     asset="${bin}_linux_${arch}"
     fetch "$asset"
     expected=$(awk -v name="$asset" '$2 == name {print $1}' "$tmp/checksums.txt")
     [ "${#expected}" = 64 ] || die "missing or invalid checksum for $asset"
-    printf '%s  %s\n' "$expected" "$tmp/$asset" | sha256sum -c - || die "checksum mismatch for $asset"
+    printf '%s  %s\n' "$expected" "$tmp/$asset" | sha256sum -c --status - || die "checksum mismatch for $asset"
 done
+detail 'CLI and daemon checksums verified.'
 if [ "$nixpacks" = 1 ]; then
+    detail 'Downloading and verifying Nixpacks...'
     case "$arch" in
         amd64) nixarch=x86_64; nixsum=0f55de7874507b9cf7502113120bd96f2ab6979f78d10eaf2eb2ade9207b3af6 ;;
         arm64) nixarch=aarch64; nixsum=912bd02dd2bb6f9c3a9ed965fe8a68b4aa318dc7a2546e2eca6f2806a894ba39 ;;
     esac
     curl --fail --location --silent --show-error "https://github.com/railwayapp/nixpacks/releases/download/v1.41.0/nixpacks-v1.41.0-$nixarch-unknown-linux-musl.tar.gz" -o "$tmp/nixpacks.tar.gz"
-    printf '%s  %s\n' "$nixsum" "$tmp/nixpacks.tar.gz" | sha256sum -c - || die 'Nixpacks checksum mismatch'
+    printf '%s  %s\n' "$nixsum" "$tmp/nixpacks.tar.gz" | sha256sum -c --status - || die 'Nixpacks checksum mismatch'
     tar -xzf "$tmp/nixpacks.tar.gz" -C "$tmp" nixpacks
 fi
+section 'Installing Startship'
+detail 'Setting up binaries, configuration, and systemd units...'
 if ! id startship >/dev/null 2>&1; then useradd --system --home-dir "$data" --shell /usr/sbin/nologin startship; fi
 usermod -a -G docker startship
 install -d -m 0755 /usr/local/bin
@@ -156,13 +169,19 @@ configure() { # TOML EDIT_ENV [RUNNER...]
 }
 if [ -f "$config" ]; then cp "$config" "$tmp/check.toml"; fi
 configure "$tmp/check.toml" 0 || die 'invalid settings; nothing was configured'
+dashboard_summary='Dashboard: see configuration and environment below'
+if [ -n "$dashboard_listen" ]; then
+    dashboard_summary="Dashboard listeners: $dashboard_listen"
+elif [ ! -f "$env_file" ]; then
+    dashboard_summary='Dashboard:     http://localhost:9000'
+fi
 if [ ! -f "$env_file" ]; then
     printf 'STARTSHIP_DATA=%s\n' "$data" > "$env_file"
-    if [ -z "$dashboard_listen" ]; then printf '%s\n' 'STARTSHIP_DASHBOARD_ADDR=:8080' >> "$env_file"; fi
+    if [ -z "$dashboard_listen" ]; then printf '%s\n' 'STARTSHIP_DASHBOARD_ADDR=:9000' >> "$env_file"; fi
     chmod 0600 "$env_file"
 fi
 if [ ! -f "$config" ]; then
-    printf '%s\n' '# Startship daemon settings; flags > environment > this file > defaults.' '# Existing /etc/startship/startshipd.env values override these settings.' '# Remove corresponding *_ADDR entries from that env file to use file listeners.' '# dashboard_listen = ["127.0.0.1:8080"]' '# dashboard_listen = ["tailscale0:8080", "127.0.0.1:8080"]' '# http_listen = [":80"]' '# https_listen = [":443"]' '# router_disabled = false' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' |
+    printf '%s\n' '# Startship daemon settings; flags > environment > this file > defaults.' '# Existing /etc/startship/startshipd.env values override these settings.' '# Remove corresponding *_ADDR entries from that env file to use file listeners.' '# dashboard_listen = ["127.0.0.1:9000"]' '# dashboard_listen = ["tailscale0:9000", "127.0.0.1:9000"]' '# http_listen = [":80"]' '# https_listen = [":443"]' '# router_disabled = false' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' |
         runuser -u startship -- sh -c 'umask 027; cat > "$1"' sh "$config"
 fi
 configure "$config" 1 runuser -u startship -- || die "could not write settings to $config"
@@ -176,12 +195,27 @@ printf '%s\n' '[Unit]' 'Description=Install the Startship release requested from
 sed -i "s|/var/lib/startship|$data|g" /etc/systemd/system/startshipd.service /etc/systemd/system/startship-update.path /etc/systemd/system/startship-update.service
 if [ "$start" = 0 ]; then
     if [ -d /run/systemd/system ]; then systemctl daemon-reload; fi
-    printf '%s\n' 'Services installed but not started. Start them: systemctl enable --now startshipd.service startship-update.path'
+    status='Services were not started (--no-start).'
 elif [ -d /run/systemd/system ]; then
+    detail 'Starting systemd services...'
     systemctl daemon-reload
     systemctl enable --now startshipd.service startship-update.path
     systemctl restart startshipd.service
+    status=''
 else
-    printf '%s\n' 'systemd is not running; service installed but not started. On boot: systemctl enable --now startshipd'
+    status='Services were not started because systemd is not running.'
 fi
-printf '%s\n' 'Installed. Local CLI works without login as root or for members of the startship group.' 'Add a local user: usermod -aG startship USER (then log in again).' 'Use startship login URL only for remote servers.' 'Dashboard first-run administrator credentials: journalctl -u startshipd' 'Treat credentials logs as sensitive. Complete dashboard setup by signing in and changing the password.'
+section 'Startship installed'
+detail "$dashboard_summary" "Data:          $data" "Configuration: $config" "Environment:   $env_file"
+if [ -n "$status" ]; then
+    section 'Start the services'
+    detail "$status" 'Run when systemd is available:' '  sudo systemctl enable --now startshipd.service startship-update.path'
+fi
+section 'First sign-in'
+detail 'After the daemon starts, retrieve the temporary admin credentials:' \
+    '  sudo journalctl -u startshipd' \
+    'Keep the logs private and change the password when you sign in.'
+section 'CLI access'
+detail 'Local: root and members of the startship group do not need to log in.' \
+    '  sudo usermod -aG startship USER  (then sign out and back in)' \
+    'Remote: startship login URL'

@@ -23,7 +23,7 @@ startship whoami
 startship workspaces list
 ```
 
-Login prompts for the username and password. Session settings are stored in `$XDG_CONFIG_HOME/startship/config.json` (or `~/.config/startship/config.json`). `STARTSHIP_SERVER` and `STARTSHIP_TOKEN` override saved server and credentials; `STARTSHIP_TOKEN` also accepts a personal access token (`sst_…`), sent as a Bearer token. Without a saved or explicit server, the CLI uses the local socket if accessible and otherwise falls back to `http://localhost:8080`. Run `startship logout` to end a saved session.
+Login prompts for the username and password. Session settings are stored in `$XDG_CONFIG_HOME/startship/config.json` (or `~/.config/startship/config.json`). `STARTSHIP_SERVER` and `STARTSHIP_TOKEN` override saved server and credentials; `STARTSHIP_TOKEN` also accepts a personal access token (`sst_…`), sent as a Bearer token. Without a saved or explicit server, the CLI uses the local socket if accessible and otherwise falls back to `http://localhost:9000`. Run `startship logout` to end a saved session.
 
 The CLI uses a saved refresh credential to renew its five-minute access credential. HTTP sessions last up to seven days unless revoked sooner. If the saved session is no longer valid, sign in again.
 

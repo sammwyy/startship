@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	daemonconfig "github.com/sammwyy/startship/internal/config"
 	"github.com/sammwyy/startship/internal/update"
 	"github.com/sammwyy/startship/internal/version"
 	"io"
@@ -59,7 +60,7 @@ func (c *cli) transport() (string, *http.Client, error) {
 			}
 		}
 		if server == "" {
-			server = "http://localhost:8080"
+			server = daemonconfig.DefaultDashboardURL
 		}
 	}
 	u, err := url.Parse(server)
@@ -401,7 +402,7 @@ Names or IDs accepted for workspaces/projects/containers. JSON objects may be
 passed as '-' to read stdin. STARTSHIP_SERVER and STARTSHIP_TOKEN override config.
 Without a saved server, the local admin socket needs no login (root/startship group).
 STARTSHIP_SOCKET overrides /run/startship/startship.sock; unix:///path is also accepted.
-If unavailable, uses http://localhost:8080. Use login URL for remote servers.
+If unavailable, uses ` + daemonconfig.DefaultDashboardURL + `. Use login URL for remote servers.
 `
 
 func (c *cli) run(args []string) error {
@@ -557,7 +558,7 @@ func (c *cli) run(args []string) error {
 			c.Token, c.Refresh = "", ""
 		}
 		if c.Server == "" {
-			c.Server = "http://localhost:8080"
+			c.Server = daemonconfig.DefaultDashboardURL
 		}
 		u, e := c.prompt("Username", false)
 		if e != nil {

@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 
+	"github.com/sammwyy/startship/internal/config"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -79,6 +80,6 @@ func (a *Server) bootstrapAdmin(username, password string) error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	log.Printf("\n============================================================\nSTARTSHIP FIRST-RUN ADMIN — SETUP PENDING\nDashboard: http://localhost:8080 (or your server address)\nUsername: %s\nPassword: %s\nYou MUST change this password on first sign-in.\nUntil setup is complete, restarting rotates these credentials.\n============================================================", username, password)
+	log.Printf("\n============================================================\nSTARTSHIP FIRST-RUN ADMIN — SETUP PENDING\nDefault dashboard: %s (or your server address)\nUsername: %s\nPassword: %s\nYou MUST change this password on first sign-in.\nUntil setup is complete, restarting rotates these credentials.\n============================================================", config.DefaultDashboardURL, username, password)
 	return nil
 }
