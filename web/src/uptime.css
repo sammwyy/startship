@@ -212,6 +212,112 @@
   flex-shrink: 0;
 }
 
+.notification-settings {
+  display: grid;
+  gap: 16px;
+}
+
+.notification-settings .form-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.notification-settings h3 {
+  margin: 0 0 6px;
+}
+
+.notification-kind {
+  position: relative;
+}
+
+.notification-kind select {
+  appearance: none;
+  padding-inline-end: 30px;
+}
+
+.notification-kind::after {
+  position: absolute;
+  inset-inline-end: 14px;
+  bottom: 15px;
+  width: 6px;
+  height: 6px;
+  border: solid currentColor;
+  border-width: 0 1px 1px 0;
+  content: "";
+  pointer-events: none;
+  transform: rotate(45deg);
+}
+
+.notification-settings .status-option input {
+  appearance: none;
+  flex: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  padding: 0;
+}
+
+.notification-settings .status-option input:checked {
+  background: var(--success);
+  border-color: var(--success);
+}
+
+.notification-settings .status-option input:checked::before {
+  display: block;
+  width: 4px;
+  height: 7px;
+  margin: 1px auto;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  content: "";
+  transform: rotate(45deg);
+}
+
+.notification-channel,
+.notification-deliveries li {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.notification-channel + .notification-channel {
+  margin-top: 8px;
+}
+
+.notification-channel summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.notification-channel summary span,
+.notification-channel summary small {
+  color: var(--muted);
+  margin-inline-start: 8px;
+}
+
+.notification-channel[open] summary {
+  margin-bottom: 12px;
+}
+
+.notification-deliveries {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification-deliveries li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.notification-deliveries time,
+.notification-deliveries small {
+  color: var(--muted);
+}
+
 .public-status {
   min-height: 100vh;
   background: var(--bg);

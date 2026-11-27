@@ -34,6 +34,7 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | `traffic` | `project_id`, `window` 300/900/3600 | `traffic.view` | = GET `projects/:id/traffic?window=` | a new `snapshot` pushed every 5s | TrafficView 5s |
 | `uptime` | `project_id` | project visible | = GET `projects/:id/uptime` | replacement snapshot on check or project change | Project Uptime |
 | `status_page` | `workspace_id` | `workspace.manage` | = GET `workspaces/:id/status-page` | replacement snapshot when publishing settings change | Workspace settings |
+| `notifications` | `workspace_id` | `workspace.manage` | `{channels[], deliveries[]}` from `workspaces/:id/notifications/channels` and `/deliveries` | replacement snapshot on channel changes and completed delivery attempts | Workspace settings |
 | `system_update` | none | signed in (same as GET) | = GET `system/update` | a new `snapshot` whenever it changes (update requested, status file, release check) | SystemView 2s/60s |
 | `account_sessions` | none | signed in | = GET `me/sessions` | replacement snapshot when session data changes | account session list |
 | `account_tokens` | none | signed in | = GET `me/tokens` | replacement snapshot when a token is created, used from a new IP or after a minute, or revoked | account access tokens |
@@ -43,6 +44,19 @@ Record shapes are exactly those of the REST API (`publicRecord` / container reco
 | `audit_activity` | none | platform `audit.view` | = GET `audit` | replacement snapshot when an action is recorded | platform audit |
 
 Mutations stay on the REST API; their effects arrive over the socket.
+
+## Workspace notifications
+Under `/api/workspaces/:id/notifications`, use GET or POST `/channels`, PATCH
+or DELETE `/channels/:channel_id`, POST `/channels/:channel_id/test`, and
+GET `/deliveries`. Write the destination as `url`; reads expose only its
+scheme and host as `host`. Channels are disabled until explicitly enabled.
+Send test queues a delivery even for a disabled channel. The log keeps the
+latest 50 attempts per workspace and shows the HTTP status, if available.
+Automatic deployment events cover production project builds, not previews,
+queue-full rejections, or restart reconciliation. Delivery is best-effort
+and never retried. Destinations must resolve to public addresses; to test
+against an intentional loopback receiver, set
+`STARTSHIP_NOTIFICATION_LOCAL_HOST=127.0.0.1:PORT` on the daemon.
 
 ## Branch previews
 Projects opt in with `PATCH /api/projects/:id` (`{"previews":true}`).

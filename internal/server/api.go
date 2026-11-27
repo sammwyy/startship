@@ -451,6 +451,10 @@ func (a *Server) api() http.Handler {
 			a.workspaceStatusPage(w, r, old, x, uid)
 			return
 		}
+		if len(p) >= 4 && kind == "workspaces" && p[3] == "notifications" {
+			a.workspaceNotifications(w, r, old, x, p[4:])
+			return
+		}
 		if len(p) == 4 && kind == "projects" && p[3] == "traffic" {
 			if !x.can(old, "traffic.view") {
 				forbidden(w)

@@ -380,6 +380,10 @@ const usage = `startship [--json] COMMAND
   workspaces domains ...         alias for domains; quote wildcard names
   traffic PROJECT | detect JSON | version
   uptime PROJECT [enable|disable] project health history and incidents
+  notifications list|log WORKSPACE
+  notifications add WORKSPACE --name NAME --kind discord|slack|webhook --url URL [--events EVENT,...] [--enable]
+  notifications update WORKSPACE CHANNEL_ID [--name NAME] [--kind KIND] [--url URL] [--events EVENT,...] [--enable|--disable]
+  notifications remove|test WORKSPACE CHANNEL_ID
   router [show]                  show active router settings and startup overrides
   router set [--http ADDR[,ADDR]] [--https ADDR[,ADDR]]
   router disable | router enable  apply and save changes without a restart (Platform Admin)
@@ -589,6 +593,8 @@ func (c *cli) run(args []string) error {
 		return c.runUptime(a)
 	case "status-page":
 		return c.runStatusPage(a)
+	case "notifications":
+		return c.runNotifications(a)
 	case "deploy", "redeploy", "traffic", "logs":
 		if len(a) == 0 {
 			return errors.New("project or log target required")

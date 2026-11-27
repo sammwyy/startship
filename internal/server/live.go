@@ -91,7 +91,7 @@ func (s *liveSub) relevant(r Record) bool {
 	switch s.Topic {
 	case "uptime":
 		return r.ID == s.ProjectID
-	case "status_page":
+	case "status_page", "notifications":
 		return r.ID == s.WorkspaceID
 	case "firewall":
 		return r.ID == s.WorkspaceID
@@ -149,9 +149,9 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 				return x, Record{}, "invalid subscription"
 			}
 		}
-	case "workspace", "certificates", "services", "volumes", "firewall", "backups", "workspace_activity", "status_page", "recipe_apps":
+	case "workspace", "certificates", "services", "volumes", "firewall", "backups", "workspace_activity", "status_page", "notifications", "recipe_apps":
 		id, kind = s.WorkspaceID, "workspaces"
-		if s.Topic == "status_page" {
+		if s.Topic == "status_page" || s.Topic == "notifications" {
 			perm = "workspace.manage"
 		}
 		if s.Topic == "workspace_activity" {
@@ -260,6 +260,12 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		data, err := a.statusConfig(r.ID)
 		if err != nil {
 			return nil, nil, r, "status page unavailable"
+		}
+		return data, nil, r, ""
+	case "notifications":
+		data, err := a.notificationsData(r.ID)
+		if err != nil {
+			return nil, nil, r, "notifications unavailable"
 		}
 		return data, nil, r, ""
 	case "traffic":
@@ -566,8 +572,8 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 					key = s.Topic
 				case "uptime":
 					key = "uptime:" + s.ProjectID
-				case "status_page":
-					key = "status_page:" + s.WorkspaceID
+				case "status_page", "notifications":
+					key = s.Topic + ":" + s.WorkspaceID
 				}
 				_, relevant := pending[key]
 				for _, e := range pending {

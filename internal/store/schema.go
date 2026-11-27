@@ -38,6 +38,21 @@ CREATE INDEX IF NOT EXISTS uptime_checks_at ON uptime_checks(at);
 CREATE TABLE IF NOT EXISTS uptime_incidents(project_id TEXT NOT NULL, started INTEGER NOT NULL, ended INTEGER, cause TEXT NOT NULL, PRIMARY KEY(project_id, started));
 CREATE UNIQUE INDEX IF NOT EXISTS uptime_one_open_incident ON uptime_incidents(project_id) WHERE ended IS NULL;
 CREATE TABLE IF NOT EXISTS status_pages(workspace_id TEXT PRIMARY KEY, slug TEXT COLLATE NOCASE UNIQUE, enabled INTEGER NOT NULL, title TEXT NOT NULL, projects TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS notification_channels(id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, name TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('discord','slack','webhook')), url TEXT NOT NULL, events TEXT NOT NULL, enabled INTEGER NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS notification_channels_workspace ON notification_channels(workspace_id);
+CREATE TABLE IF NOT EXISTS notification_deliveries(id INTEGER PRIMARY KEY, channel_id TEXT NOT NULL, workspace_id TEXT NOT NULL, event TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('ok','failed')), http_status INTEGER NOT NULL, error TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS notification_deliveries_workspace ON notification_deliveries(workspace_id,id DESC);
+CREATE TRIGGER IF NOT EXISTS notification_channel_delete AFTER DELETE ON notification_channels BEGIN
+    DELETE FROM notification_deliveries WHERE channel_id=OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS notification_workspace_delete AFTER DELETE ON records WHEN OLD.kind='workspaces' BEGIN
+    DELETE FROM notification_channels WHERE workspace_id=OLD.id;
+END;
+CREATE TRIGGER IF NOT EXISTS notification_delivery_prune AFTER INSERT ON notification_deliveries BEGIN
+    DELETE FROM notification_deliveries WHERE workspace_id=NEW.workspace_id AND id < (
+        SELECT id FROM notification_deliveries WHERE workspace_id=NEW.workspace_id ORDER BY id DESC LIMIT 1 OFFSET 49
+    );
+END;
 CREATE TRIGGER IF NOT EXISTS status_workspace_delete AFTER DELETE ON records WHEN OLD.kind='workspaces' BEGIN
     DELETE FROM status_pages WHERE workspace_id=OLD.id;
 END;
