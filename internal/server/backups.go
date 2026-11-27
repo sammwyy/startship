@@ -185,14 +185,14 @@ func (a *Server) runBackup(s Service, trigger, uid string) (Backup, error) {
 		return b, err
 	}
 	if trigger == "scheduled" && s.Backup != nil {
-		a.pruneBackups(s.ID, s.Backup.Keep)
+		a.pruneBackups(s.WorkspaceID, s.ID, s.Backup.Keep)
 	}
 	return b, nil
 }
 
-func (a *Server) pruneBackups(service string, keep int) {
+func (a *Server) pruneBackups(workspace, service string, keep int) {
 	n := 0
-	for _, b := range a.backups("", service) {
+	for _, b := range a.backups(workspace, service) {
 		if b.Trigger != "scheduled" || b.Status != "completed" {
 			continue
 		}
@@ -293,6 +293,11 @@ func (a *Server) runDueBackups(now time.Time) {
 }
 
 func (a *Server) backupsAPI(w http.ResponseWriter, r *http.Request, p []string, uid string, x *access) bool {
+	if r.Method != "GET" && (len(p) > 1 && p[1] == "backups" ||
+		len(p) == 4 && p[1] == "services" && (p[3] == "backups" || p[3] == "backup-schedule")) {
+		a.transferMu.Lock()
+		defer a.transferMu.Unlock()
+	}
 	if len(p) == 4 && p[1] == "workspaces" && p[3] == "backups" {
 		ws, err := a.store.Get(p[2])
 		if err != nil || ws.Kind != "workspaces" || !x.visible(ws) {

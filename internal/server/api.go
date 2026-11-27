@@ -34,6 +34,7 @@ type Server struct {
 	serviceCatalog       *registry.Cache[catalog.Registry]
 	recipeFile           func(recipeApp, recipes.File, string, string) (string, error)
 	resourcesMu          sync.Mutex
+	transferMu           sync.Mutex
 	volumeSizeMu         sync.Mutex
 	volumeSizeAt         time.Time
 	serviceReservedPorts map[int]bool
@@ -382,7 +383,7 @@ func (a *Server) api() http.Handler {
 			reply(w, 200, pipeline.Templates())
 			return
 		}
-		if a.catalogAPI(w, r, p, x) || a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.backupsAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) || a.recipeAppsAPI(w, r, p, uid, x) {
+		if a.transfersAPI(w, r, p, uid, x) || a.catalogAPI(w, r, p, x) || a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.backupsAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) || a.recipeAppsAPI(w, r, p, uid, x) {
 			return
 		}
 		if p[1] == "detect" && r.Method == "POST" {
@@ -393,6 +394,10 @@ func (a *Server) api() http.Handler {
 			return
 		}
 		kind := p[1]
+		if r.Method != "GET" && (kind == "projects" || kind == "workspaces" || kind == "apps" || kind == "routes") {
+			a.transferMu.Lock()
+			defer a.transferMu.Unlock()
+		}
 		containers := kind == "containers"
 		if containers {
 			if r.Method != "GET" {
@@ -893,6 +898,8 @@ func verifySignature(secret string, body []byte, signature string) bool {
 	return hmac.Equal(got, m.Sum(nil))
 }
 func (a *Server) webhook(w http.ResponseWriter, r *http.Request, id string) {
+	a.transferMu.Lock()
+	defer a.transferMu.Unlock()
 	if r.Method != "POST" {
 		fail(w, 405, "method not allowed")
 		return

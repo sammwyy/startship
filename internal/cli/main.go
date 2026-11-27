@@ -311,6 +311,9 @@ const usage = `startship [--json] COMMAND
   account token revoke TOKEN_ID
   activity workspace|project TARGET [--follow]
   workspaces list|get ID|create NAME|rename ID NAME|delete ID
+  transfer plan KIND ID | transfer copy|move KIND ID DESTINATION [--only | --include KIND:ID ...]
+                                 kind: projects, apps, services, volumes
+                                 includes all linked resources by default
   projects list [WORKSPACE] | projects get ID|create NAME WORKSPACE|delete ID
   projects update ID JSON        project settings (same fields as API)
   projects sleep ID | projects wake ID
@@ -428,6 +431,9 @@ func (c *cli) run(args []string) error {
 	}
 	cmd := a[0]
 	a = a[1:]
+	if cmd == "transfer" {
+		return c.runTransfer(a)
+	}
 	if cmd == "config" {
 		return c.runConfig(a)
 	}

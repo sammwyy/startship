@@ -174,6 +174,9 @@ func (a *Server) serviceAction(id, action string) error {
 	if err != nil {
 		return err
 	}
+	if (action == "start" || action == "restart") && s.Container == "" {
+		action = "recreate"
+	}
 	e, _ := s.engineDefinition()
 	update := func(status string) { s.Status = status; a.saveService(s) }
 	defer func() {

@@ -34,6 +34,7 @@ import {
 } from "../../components/ServiceUI";
 import { ServiceConfig } from "../../components/ServiceConfig";
 import { ServiceActions } from "../../components/ServiceActions";
+import { ResourceTransfer } from "../../components/ResourceTransfer";
 import { ConnectServiceModal } from "../../components/ConnectServiceModal";
 import {
   BackupStorage,
@@ -102,6 +103,14 @@ export function ServiceDetailView() {
         actions={
           <>
             <Badge status={s.status} />
+            {allowed && (
+              <ResourceTransfer
+                kind="services"
+                id={s.id}
+                name={s.name}
+                workspaceId={id!}
+              />
+            )}
             {allowed && (
               <ServiceActions
                 service={s}

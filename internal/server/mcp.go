@@ -278,8 +278,42 @@ var (
 
 var mcpTools []mcpTool
 
+func transferToolSchema(execute bool) map[string]any {
+	ref := map[string]any{
+		"kind": map[string]any{"type": "string", "enum": []string{"projects", "apps", "services", "volumes"}},
+		"id":   text("Resource ID."),
+	}
+	props := map[string]any{"resource": object(ref, "kind", "id")}
+	if execute {
+		props["destination"] = workspaceArg
+		props["include"] = map[string]any{"type": "array", "items": object(ref, "kind", "id"), "description": "Selected linked resources from the plan. Omit to include all."}
+		return object(props, "resource", "destination")
+	}
+	return object(props, "resource")
+}
+
+func transferTool(operation string) func(*mcpCall, map[string]any) (any, error) {
+	return func(c *mcpCall, in map[string]any) (any, error) {
+		body := map[string]any{"resource": in["resource"]}
+		if operation != "plan" {
+			dst, err := c.resolve("workspaces", in, "destination")
+			if err != nil {
+				return nil, err
+			}
+			body["destination_workspace_id"] = dst
+			if include, ok := in["include"]; ok {
+				body["include"] = include
+			}
+		}
+		return c.do("POST", "transfers/"+operation, body)
+	}
+}
+
 func init() {
 	mcpTools = []mcpTool{
+		tool("plan_transfer", "Plan a workspace transfer", "See the source and linked resources for a project, app, service or volume.", true, false, transferToolSchema(false), transferTool("plan")),
+		tool("copy_resource", "Copy to another workspace", "Copy a resource and its linked resources into another workspace. Include an empty array to copy only the selected resource.", false, false, transferToolSchema(true), transferTool("copy")),
+		tool("move_resource", "Move to another workspace", "Move a resource and its linked resources into another workspace.", false, true, transferToolSchema(true), transferTool("move")),
 		tool("whoami", "Who am I", "The account and token this MCP connection acts as, with platform permissions.", true, false, object(nil),
 			func(c *mcpCall, _ map[string]any) (any, error) { return c.do("GET", "me", nil) }),
 		tool("list_workspaces", "List workspaces", "Workspaces this token can reach.", true, false, object(nil),
