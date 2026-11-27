@@ -78,7 +78,7 @@ export function PublicStatusView({ slug }: { slug: string }) {
         {error ? (
           <ErrorMessage error={error} />
         ) : !page ? (
-          <Loading />
+          <Loading layout="stats" label="Loading service status…" />
         ) : (
           <>
             <div className={`status-banner uptime-${state}`} role="status">

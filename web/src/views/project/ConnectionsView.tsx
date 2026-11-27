@@ -57,7 +57,7 @@ export function ConnectionsView() {
         }
       />
       {connections.isPending ? (
-        <Loading />
+        <Loading layout="cards" label="Loading connections…" />
       ) : !connections.data?.attached.length ? (
         <Empty title="Connect your building blocks">
           <p>

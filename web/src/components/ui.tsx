@@ -3,6 +3,8 @@ import type { FormEvent, InputHTMLAttributes, ReactNode } from "react";
 import { Icon } from "./Icon";
 import { setThemePreference, useAppliedTheme } from "../lib/theme";
 
+export { Loading } from "./Skeleton";
+
 export function Field({
   label,
   ...props
@@ -36,13 +38,6 @@ export function Empty({
       <strong>{title}</strong>
       {children}
     </div>
-  );
-}
-export function Loading() {
-  return (
-    <p className="panel-pad" role="status">
-      Loading…
-    </p>
   );
 }
 export function ErrorMessage({ error }: { error: unknown }) {

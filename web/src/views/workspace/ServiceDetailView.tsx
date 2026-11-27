@@ -72,7 +72,8 @@ export function ServiceDetailView() {
   async function refresh() {
     await client.invalidateQueries();
   }
-  if (list.isPending || (!engine && catalog.isPending)) return <Loading />;
+  if (list.isPending || (!engine && catalog.isPending))
+    return <Loading layout="page" label="Loading service…" />;
   if (!s || !engine)
     return (
       <>

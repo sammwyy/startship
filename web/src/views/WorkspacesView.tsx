@@ -8,11 +8,12 @@ import type { Workspace } from "../services/types";
 import { queries } from "../services/queries";
 import { Heading } from "../components/Heading";
 import { Icon } from "../components/Icon";
-import { Empty, Field } from "../components/ui";
+import { Empty, ErrorMessage, Field, Loading } from "../components/ui";
 import { text } from "../lib/project";
 
 export function WorkspacesView() {
-  const { workspaces, workspace } = useDashboard(),
+  const { workspaces, workspace, workspacesPending, workspacesError } =
+      useDashboard(),
     { can } = useSession(),
     ui = useUI(),
     client = useQueryClient(),
@@ -49,10 +50,16 @@ export function WorkspacesView() {
       />
       <div className="section-head">
         <h2>
-          All workspaces <span className="count">{workspaces.length}</span>
+          All workspaces{" "}
+          {!workspacesPending && !workspacesError && (
+            <span className="count">{workspaces.length}</span>
+          )}
         </h2>
       </div>
-      {workspaces.length ? (
+      <ErrorMessage error={workspacesError} />
+      {workspacesPending ? (
+        <Loading layout="cards" label="Loading workspaces…" />
+      ) : workspaces.length ? (
         <div className="grid">
           {workspaces.map((w) => (
             <Link className="card link" key={w.id} to={`/workspace/${w.id}`}>
@@ -81,9 +88,11 @@ export function WorkspacesView() {
           ))}
         </div>
       ) : (
-        <Empty title="No workspaces yet">
-          Create a workspace to organize your projects.
-        </Empty>
+        !workspacesError && (
+          <Empty title="No workspaces yet">
+            Create a workspace to organize your projects.
+          </Empty>
+        )
       )}
     </>
   );

@@ -1,0 +1,111 @@
+.instance-screen {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 100dvh;
+  background: var(--bg);
+}
+.instance-header,
+.instance-label-row,
+.instance-host {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.instance-header {
+  justify-content: space-between;
+  padding: 14px clamp(18px, 4vw, 48px);
+  border-bottom: 1px solid var(--line);
+}
+.instance-main {
+  display: grid;
+  place-items: center;
+  padding: clamp(20px, 5vw, 56px);
+}
+.instance-card {
+  width: min(100%, 420px);
+  min-width: 0;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  overflow: hidden;
+}
+.instance-label-row,
+.instance-host {
+  padding: 14px 22px;
+  background: var(--raised);
+  color: var(--muted);
+  font-size: 11px;
+}
+.instance-label-row {
+  border-bottom: 1px solid var(--line);
+  font-family: ui-monospace, monospace;
+}
+.instance-label-row .icon {
+  color: var(--accent-ink);
+}
+.instance-host {
+  flex-wrap: wrap;
+  justify-content: space-between;
+  border-top: 1px solid var(--line);
+}
+.instance-host code {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.instance-body {
+  padding: clamp(20px, 5vw, 30px);
+}
+.instance-body h1 {
+  margin: 0;
+  font-size: 27px;
+  letter-spacing: -0.7px;
+}
+.instance-body p {
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.instance-body label {
+  color: var(--text);
+  font-size: 12px;
+}
+.instance-body input {
+  min-height: 42px;
+}
+.instance-body button[type="submit"] {
+  justify-content: space-between;
+  min-height: 42px;
+  width: 100%;
+  margin-top: 4px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.instance-body .instance-help {
+  margin: 14px 0 0;
+  font-size: 11px;
+}
+.instance-progress {
+  height: 4px;
+  margin-top: 22px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--line-strong);
+}
+.instance-progress::after {
+  content: "";
+  display: block;
+  width: 33%;
+  height: 100%;
+  background: var(--accent-ink);
+  animation: instance-progress 1.4s ease-in-out infinite alternate;
+}
+@keyframes instance-progress {
+  to {
+    transform: translateX(200%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .instance-progress::after {
+    animation: none;
+  }
+}

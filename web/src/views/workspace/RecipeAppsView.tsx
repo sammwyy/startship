@@ -195,7 +195,10 @@ export function AppsMarketplaceView() {
       />
       <ErrorMessage error={apps.error || catalog.error || liveError} />
       {catalog.isPending ? (
-        <Loading />
+        <Loading
+          layout={entryId ? "rows" : "cards"}
+          label="Loading app marketplace…"
+        />
       ) : entry ? (
         <section className="panel marketplace-detail">
           <EngineIcon
@@ -796,7 +799,10 @@ export function RecipeAppsView() {
       )}
       <ErrorMessage error={query.error || liveError} />
       {query.isPending ? (
-        <Loading />
+        <Loading
+          layout={appId ? "page" : layout === "list" ? "table" : "cards"}
+          label="Loading apps…"
+        />
       ) : appId ? (
         app ? (
           <AppDetail

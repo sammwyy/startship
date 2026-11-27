@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  Suspense,
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Link,
   NavLink,
@@ -15,7 +22,7 @@ import { useSession } from "../providers/SessionProvider";
 import { useUI } from "../providers/UIProvider";
 import { projectSections, text } from "../lib/project";
 import { Brand, Icon } from "../components/Icon";
-import { Badge, Field, ThemeButton } from "../components/ui";
+import { Badge, Field, Loading, ThemeButton } from "../components/ui";
 import { Popover } from "../components/Popover";
 import { SystemUpdateLink } from "../components/SystemUpdateLink";
 import { useLiveSubscription } from "../providers/LiveProvider";
@@ -23,9 +30,14 @@ import { useLiveSubscription } from "../providers/LiveProvider";
 interface DashboardContext {
   workspace?: Workspace;
   workspaces: Workspace[];
+  workspacesPending: boolean;
+  workspacesError?: Error | null;
   project?: Project;
 }
-const Context = createContext<DashboardContext>({ workspaces: [] });
+const Context = createContext<DashboardContext>({
+  workspaces: [],
+  workspacesPending: false,
+});
 export const useDashboard = () => useContext(Context);
 
 export function DashboardLayout() {
@@ -36,7 +48,18 @@ export function DashboardLayout() {
     location = useLocation();
   const projectMatch = useMatch("/project/:projectId/*"),
     workspaceMatch = useMatch("/workspace/:workspaceId/*");
-  const { data: workspaces = [] } = useQuery(queries.workspaces());
+  const {
+    data: workspaces = [],
+    isPending: workspacesPending,
+    error: workspacesError,
+  } = useQuery(queries.workspaces());
+  const projectSection = projectMatch?.params["*"];
+  const loadingLayout =
+    workspaceMatch && !workspaceMatch.params["*"]
+      ? "workspace"
+      : projectMatch && (!projectSection || projectSection === "overview")
+        ? "project"
+        : "page";
   const { data: project } = useQuery({
     ...queries.project(projectMatch?.params.projectId || ""),
     enabled: !!projectMatch,
@@ -264,7 +287,15 @@ export function DashboardLayout() {
     </aside>
   );
   return (
-    <Context.Provider value={{ workspace, workspaces, project }}>
+    <Context.Provider
+      value={{
+        workspace,
+        workspaces,
+        workspacesPending,
+        workspacesError,
+        project,
+      }}
+    >
       <div
         className={`dashboard sidebar-layout${collapsed ? " sidebar-collapsed" : ""}`}
       >
@@ -285,7 +316,9 @@ export function DashboardLayout() {
             <div
               className={`content${/\/(source|environment|pipeline)$/.test(location.pathname) || /^\/system(?:\/|$)/.test(location.pathname) || /^\/workspace\/[^/]+\/settings$/.test(location.pathname) ? " content-compact" : ""}`}
             >
-              <Outlet />
+              <Suspense fallback={<Loading layout={loadingLayout} />}>
+                <Outlet />
+              </Suspense>
             </div>
           </main>
         </div>

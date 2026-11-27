@@ -85,7 +85,7 @@ export function NetworkFirewallView() {
         <>
           <ErrorMessage error={error} />
           {isPending ? (
-            <Loading />
+            <Loading layout="table" />
           ) : (
             data && (
               <>

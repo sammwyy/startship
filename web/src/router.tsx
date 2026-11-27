@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import {
   createHashRouter,
   Navigate,
@@ -11,11 +10,12 @@ import { ProjectLayout } from "./layouts/ProjectLayout";
 import { SystemLayout } from "./layouts/SystemLayout";
 import { AuthView } from "./views/AuthView";
 import { LiveProvider } from "./providers/LiveProvider";
+import { BootScreen } from "./components/InstanceScreen";
 import { ErrorMessage, Loading } from "./components/ui";
 
 function SessionGate() {
   const session = useSession();
-  if (session.loading) return <Loading />;
+  if (session.loading) return <BootScreen />;
   if (session.error) return <ErrorMessage error={session.error} />;
   if (
     !session.user ||
@@ -25,14 +25,13 @@ function SessionGate() {
     return <AuthView />;
   return (
     <LiveProvider>
-      <Suspense fallback={<Loading />}>
-        <Outlet />
-      </Suspense>
+      <Outlet />
     </LiveProvider>
   );
 }
 function Home() {
-  const { workspace } = useDashboard();
+  const { workspace, workspacesPending } = useDashboard();
+  if (workspacesPending) return <Loading layout="workspace" />;
   return (
     <Navigate
       to={workspace ? `/workspace/${workspace.id}` : "/workspaces"}
@@ -57,6 +56,7 @@ function RouteError() {
 export const router = createHashRouter([
   {
     element: <SessionGate />,
+    HydrateFallback: BootScreen,
     errorElement: <RouteError />,
     children: [
       {
