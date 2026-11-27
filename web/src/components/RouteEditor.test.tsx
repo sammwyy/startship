@@ -2,12 +2,15 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { RouteEditor } from "./RouteEditor";
+import { request } from "../services/api";
 import type {
   Container,
   Certificate,
   DomainRoute,
   WorkspaceDomain,
 } from "../services/types";
+
+vi.mock("../services/api", () => ({ request: vi.fn() }));
 
 const web: Container = {
   id: "web",
@@ -45,6 +48,7 @@ function setup(
     admin?: boolean;
     certificates?: Certificate[];
     certificatesAvailable?: boolean;
+    workspaceId?: string;
     onSave?: () => Promise<void>;
   } = {},
 ) {
@@ -53,6 +57,7 @@ function setup(
     <RouteEditor
       containers={[web]}
       domains={[domain]}
+      workspaceId="w"
       onCancel={vi.fn()}
       {...options}
       onSave={onSave}
@@ -92,6 +97,41 @@ describe("domain routing editor", () => {
     await user.click(screen.getByRole("button", { name: "Connect domain" }));
     expect(onSave).toHaveBeenCalledWith(
       expect.objectContaining({ certificate_id: "cert", force_https: true }),
+    );
+  });
+  it("uploads a certificate inline, updates HTTPS preview, and saves the new certificate", async () => {
+    vi.mocked(request).mockResolvedValueOnce({
+      id: "uploaded-cert",
+      workspace_id: "w",
+      domains: ["example.com"],
+      source: "upload",
+      issuer: "Test issuer",
+      not_before: "2020-01-01T00:00:00Z",
+      not_after: "2099-01-01T00:00:00Z",
+      status: "active",
+      auto_renew: false,
+      cert_pem: "CERT",
+    } satisfies Certificate);
+    const { user, onSave } = setup();
+    expect(screen.getByText("http://")).toBeInTheDocument();
+    await user.click(
+      screen.getByRole("option", { name: /Upload certificate/ }),
+    );
+    await user.type(
+      screen.getByLabelText("Certificate chain PEM"),
+      "-----BEGIN CERTIFICATE-----",
+    );
+    await user.type(
+      screen.getByLabelText("Private key PEM"),
+      "-----BEGIN PRIVATE KEY-----",
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Upload certificate" }),
+    );
+    expect(screen.getByText("https://")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Connect domain" }));
+    expect(onSave).toHaveBeenCalledWith(
+      expect.objectContaining({ certificate_id: "uploaded-cert" }),
     );
   });
   it("preserves inaccessible certificate bindings without offering selection", () => {

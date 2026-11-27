@@ -11,6 +11,12 @@ import { AppsMarketplaceView, RecipeAppsView } from "./RecipeAppsView";
 vi.mock("../../layouts/DashboardLayout", () => ({
   useDashboard: () => ({ workspace: { id: "w" } }),
 }));
+vi.mock("../../providers/SessionProvider", () => ({
+  useSession: () => ({
+    user: { platform_admin: true },
+    can: () => true,
+  }),
+}));
 vi.mock("../../providers/LiveProvider", () => ({
   useLiveSubscription: () => undefined,
 }));
@@ -186,3 +192,85 @@ it.each([
     expect(await screen.findByText(badge)).toBeInTheDocument();
   },
 );
+
+it("generates a certificate inline when connecting a domain to an app", async () => {
+  const user = userEvent.setup();
+  const appWithHttp: RecipeApps = {
+    can_manage: true,
+    apps: [
+      {
+        ...installed.apps[0],
+        domains: [],
+        recipe: {
+          ...jellyfin,
+          http: [{ id: "web", container: "web", port: 80 }],
+        },
+      },
+    ],
+  };
+  vi.mocked(request).mockImplementation(async (path, body) => {
+    if (path === "workspaces/w/apps") return appWithHttp;
+    if (path === "workspaces/w/domains")
+      return {
+        domains: [
+          {
+            id: "d1",
+            name: "example.com",
+            apex: true,
+            subdomains: true,
+            routes: 0,
+          },
+        ],
+      };
+    if (path === "workspaces/w/certificates" && !body)
+      return { certificates: [] };
+    if (path === "workspaces/w/certificates" && body)
+      return {
+        id: "cert-inline",
+        workspace_id: "w",
+        domains: ["example.com"],
+        source: "acme",
+        issuer: "",
+        not_before: "",
+        not_after: "",
+        status: "pending",
+        auto_renew: true,
+      };
+    return {};
+  });
+
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <UIProvider>
+        <MemoryRouter initialEntries={["/workspace/w/apps/media"]}>
+          <Routes>
+            <Route
+              path="/workspace/:workspaceId/apps/:appId"
+              element={<RecipeAppsView />}
+            />
+          </Routes>
+        </MemoryRouter>
+      </UIProvider>
+    </QueryClientProvider>,
+  );
+
+  await user.click(
+    await screen.findByRole("button", { name: "Connect domain" }),
+  );
+  const generate = await screen.findByRole("option", {
+    name: /Generate certificate for example\.com/,
+  });
+  await user.click(generate);
+  expect(request).toHaveBeenCalledWith("workspaces/w/certificates", {
+    source: "acme",
+    domains: ["example.com"],
+    auto_renew: true,
+  });
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+  expect(request).toHaveBeenCalledWith("workspaces/w/apps/media/domains", {
+    endpoint: "web",
+    host: "example.com",
+    certificate_id: "cert-inline",
+    force_https: false,
+  });
+});
