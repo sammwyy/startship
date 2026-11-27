@@ -1,0 +1,38 @@
+.resource-transfer {
+  width: min(510px, calc(100vw - 32px));
+}
+
+.resource-transfer .service-modal-head {
+  padding: 16px 20px;
+}
+
+.resource-transfer > form,
+.resource-transfer > .transfer-plan-error {
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.transfer-links {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.transfer-links p {
+  margin: 0;
+}
+
+.transfer-links .transfer-link {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.transfer-link input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}

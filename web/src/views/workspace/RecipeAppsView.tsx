@@ -12,6 +12,7 @@ import { HostPicker, pickedHost } from "../../components/HostPicker";
 import { Icon } from "../../components/Icon";
 import { categoryLabel, Marketplace } from "../../components/Marketplace";
 import { RecipeSchemaFields } from "../../components/RecipeSchemaFields";
+import { ResourceTransfer } from "../../components/ResourceTransfer";
 import { ServiceModal, ServicePicker } from "../../components/ServiceUI";
 import {
   AsyncForm,
@@ -563,13 +564,21 @@ function AppDetail({
         subtitle={app.recipe.description}
         actions={
           manage && (
-            <button
-              className="primary"
-              disabled={disabled}
-              onClick={() => setDialog("settings")}
-            >
-              <Icon name="settings" /> Configure
-            </button>
+            <>
+              <ResourceTransfer
+                kind="apps"
+                id={app.id}
+                name={app.name}
+                workspaceId={workspaceId}
+              />
+              <button
+                className="primary"
+                disabled={disabled}
+                onClick={() => setDialog("settings")}
+              >
+                <Icon name="settings" /> Configure
+              </button>
+            </>
           )
         }
       />

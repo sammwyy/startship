@@ -18,6 +18,7 @@ import { AsyncForm, Empty, ErrorMessage, Field, Loading } from "./ui";
 import { Icon } from "./Icon";
 import { Heading } from "./Heading";
 import { ProjectHeading } from "./ProjectHeading";
+import { ResourceTransfer } from "./ResourceTransfer";
 
 export function volumeSize(bytes: number) {
   if (!bytes) return "0 B";
@@ -336,6 +337,14 @@ export function VolumesPanel({
                     })}
                   </time>
                   <div className="volume-actions">
+                    {allowed && v.purpose !== "backups" && (
+                      <ResourceTransfer
+                        kind="volumes"
+                        id={v.id}
+                        name={v.name}
+                        workspaceId={workspaceId}
+                      />
+                    )}
                     {allowed &&
                       (project ? (
                         <button

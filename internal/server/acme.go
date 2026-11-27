@@ -232,6 +232,9 @@ func (a *Server) ensurePreviewCertificate(previewID, workspace, host string) {
 		a.certMu.Unlock()
 		return
 	}
+	if project, err := a.store.Get(p.ProjectID); err == nil && project.Kind == "projects" {
+		workspace = projectWorkspace(project)
+	}
 	if _, err := a.certificate(id); err == nil {
 		a.certMu.Unlock()
 		return

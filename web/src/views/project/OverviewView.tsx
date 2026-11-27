@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useProject } from "../../layouts/ProjectLayout";
 import { ProjectHeading } from "../../components/ProjectHeading";
+import { ResourceTransfer } from "../../components/ResourceTransfer";
 import { ScopedActivityTabs } from "../../components/ScopedActivityTabs";
 import { ProjectSettingsForm } from "../../components/ProjectSettingsForm";
 import { Badge } from "../../components/ui";
@@ -17,7 +18,19 @@ export function OverviewView() {
   const base = `/project/${project.id}`;
   return (
     <>
-      <ProjectHeading title={project.name} />
+      <ProjectHeading
+        title={project.name}
+        actions={
+          can("project.delete", project) && (
+            <ResourceTransfer
+              kind="projects"
+              id={project.id}
+              name={project.name}
+              workspaceId={project.workspace_id}
+            />
+          )
+        }
+      />
       <ScopedActivityTabs scope="project" resource={project} />
       <div className="project-overview">
         <div className="overview-configuration">
