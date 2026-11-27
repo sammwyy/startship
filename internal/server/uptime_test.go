@@ -22,7 +22,7 @@ func TestUptimeIncidentTransitionsAndWindows(t *testing.T) {
 	now := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
 	check := func(at time.Time, cause string) {
 		t.Helper()
-		if err := a.recordUptime(p.ID, at, 23, cause); err != nil {
+		if _, err := a.recordUptime(p.ID, at, 23, cause); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -76,7 +76,7 @@ func TestPublicStatusOnlyExposesSelectedProjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, minutes := range []int{-2, -1} {
-		if err := a.recordUptime("selected-id", time.Now().Add(time.Duration(minutes)*time.Minute), 13, "private error 192.0.2.3"); err != nil {
+		if _, err := a.recordUptime("selected-id", time.Now().Add(time.Duration(minutes)*time.Minute), 13, "private error 192.0.2.3"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -274,11 +274,11 @@ func TestUptimeRetentionKeepsBoundaryAndOngoingIncidents(t *testing.T) {
 		{cutoff.Add(-time.Hour), "ongoing"},
 		{cutoff, "inside retention"},
 	} {
-		if err := a.recordUptime(p.ID, row.at, 10, row.cause); err != nil {
+		if _, err := a.recordUptime(p.ID, row.at, 10, row.cause); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := a.recordUptime("deleted", now, 10, ""); err != nil {
+	if _, err := a.recordUptime("deleted", now, 10, ""); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.pruneUptime(now); err != nil {
@@ -291,7 +291,7 @@ func TestUptimeRetentionKeepsBoundaryAndOngoingIncidents(t *testing.T) {
 	if err := a.store.DB.QueryRow("SELECT COUNT(*) FROM uptime_incidents").Scan(&count); err != nil || count != 1 {
 		t.Fatalf("wanted only the ongoing incident; got %d: %v", count, err)
 	}
-	if err := a.recordUptime(p.ID, now, 10, ""); err != nil {
+	if _, err := a.recordUptime(p.ID, now, 10, ""); err != nil {
 		t.Fatal(err)
 	}
 	got, err := a.summarizeUptime(p, now, 90, true)

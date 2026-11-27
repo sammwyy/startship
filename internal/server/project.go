@@ -205,6 +205,7 @@ func (a *Server) buildProject(id string) {
 	logger := &logWriter{a: a, id: id, secret: job.GitToken}
 	var containers []Record
 	var revisions []string
+	var project Record
 	defer func() {
 		if err == nil {
 			return
@@ -220,7 +221,10 @@ func (a *Server) buildProject(id string) {
 			}
 			a.store.Update(revision, func(r *Record) { r.Status = "failed" })
 		}
-		a.store.Update(id, func(r *Record) { r.Status = "failed"; now := time.Now().UTC(); r.Finished = &now })
+		now := time.Now().UTC()
+		if updateErr := a.store.Update(id, func(r *Record) { r.Status = "failed"; r.Finished = &now }); updateErr == nil && job.PreviewID == "" && project.ID != "" {
+			go a.dispatchNotification(project, deployFailed, now)
+		}
 		if job.PreviewID != "" {
 			if preview, e := a.store.Get(job.PreviewID); e != nil {
 				for _, revision := range revisions {
@@ -241,7 +245,8 @@ func (a *Server) buildProject(id string) {
 			return
 		}
 	}
-	if current, e := a.store.Get(p.ID); e != nil || current.Owner != p.Owner {
+	if project, err = a.store.Get(p.ID); err != nil || project.Owner != p.Owner {
+		project = Record{}
 		err = fmt.Errorf("project no longer exists")
 		return
 	}
@@ -342,6 +347,9 @@ func (a *Server) buildProject(id string) {
 	}
 	if err == nil {
 		fmt.Fprintln(logger, "Project deployment healthy; all containers switched together")
+		if job.PreviewID == "" {
+			go a.dispatchNotification(project, deploySucceeded, time.Now().UTC())
+		}
 	}
 }
 

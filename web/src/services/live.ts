@@ -23,7 +23,7 @@ export type LiveSubscription =
   | { topic: "firewall"; workspace_id: string }
   | { topic: "project"; project_id: string }
   | { topic: "uptime"; project_id: string }
-  | { topic: "status_page"; workspace_id: string }
+  | { topic: "status_page" | "notifications"; workspace_id: string }
   | { topic: "workspace"; workspace_id: string }
   | { topic: "release_log"; release_id: string }
   | { topic: "container_log"; container_id: string }

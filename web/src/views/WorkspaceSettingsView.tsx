@@ -10,6 +10,7 @@ import { Heading } from "../components/Heading";
 import { AsyncForm, ErrorMessage, Field, Loading } from "../components/ui";
 import { useLiveFeed, useLiveSubscription } from "../providers/LiveProvider";
 import type { Project } from "../services/types";
+import { NotificationSettings } from "./workspace/NotificationSettings";
 
 interface StatusSettings {
   enabled: boolean;
@@ -175,7 +176,12 @@ export function WorkspaceSettingsView() {
         />
         <button className="primary">Save changes</button>
       </AsyncForm>
-      {can("workspace.manage", workspace) && <StatusPageSettings id={id} />}
+      {can("workspace.manage", workspace) && (
+        <>
+          <StatusPageSettings id={id} />
+          <NotificationSettings id={id} />
+        </>
+      )}
     </>
   );
 }

@@ -145,22 +145,27 @@ func (a *Server) sampleUptime(p Record) {
 
 func (a *Server) commitUptime(p Record, at time.Time, latency float64, cause string) error {
 	a.store.Lock()
-	defer a.store.Unlock()
 	current, err := a.store.Get(p.ID)
 	if err != nil || current.Active != p.Active || current.Sleeping || !current.UptimeMonitoring {
+		a.store.Unlock()
 		return nil
 	}
-	if err := a.recordUptime(p.ID, at, latency, cause); err != nil {
+	event, err := a.recordUptime(p.ID, at, latency, cause)
+	a.store.Unlock()
+	if err != nil {
 		return err
 	}
 	a.live.publish(liveEvent{changeKey: "uptime:" + p.ID})
+	if event != "" {
+		go a.dispatchNotification(current, event, at.UTC())
+	}
 	return nil
 }
 
-func (a *Server) recordUptime(project string, at time.Time, latency float64, cause string) error {
+func (a *Server) recordUptime(project string, at time.Time, latency float64, cause string) (string, error) {
 	tx, err := a.store.DB.Begin()
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback()
 	ts := at.UnixMilli()
@@ -169,21 +174,37 @@ func (a *Server) recordUptime(project string, at time.Time, latency float64, cau
 	var previousCause string
 	err = tx.QueryRow("SELECT at,ok,error FROM uptime_checks WHERE project_id=? ORDER BY at DESC LIMIT 1", project).Scan(&previousAt, &previousOK, &previousCause)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+		return "", err
 	}
 	previousFailed := err == nil && !previousOK
 	if _, err = tx.Exec("INSERT INTO uptime_checks VALUES(?,?,?,?,?)", project, ts, cause == "", latency, cause); err != nil {
-		return err
+		return "", err
 	}
+	var result sql.Result
+	var event string
 	if cause == "" {
-		_, err = tx.Exec("UPDATE uptime_incidents SET ended=? WHERE project_id=? AND ended IS NULL", ts, project)
+		event = uptimeRecovered
+		result, err = tx.Exec("UPDATE uptime_incidents SET ended=? WHERE project_id=? AND ended IS NULL", ts, project)
 	} else if previousFailed {
-		_, err = tx.Exec("INSERT OR IGNORE INTO uptime_incidents(project_id,started,cause) VALUES(?,?,?)", project, previousAt, previousCause)
+		event = uptimeDown
+		result, err = tx.Exec("INSERT OR IGNORE INTO uptime_incidents(project_id,started,cause) VALUES(?,?,?)", project, previousAt, previousCause)
 	}
 	if err != nil {
-		return err
+		return "", err
 	}
-	return tx.Commit()
+	if result != nil {
+		n, err := result.RowsAffected()
+		if err != nil {
+			return "", err
+		}
+		if n == 0 {
+			event = ""
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return event, nil
 }
 
 func uptimePercent(up, total int) *float64 {
