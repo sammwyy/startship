@@ -79,6 +79,7 @@ func resolvedCandidate(dir, root, kind string, p Record) (pipelineCandidate, err
 	}
 	if p.Pipeline != nil {
 		resolved.Deploy.HealthTimeout = p.Pipeline.Deploy.HealthTimeout
+		resolved.Deploy.HealthDisabled = p.Pipeline.Deploy.HealthDisabled
 		resolved.Build.Engine = p.Pipeline.Build.Engine
 		if p.Pipeline.Deploy.Port != 0 {
 			resolved.Deploy.Port = p.Pipeline.Deploy.Port
@@ -300,6 +301,7 @@ func (a *Server) buildProject(id string) {
 	a.store.Update(id, func(r *Record) { r.Commit = commit })
 	fmt.Fprintf(logger, "Detected %d container(s); building one project deployment at %s\n", len(plan), commit)
 	existing := a.store.List("apps", p.Owner)
+	skippedReadiness := false
 	for i, candidate := range plan {
 		c := Record{ID: randomID(), Kind: "apps", Owner: p.Owner, Parent: p.ID, ProjectID: p.ID, Name: p.Name, Created: time.Now().UTC()}
 		if candidate.RootDir != "." {
@@ -339,6 +341,7 @@ func (a *Server) buildProject(id string) {
 			err = fmt.Errorf("container %s did not become healthy", c.Name)
 			return
 		}
+		skippedReadiness = skippedReadiness || built.StaticDir == "" && readinessDisabled(built)
 	}
 	if job.PreviewID != "" {
 		err = a.activatePreview(job, revisions)
@@ -346,7 +349,11 @@ func (a *Server) buildProject(id string) {
 		err = a.activateProject(p.ID, id, containers, revisions)
 	}
 	if err == nil {
-		fmt.Fprintln(logger, "Project deployment healthy; all containers switched together")
+		if skippedReadiness {
+			fmt.Fprintln(logger, "Project deployment activated (readiness checks skipped); all containers switched together")
+		} else {
+			fmt.Fprintln(logger, "Project deployment healthy; all containers switched together")
+		}
 		if job.PreviewID == "" {
 			go a.dispatchNotification(project, deploySucceeded, time.Now().UTC())
 		}
@@ -408,12 +415,16 @@ func (a *Server) activateProject(projectID, releaseID string, containers []Recor
 	}
 	p.Active, job.Status, job.Finished = releaseID, "running", &now
 	p.Sleeping = false
+	p.UptimeSince = now.UnixMilli()
 	changes = append(changes, p, job)
 	tx, err := a.store.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err = closeUptimeIncident(tx, p.ID, p.UptimeSince); err != nil {
+		return err
+	}
 	for _, record := range changes {
 		b, e := json.Marshal(record)
 		if e != nil {

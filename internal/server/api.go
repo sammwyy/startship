@@ -732,6 +732,7 @@ func (a *Server) api() http.Handler {
 		switch kind {
 		case "projects":
 			v.Sleeping = old.Sleeping
+			v.UptimeSince = old.UptimeSince
 			if v.SleepAfter < 0 || v.SleepAfter > 10080 {
 				fail(w, 400, "sleep_after must be between 0 and 10080 minutes")
 				return
@@ -859,7 +860,12 @@ func (a *Server) api() http.Handler {
 			}
 			v.Owner = parent.Owner
 		}
-		if e := a.store.Save(v); e != nil {
+		save := a.store.Save
+		if kind == "projects" && old.ID != "" && old.UptimeMonitoring != v.UptimeMonitoring {
+			v.UptimeSince = time.Now().UnixMilli()
+			save = a.saveUptimeSettings
+		}
+		if e := save(v); e != nil {
 			fail(w, 500, "save failed")
 			return
 		}

@@ -42,6 +42,7 @@ type Record struct {
 	SleepAfter        int                `json:"sleep_after,omitempty"`
 	Sleeping          bool               `json:"sleeping,omitempty"`
 	UptimeMonitoring  bool               `json:"uptime_monitoring,omitempty"`
+	UptimeSince       int64              `json:"uptime_since,omitempty"`
 	ResourcesUpdated  *time.Time         `json:"resources_updated,omitempty"`
 	Host              string             `json:"host,omitempty"`
 	PathPrefix        string             `json:"path_prefix,omitempty"`

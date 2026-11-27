@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/sammwyy/startship/internal/pipeline"
+	"net"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -219,6 +220,58 @@ func TestProjectDeploymentSwitchesContainersTogether(t *testing.T) {
 		if c.Env["MODE"] != "current" || d.RedeployOf == "" {
 			t.Fatal(c, d)
 		}
+	}
+}
+
+func TestProjectDeploymentReadinessLog(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\nif [ \"$1\" = inspect ]; then echo 127.0.0.1; fi\n"
+	if err := os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	for _, tc := range []struct {
+		name      string
+		disabled  bool
+		container string
+		project   string
+	}{
+		{"checked", false, "Container healthy; ready for project activation", "Project deployment healthy; all containers switched together"},
+		{"skipped", true, "Readiness check disabled; container started", "Project deployment activated (readiness checks skipped); all containers switched together"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := testServer(t)
+			p := Record{ID: "project", Kind: "projects", Owner: "owner", Active: "old"}
+			a.queues["project:"+p.ID] = make(chan string, 1)
+			port := listener.Addr().(*net.TCPAddr).Port
+			for _, record := range []Record{
+				p,
+				{ID: "old", Kind: "releases", Owner: p.Owner, ProjectID: p.ID, Status: "running", ContainerReleases: []string{"artifact"}},
+				{ID: "artifact", Kind: "deployments", Owner: p.Owner, ProjectID: p.ID, ReleaseID: "old", Status: "running", Image: "image", RootDir: ".", Port: port, Pipeline: &pipeline.Pipeline{Deploy: pipeline.Deploy{Port: port, HealthDisabled: tc.disabled}}},
+			} {
+				if err := a.store.Save(record); err != nil {
+					t.Fatal(err)
+				}
+			}
+			next, err := a.enqueueProject(p, Record{RedeployOf: "old"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			a.buildProject(next.ID)
+			next, err = a.store.Get(next.ID)
+			if err != nil || next.Status != "running" || len(next.ContainerReleases) != 1 || !strings.Contains(next.Log, tc.project) {
+				t.Fatalf("project log: %q (%v)", next.Log, err)
+			}
+			container, err := a.store.Get(next.ContainerReleases[0])
+			if err != nil || !strings.Contains(container.Log, tc.container) {
+				t.Fatalf("container log: %q (%v)", container.Log, err)
+			}
+		})
 	}
 }
 

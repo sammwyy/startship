@@ -112,6 +112,7 @@ export interface Pipeline {
     health_path?: string;
     expect_status?: number;
     health_timeout?: number;
+    health_disabled?: boolean;
   };
 }
 export interface PipelineTemplate {

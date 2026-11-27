@@ -25,14 +25,15 @@ type Test struct {
 	ExpectOutput   string   `json:"expect_output,omitempty"`
 }
 type Deploy struct {
-	Image         string `json:"image,omitempty"`
-	Artifact      string `json:"artifact,omitempty"`
-	Static        bool   `json:"static,omitempty"`
-	Command       string `json:"command,omitempty"`
-	Port          int    `json:"port,omitempty"`
-	HealthPath    string `json:"health_path,omitempty"`
-	ExpectStatus  int    `json:"expect_status,omitempty"`
-	HealthTimeout int    `json:"health_timeout,omitempty"`
+	Image          string `json:"image,omitempty"`
+	Artifact       string `json:"artifact,omitempty"`
+	Static         bool   `json:"static,omitempty"`
+	Command        string `json:"command,omitempty"`
+	Port           int    `json:"port,omitempty"`
+	HealthPath     string `json:"health_path,omitempty"`
+	ExpectStatus   int    `json:"expect_status,omitempty"`
+	HealthTimeout  int    `json:"health_timeout,omitempty"`
+	HealthDisabled bool   `json:"health_disabled,omitempty"`
 }
 type Pipeline struct {
 	Build  Build  `json:"build"`

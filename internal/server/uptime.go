@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"log"
 	"net/http"
@@ -146,11 +147,11 @@ func (a *Server) sampleUptime(p Record) {
 func (a *Server) commitUptime(p Record, at time.Time, latency float64, cause string) error {
 	a.store.Lock()
 	current, err := a.store.Get(p.ID)
-	if err != nil || current.Active != p.Active || current.Sleeping || !current.UptimeMonitoring {
+	if err != nil || current.Active != p.Active || current.UptimeSince != p.UptimeSince || current.Sleeping || !current.UptimeMonitoring {
 		a.store.Unlock()
 		return nil
 	}
-	event, err := a.recordUptime(p.ID, at, latency, cause)
+	event, err := a.recordUptimeSince(p.ID, p.UptimeSince, at, latency, cause)
 	a.store.Unlock()
 	if err != nil {
 		return err
@@ -163,6 +164,10 @@ func (a *Server) commitUptime(p Record, at time.Time, latency float64, cause str
 }
 
 func (a *Server) recordUptime(project string, at time.Time, latency float64, cause string) (string, error) {
+	return a.recordUptimeSince(project, 0, at, latency, cause)
+}
+
+func (a *Server) recordUptimeSince(project string, since int64, at time.Time, latency float64, cause string) (string, error) {
 	tx, err := a.store.DB.Begin()
 	if err != nil {
 		return "", err
@@ -172,7 +177,7 @@ func (a *Server) recordUptime(project string, at time.Time, latency float64, cau
 	var previousAt int64
 	var previousOK bool
 	var previousCause string
-	err = tx.QueryRow("SELECT at,ok,error FROM uptime_checks WHERE project_id=? ORDER BY at DESC LIMIT 1", project).Scan(&previousAt, &previousOK, &previousCause)
+	err = tx.QueryRow("SELECT at,ok,error FROM uptime_checks WHERE project_id=? AND at>=? ORDER BY at DESC LIMIT 1", project, since).Scan(&previousAt, &previousOK, &previousCause)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
@@ -205,6 +210,36 @@ func (a *Server) recordUptime(project string, at time.Time, latency float64, cau
 		return "", err
 	}
 	return event, nil
+}
+
+func closeUptimeIncident(tx *sql.Tx, project string, at int64) error {
+	_, err := tx.Exec("UPDATE uptime_incidents SET ended=max(started,?) WHERE project_id=? AND ended IS NULL", at, project)
+	return err
+}
+
+func (a *Server) saveUptimeSettings(p Record) error {
+	a.store.Lock()
+	defer a.store.Unlock()
+	b, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	tx, err := a.store.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec("UPDATE records SET body=? WHERE id=?", string(b), p.ID); err != nil {
+		return err
+	}
+	if err := closeUptimeIncident(tx, p.ID, p.UptimeSince); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	a.store.Notify(p)
+	return nil
 }
 
 func uptimePercent(up, total int) *float64 {
@@ -307,7 +342,7 @@ func (a *Server) fillUptime(out *uptimeSummary, p Record, now, first time.Time, 
 			return err
 		}
 		check.At = time.UnixMilli(ts).UTC()
-		if out.State == "pending" && p.Active != "" {
+		if out.State == "pending" && p.Active != "" && ts >= p.UptimeSince {
 			if check.OK {
 				out.State = "operational"
 			} else {

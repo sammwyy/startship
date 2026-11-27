@@ -24,7 +24,7 @@ func TestAppRunArgs(t *testing.T) {
 				flags := map[string][]string{}
 				for i := 1; i < len(args); i++ {
 					key := args[i]
-					if key == "--rm" || key == "-d" {
+					if key == "--rm" || key == "-d" || key == "--no-healthcheck" {
 						flags[key] = []string{"true"}
 						continue
 					}
@@ -35,7 +35,7 @@ func TestAppRunArgs(t *testing.T) {
 					"--network": {"startship-project"}, "--network-alias": {"my-api"},
 					"--memory": {memory}, "--cpus": {cpus}, "--pids-limit": {pids},
 					"--cap-drop": {"ALL"}, "--cap-add": {"CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE"},
-					"--security-opt": {"no-new-privileges"}, "-e": {"PORT=8080", "KEY=value"},
+					"--security-opt": {"no-new-privileges"}, "--no-healthcheck": {"true"}, "-e": {"PORT=8080", "KEY=value"},
 				} {
 					if !reflect.DeepEqual(flags[key], expected) {
 						t.Errorf("%s = %v, want %v", key, flags[key], expected)
