@@ -2,8 +2,11 @@ package recipes
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/sammwyy/startship/internal/config"
 )
 
 func TestRegistryParse(t *testing.T) {
@@ -30,6 +33,16 @@ func TestRegistryParse(t *testing.T) {
 	}
 	if result, err := parse(recipe); err != nil || result["minecraft"].Version != "remote" || len(result) != 1 {
 		t.Fatalf("registry replacement failed: %v", err)
+	}
+}
+
+func TestBundledRecipePortsAvoidDefaultDashboardPort(t *testing.T) {
+	for id, recipe := range Builtins() {
+		for _, port := range recipe.Ports {
+			if strconv.Itoa(port.HostPort) == config.DefaultDashboardPort {
+				t.Errorf("%s/%s publishes the default dashboard port %d", id, port.ID, port.HostPort)
+			}
+		}
 	}
 }
 

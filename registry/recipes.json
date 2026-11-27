@@ -424,7 +424,7 @@
           "container": "woodpecker-ci",
           "protocol": "tcp",
           "port": 9000,
-          "host_port": 9000
+          "host_port": 9001
         }
       ],
       "config_schema": {
