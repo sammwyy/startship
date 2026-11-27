@@ -15,13 +15,39 @@ sudo journalctl -u startshipd
 
 The installer verifies release checksums, installs `startship` and `startshipd` in `/usr/local/bin`, installs Nixpacks, and starts the daemon. It keeps existing settings in the root-owned `/etc/startship/startshipd.env` and the daemon-writable `/etc/startship/config/startship.toml`. By default, state lives in `/var/lib/startship`, including the SQLite database `startship.db`. The service runs as `startship` with Docker access. Without a running systemd, the script writes the units but cannot start them.
 
-To install a specific release instead of the latest, replace `vX.Y.Z` with a tag from the [releases page](https://github.com/sammwyy/startship/releases). Use the installer from that tag and pass the same version through `sudo`:
+To install a specific release instead of the latest, replace `vX.Y.Z` with a tag from the [releases page](https://github.com/sammwyy/startship/releases). Use the installer from that tag and pass the same version:
 
 ```sh
 version=vX.Y.Z
 curl -fsSL "https://raw.githubusercontent.com/sammwyy/startship/$version/install.sh" -o install.sh
-sudo env STARTSHIP_VERSION="$version" sh install.sh
+sudo sh install.sh --version "$version"
 ```
+
+### Installer options
+
+Run `sh install.sh --help` for the full list. Values accept `--option VALUE` or `--option=VALUE`.
+
+| Option | Effect |
+| --- | --- |
+| `--version TAG` | Install release `TAG` instead of the latest (also `STARTSHIP_VERSION`). |
+| `--download-url URL` | Fetch the release assets and `checksums.txt` from `URL` (also `STARTSHIP_DOWNLOAD_URL`). |
+| `--data-dir DIR` | Data directory, chosen on first install (also `STARTSHIP_DATA`; default `/var/lib/startship`). |
+| `--dashboard-listen ADDRS` | Dashboard and API listeners, comma-separated, such as `127.0.0.1:8080`. |
+| `--http-listen ADDRS`, `--https-listen ADDRS` | Application router listeners, comma-separated. |
+| `--no-router` | Disable the application router, leaving ports 80 and 443 free. Enable it later with `startship router enable`. |
+| `--dashboard-domain HOST` | Also serve the dashboard through the router at `HOST`. |
+| `--acme-email EMAIL` | Account email for Let's Encrypt certificates. |
+| `--network-firewall` | Enable the optional [network firewall](docs/firewall.md#network-firewall-l4) (also `STARTSHIP_NETWORK_FIREWALL=1`). |
+| `--no-nixpacks` | Do not install Nixpacks. |
+| `--no-start` | Install the services without enabling or starting them. |
+
+For example, to keep the dashboard local and leave ports 80 and 443 to another web server:
+
+```sh
+sudo sh install.sh --dashboard-listen 127.0.0.1:8080 --no-router
+```
+
+Settings options are validated, then written to `/etc/startship/config/startship.toml`; a matching variable in `/etc/startship/startshipd.env` is removed so the file setting takes effect. Running the installer again upgrades the binaries and applies only the options you pass, keeping the other settings and the data directory.
 
 ## Docker Compose
 
