@@ -2771,6 +2771,2354 @@
         "type": "object",
         "properties": {}
       }
+    },
+    {
+      "id": "n8n",
+      "logo": "n8n",
+      "category": "automation",
+      "name": "n8n",
+      "icon": "pipeline",
+      "description": "Connect apps and automate workflows on your own server.",
+      "version": "2.49.8",
+      "containers": [
+        {
+          "id": "n8n",
+          "image": "docker.n8n.io/n8nio/n8n:2.49.8",
+          "env": {
+            "N8N_EDITOR_BASE_URL": "${public_url}",
+            "WEBHOOK_URL": "${public_url}/",
+            "N8N_PROXY_HOPS": "1",
+            "N8N_ENCRYPTION_KEY": "${encryption_key}"
+          },
+          "mounts": {
+            "data": "/home/node/.n8n"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "n8n",
+          "port": 5678
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "encryption_key"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "encryption_key": {
+            "type": "string",
+            "title": "Encryption key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "node-red",
+      "logo": "node-red",
+      "category": "automation",
+      "name": "Node-RED",
+      "icon": "pipeline",
+      "description": "A flow editor for devices, APIs, and services. Use the configured administrator credentials to sign in.",
+      "version": "5.0.10",
+      "containers": [
+        {
+          "id": "node-red",
+          "image": "nodered/node-red:5.0.10",
+          "command": [
+            "--define",
+            "adminAuth={\"type\":\"credentials\",\"users\":[{\"username\":\"admin\",\"permissions\":\"*\"}]}",
+            "--define",
+            "adminAuth.users[0].password=${admin_hash}",
+            "--define",
+            "credentialSecret=${credential_secret}"
+          ],
+          "mounts": {
+            "data": "/data"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "node-red",
+          "port": 1880
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "admin_hash",
+          "credential_secret"
+        ],
+        "properties": {
+          "admin_hash": {
+            "type": "string",
+            "title": "Administrator bcrypt password hash",
+            "description": "Generate a bcrypt hash with Node-RED’s hash-pw command."
+          },
+          "credential_secret": {
+            "type": "string",
+            "title": "Flow credential encryption key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "home-assistant",
+      "logo": "home-assistant",
+      "category": "automation",
+      "name": "Home Assistant",
+      "icon": "pipeline",
+      "description": "Automate IP-connected devices. Host-network discovery, USB devices, and Supervisor add-ons are not included.",
+      "version": "2026.11.3",
+      "containers": [
+        {
+          "id": "home-assistant",
+          "image": "homeassistant/home-assistant:2026.11.3",
+          "mounts": {
+            "config": "/config"
+          }
+        }
+      ],
+      "volumes": [
+        "config"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "home-assistant",
+          "port": 8123
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "vaultwarden",
+      "logo": "vaultwarden",
+      "category": "automation",
+      "name": "Vaultwarden",
+      "icon": "pipeline",
+      "description": "A lightweight Bitwarden-compatible password vault. Create your account via the private admin page.",
+      "version": "1.37.5-alpine",
+      "containers": [
+        {
+          "id": "vaultwarden",
+          "image": "vaultwarden/server:1.37.5-alpine",
+          "env": {
+            "DOMAIN": "${public_url}",
+            "ADMIN_TOKEN": "${admin_token}",
+            "SIGNUPS_ALLOWED": "false"
+          },
+          "mounts": {
+            "data": "/data"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "vaultwarden",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "admin_token"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "admin_token": {
+            "type": "string",
+            "title": "Administration token",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "it-tools",
+      "logo": "it-tools",
+      "category": "automation",
+      "name": "IT-Tools",
+      "icon": "pipeline",
+      "description": "A browser toolbox for encodings, converters, and developer utilities.",
+      "version": "2024.10.22-7ca5933",
+      "containers": [
+        {
+          "id": "it-tools",
+          "image": "corentinth/it-tools:2024.10.22-7ca5933"
+        }
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "it-tools",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "stirling-pdf",
+      "logo": "stirling-pdf",
+      "category": "automation",
+      "name": "Stirling PDF",
+      "icon": "pipeline",
+      "description": "Convert, split, merge, and edit PDF files locally.",
+      "version": "3.5.0-ultra-lite",
+      "containers": [
+        {
+          "id": "stirling-pdf",
+          "image": "stirlingtools/stirling-pdf:3.5.0-ultra-lite",
+          "env": {
+            "SECURITY_ENABLELOGIN": "true",
+            "SECURITY_INITIALLOGIN_USERNAME": "${admin_name}",
+            "SECURITY_INITIALLOGIN_PASSWORD": "${admin_password}"
+          },
+          "mounts": {
+            "config": "/configs",
+            "training": "/usr/share/tessdata"
+          }
+        }
+      ],
+      "volumes": [
+        "config",
+        "training"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "stirling-pdf",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "admin_name",
+          "admin_password"
+        ],
+        "properties": {
+          "admin_name": {
+            "type": "string",
+            "title": "Administrator username",
+            "default": "admin"
+          },
+          "admin_password": {
+            "type": "string",
+            "title": "Initial administrator password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "linkwarden",
+      "logo": "linkwarden",
+      "category": "automation",
+      "name": "Linkwarden",
+      "icon": "pipeline",
+      "description": "Bookmark, organize, and archive web pages with full-text search.",
+      "version": "v2.13.5",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "linkwarden",
+            "POSTGRES_DB": "linkwarden",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "meilisearch",
+          "image": "getmeili/meilisearch:v1.12.8",
+          "env": {
+            "MEILI_MASTER_KEY": "${search_key}"
+          },
+          "mounts": {
+            "search": "/meili_data"
+          }
+        },
+        {
+          "id": "linkwarden",
+          "image": "ghcr.io/linkwarden/linkwarden:v2.13.5",
+          "env": {
+            "DATABASE_URL": "postgresql://linkwarden:${db_password}@postgres:5432/linkwarden",
+            "NEXTAUTH_URL": "${public_url}/api/v1/auth",
+            "NEXTAUTH_SECRET": "${session_key}",
+            "MEILI_HOST": "http://meilisearch:7700",
+            "MEILI_MASTER_KEY": "${search_key}"
+          },
+          "mounts": {
+            "data": "/data/data"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres",
+        "search",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "linkwarden",
+          "port": 3000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "db_password",
+          "session_key",
+          "search_key"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          },
+          "session_key": {
+            "type": "string",
+            "title": "Session secret",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          },
+          "search_key": {
+            "type": "string",
+            "title": "Search master key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 16
+          }
+        }
+      }
+    },
+    {
+      "id": "wallabag",
+      "logo": "wallabag",
+      "category": "automation",
+      "name": "Wallabag",
+      "icon": "pipeline",
+      "description": "Save articles in a read-later library. Change the default wallabag administrator password before sharing the site.",
+      "version": "2.6.19",
+      "containers": [
+        {
+          "id": "mariadb",
+          "image": "mariadb:10.11.19",
+          "env": {
+            "MARIADB_RANDOM_ROOT_PASSWORD": "yes",
+            "MARIADB_DATABASE": "wallabag",
+            "MARIADB_USER": "wallabag",
+            "MARIADB_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "mariadb": "/var/lib/mysql"
+          }
+        },
+        {
+          "id": "wallabag",
+          "image": "wallabag/wallabag:2.6.19",
+          "env": {
+            "SYMFONY__ENV__DATABASE_DRIVER": "pdo_mysql",
+            "SYMFONY__ENV__DATABASE_HOST": "mariadb",
+            "SYMFONY__ENV__DATABASE_NAME": "wallabag",
+            "SYMFONY__ENV__DATABASE_USER": "wallabag",
+            "SYMFONY__ENV__DATABASE_PASSWORD": "${db_password}",
+            "SYMFONY__ENV__DOMAIN_NAME": "${public_url}",
+            "SYMFONY__ENV__SECRET": "${session_key}",
+            "SYMFONY__ENV__FOSUSER_REGISTRATION": "false",
+            "POPULATE_DATABASE": "true"
+          },
+          "mounts": {
+            "images": "/var/www/wallabag/web/assets/images"
+          }
+        }
+      ],
+      "volumes": [
+        "mariadb",
+        "images"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "wallabag",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "db_password",
+          "session_key"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          },
+          "session_key": {
+            "type": "string",
+            "title": "Application secret",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "mealie",
+      "logo": "mealie",
+      "category": "automation",
+      "name": "Mealie",
+      "icon": "pipeline",
+      "description": "Collect recipes, plan meals, and share shopping lists.",
+      "version": "v3.31.0",
+      "containers": [
+        {
+          "id": "mealie",
+          "image": "ghcr.io/mealie-recipes/mealie:v3.31.0",
+          "env": {
+            "BASE_URL": "${public_url}",
+            "ALLOW_SIGNUP": "false"
+          },
+          "mounts": {
+            "data": "/app/data"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "mealie",
+          "port": 9000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          }
+        }
+      }
+    },
+    {
+      "id": "grocy",
+      "logo": "grocy",
+      "category": "automation",
+      "name": "Grocy",
+      "icon": "pipeline",
+      "description": "Manage groceries, pantry stock, and household chores. Change the default administrator password on first login.",
+      "version": "4.7.1",
+      "containers": [
+        {
+          "id": "grocy",
+          "image": "lscr.io/linuxserver/grocy:4.7.1",
+          "mounts": {
+            "data": "/config"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "grocy",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "memos",
+      "logo": "memos",
+      "category": "automation",
+      "name": "Memos",
+      "icon": "pipeline",
+      "description": "A lightweight notes and personal knowledge application.",
+      "version": "26.11.2",
+      "containers": [
+        {
+          "id": "memos",
+          "image": "neosmemo/memos:26.11.2",
+          "mounts": {
+            "data": "/var/opt/memos"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "memos",
+          "port": 5230
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "vikunja",
+      "logo": "vikunja",
+      "category": "automation",
+      "name": "Vikunja",
+      "icon": "pipeline",
+      "description": "Track personal and team tasks, projects, and kanban boards.",
+      "version": "2.8.0",
+      "containers": [
+        {
+          "id": "vikunja",
+          "image": "vikunja/vikunja:2.8.0",
+          "env": {
+            "VIKUNJA_SERVICE_PUBLICURL": "${public_url}/",
+            "VIKUNJA_SERVICE_JWTSECRET": "${session_key}",
+            "VIKUNJA_DATABASE_TYPE": "sqlite",
+            "VIKUNJA_DATABASE_PATH": "/db/vikunja.db"
+          },
+          "mounts": {
+            "files": "/app/vikunja/files",
+            "db": "/db"
+          }
+        }
+      ],
+      "volumes": [
+        "files",
+        "db"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "vikunja",
+          "port": 3456
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "session_key"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "session_key": {
+            "type": "string",
+            "title": "Session secret",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "triliumnext",
+      "logo": "triliumnext",
+      "category": "automation",
+      "name": "TriliumNext Notes",
+      "icon": "pipeline",
+      "description": "A hierarchical personal knowledge base with a browser setup wizard.",
+      "version": "v0.107.0",
+      "containers": [
+        {
+          "id": "triliumnext",
+          "image": "triliumnext/trilium:v0.107.0",
+          "mounts": {
+            "data": "/home/node/trilium-data"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "triliumnext",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "adguard-home",
+      "logo": "adguard-home",
+      "category": "networking",
+      "name": "AdGuard Home",
+      "icon": "shield",
+      "description": "DNS filtering for trusted clients. Use the setup endpoint first and select port 80 for the admin interface.",
+      "version": "v1.0.0",
+      "containers": [
+        {
+          "id": "adguard-home",
+          "image": "adguard/adguardhome:v1.0.0",
+          "mounts": {
+            "work": "/opt/adguardhome/work",
+            "config": "/opt/adguardhome/conf"
+          }
+        }
+      ],
+      "volumes": [
+        "work",
+        "config"
+      ],
+      "http": [
+        {
+          "id": "setup",
+          "container": "adguard-home",
+          "port": 3000
+        },
+        {
+          "id": "admin",
+          "container": "adguard-home",
+          "port": 80
+        }
+      ],
+      "ports": [
+        {
+          "id": "dns-tcp",
+          "container": "adguard-home",
+          "port": 53,
+          "protocol": "tcp",
+          "host_port": 53
+        },
+        {
+          "id": "dns-udp",
+          "container": "adguard-home",
+          "port": 53,
+          "protocol": "udp",
+          "host_port": 53
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "pi-hole",
+      "logo": "pi-hole",
+      "category": "networking",
+      "name": "Pi-hole",
+      "icon": "shield",
+      "description": "DNS filtering for trusted clients. DHCP is not enabled.",
+      "version": "2026.11.0",
+      "containers": [
+        {
+          "id": "pi-hole",
+          "image": "pihole/pihole:2026.11.0",
+          "env": {
+            "FTLCONF_webserver_api_password": "${admin_password}",
+            "FTLCONF_dns_listeningMode": "all"
+          },
+          "mounts": {
+            "data": "/etc/pihole"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "pi-hole",
+          "port": 80
+        }
+      ],
+      "ports": [
+        {
+          "id": "dns-tcp",
+          "container": "pi-hole",
+          "port": 53,
+          "protocol": "tcp",
+          "host_port": 53
+        },
+        {
+          "id": "dns-udp",
+          "container": "pi-hole",
+          "port": 53,
+          "protocol": "udp",
+          "host_port": 53
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "admin_password"
+        ],
+        "properties": {
+          "admin_password": {
+            "type": "string",
+            "title": "Admin password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "headscale",
+      "logo": "headscale",
+      "category": "networking",
+      "name": "Headscale",
+      "icon": "shield",
+      "description": "A private Tailscale-compatible control server. Clients and relays are managed separately.",
+      "version": "v0.29.8",
+      "containers": [
+        {
+          "id": "headscale",
+          "image": "headscale/headscale:v0.29.8",
+          "env": {
+            "HEADSCALE_SERVER_URL": "${public_url}",
+            "HEADSCALE_LISTEN_ADDR": "0.0.0.0:8080",
+            "HEADSCALE_METRICS_LISTEN_ADDR": "127.0.0.1:9090",
+            "HEADSCALE_GRPC_LISTEN_ADDR": "127.0.0.1:50443",
+            "HEADSCALE_NOISE_PRIVATE_KEY_PATH": "/var/lib/headscale/noise.key",
+            "HEADSCALE_DATABASE_TYPE": "sqlite",
+            "HEADSCALE_DATABASE_SQLITE_PATH": "/var/lib/headscale/db.sqlite",
+            "HEADSCALE_UNIX_SOCKET": "/var/lib/headscale/headscale.sock",
+            "HEADSCALE_PREFIXES_V4": "100.64.0.0/10",
+            "HEADSCALE_PREFIXES_V6": "fd7a:115c:a1e0::/48",
+            "HEADSCALE_DNS_MAGIC_DNS": "false",
+            "HEADSCALE_DNS_OVERRIDE_LOCAL_DNS": "false",
+            "HEADSCALE_DERP_URLS": "https://controlplane.tailscale.com/derpmap/default"
+          },
+          "command": [
+            "serve"
+          ],
+          "mounts": {
+            "data": "/var/lib/headscale"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "headscale",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          }
+        }
+      }
+    },
+    {
+      "id": "authentik",
+      "logo": "authentik",
+      "category": "networking",
+      "name": "Authentik",
+      "icon": "shield",
+      "description": "Single sign-on and identity management. Open /if/flow/initial-setup/ to configure the instance.",
+      "version": "2026.2.1",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "authentik",
+            "POSTGRES_DB": "authentik",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "worker",
+          "image": "ghcr.io/goauthentik/server:2026.2.1",
+          "env": {
+            "AUTHENTIK_SECRET_KEY": "${secret_key}",
+            "AUTHENTIK_POSTGRESQL__HOST": "postgres",
+            "AUTHENTIK_POSTGRESQL__NAME": "authentik",
+            "AUTHENTIK_POSTGRESQL__USER": "authentik",
+            "AUTHENTIK_POSTGRESQL__PASSWORD": "${db_password}"
+          },
+          "command": [
+            "worker"
+          ],
+          "mounts": {
+            "data": "/data",
+            "templates": "/templates"
+          }
+        },
+        {
+          "id": "authentik",
+          "image": "ghcr.io/goauthentik/server:2026.2.1",
+          "env": {
+            "AUTHENTIK_SECRET_KEY": "${secret_key}",
+            "AUTHENTIK_POSTGRESQL__HOST": "postgres",
+            "AUTHENTIK_POSTGRESQL__NAME": "authentik",
+            "AUTHENTIK_POSTGRESQL__USER": "authentik",
+            "AUTHENTIK_POSTGRESQL__PASSWORD": "${db_password}"
+          },
+          "command": [
+            "server"
+          ],
+          "mounts": {
+            "data": "/data",
+            "templates": "/templates"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres",
+        "data",
+        "templates"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "authentik",
+          "port": 9000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "db_password",
+          "secret_key"
+        ],
+        "properties": {
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          },
+          "secret_key": {
+            "type": "string",
+            "title": "Application secret key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 50
+          }
+        }
+      }
+    },
+    {
+      "id": "authelia",
+      "logo": "authelia",
+      "category": "networking",
+      "name": "Authelia",
+      "icon": "shield",
+      "description": "An authentication portal for a separate reverse proxy. Configure the proxy to use Authelia forward authentication.",
+      "version": "4.39.28",
+      "containers": [
+        {
+          "id": "authelia",
+          "image": "authelia/authelia:4.39.28",
+          "env": {
+            "COOKIE_DOMAIN": "${cookie_domain}",
+            "AUTH_HOST": "${auth_host}",
+            "ADMIN_NAME": "${admin_name}",
+            "PASSWORD_HASH": "${password_hash}",
+            "AUTHELIA_SESSION_SECRET": "${session_key}",
+            "AUTHELIA_STORAGE_ENCRYPTION_KEY": "${storage_key}",
+            "AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET": "${reset_key}"
+          },
+          "command": [
+            "sh",
+            "-ec",
+            "umask 077\ncase \"$COOKIE_DOMAIN\" in ''|*[!a-zA-Z0-9.-]*) exit 1;; esac\ncase \"$AUTH_HOST\" in ''|*[!a-zA-Z0-9.-]*) exit 1;; esac\ncase \"$ADMIN_NAME\" in ''|*[!a-zA-Z0-9_.-]*) exit 1;; esac\ncase \"$PASSWORD_HASH\" in '$argon2id$'*) ;; *) exit 1;; esac\ncat > /config/configuration.yml <<EOF\nserver:\n  address: tcp://:9091/\nauthentication_backend:\n  file:\n    path: /config/users.yml\naccess_control:\n  default_policy: one_factor\nsession:\n  cookies:\n    - domain: \"$COOKIE_DOMAIN\"\n      authelia_url: \"https://$AUTH_HOST\"\nstorage:\n  local:\n    path: /config/db.sqlite3\nnotifier:\n  filesystem:\n    filename: /config/notification.txt\nEOF\nprintf 'users:\\n  \"%s\":\\n    password: \"%s\"\\n    displayname: \"%s\"\\n' \"$ADMIN_NAME\" \"$PASSWORD_HASH\" \"$ADMIN_NAME\" > /config/users.yml\nexec /app/entrypoint.sh --config /config/configuration.yml"
+          ],
+          "mounts": {
+            "config": "/config"
+          }
+        }
+      ],
+      "volumes": [
+        "config"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "authelia",
+          "port": 9091
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "cookie_domain",
+          "auth_host",
+          "admin_name",
+          "password_hash",
+          "session_key",
+          "storage_key",
+          "reset_key"
+        ],
+        "properties": {
+          "cookie_domain": {
+            "type": "string",
+            "title": "Session cookie domain",
+            "description": "Base domain shared by Authelia and protected services."
+          },
+          "auth_host": {
+            "type": "string",
+            "title": "Public hostname",
+            "description": "Enter the mapped hostname without a scheme or path."
+          },
+          "admin_name": {
+            "type": "string",
+            "title": "Administrator username",
+            "default": "admin"
+          },
+          "password_hash": {
+            "type": "string",
+            "title": "Administrator Argon2id password hash",
+            "description": "Generate this with the Authelia crypto hash generate argon2 command."
+          },
+          "session_key": {
+            "type": "string",
+            "title": "Session secret",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          },
+          "storage_key": {
+            "type": "string",
+            "title": "Storage encryption key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          },
+          "reset_key": {
+            "type": "string",
+            "title": "Password reset signing key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "crowdsec",
+      "logo": "crowdsec",
+      "category": "networking",
+      "name": "CrowdSec Local API",
+      "icon": "shield",
+      "description": "Run the CrowdSec Local API for separately managed log processors and remediation components. This recipe does not read host logs or change firewall rules.",
+      "version": "v1.8.2",
+      "containers": [
+        {
+          "id": "crowdsec",
+          "image": "ghcr.io/crowdsecurity/crowdsec:v1.8.2",
+          "env": {
+            "DISABLE_AGENT": "true",
+            "AGENT_USERNAME": "startship-agent",
+            "AGENT_PASSWORD": "${agent_password}"
+          },
+          "mounts": {
+            "config": "/etc/crowdsec",
+            "data": "/var/lib/crowdsec/data"
+          }
+        }
+      ],
+      "volumes": [
+        "config",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "api",
+          "container": "crowdsec",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "agent_password"
+        ],
+        "properties": {
+          "agent_password": {
+            "type": "string",
+            "title": "Remote agent password",
+            "description": "Use a unique password for the provisioned startship-agent identity.",
+            "minLength": 16
+          }
+        }
+      }
+    },
+    {
+      "id": "nginx-proxy-manager",
+      "logo": "nginx-proxy-manager",
+      "category": "networking",
+      "name": "Nginx Proxy Manager",
+      "icon": "shield",
+      "description": "Manage HTTP reverse proxy routes from a dedicated web UI. Startship terminates external HTTPS.",
+      "version": "2.17.1",
+      "containers": [
+        {
+          "id": "nginx-proxy-manager",
+          "image": "jc21/nginx-proxy-manager:2.17.1",
+          "env": {
+            "DISABLE_IPV6": "true"
+          },
+          "mounts": {
+            "data": "/data",
+            "certificates": "/etc/letsencrypt"
+          }
+        }
+      ],
+      "volumes": [
+        "data",
+        "certificates"
+      ],
+      "http": [
+        {
+          "id": "admin",
+          "container": "nginx-proxy-manager",
+          "port": 81
+        },
+        {
+          "id": "proxy",
+          "container": "nginx-proxy-manager",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "traefik",
+      "logo": "traefik",
+      "category": "networking",
+      "name": "Traefik",
+      "icon": "shield",
+      "description": "Proxy requests to a configured HTTP upstream and inspect routes in a password-protected dashboard.",
+      "version": "v3.7.20",
+      "containers": [
+        {
+          "id": "traefik",
+          "image": "traefik:v3.7.20",
+          "env": {
+            "UPSTREAM": "${upstream}",
+            "DASHBOARD_AUTH": "${dashboard_auth}"
+          },
+          "command": [
+            "sh",
+            "-ec",
+            "cat > /tmp/dynamic.yml <<'EOF'\nhttp:\n  routers:\n    dashboard:\n      entryPoints: [dashboard]\n      rule: PathPrefix(`/dashboard`) || PathPrefix(`/api`)\n      service: api@internal\n      middlewares: [dashboard-auth]\n    proxy:\n      entryPoints: [web]\n      rule: PathPrefix(`/`)\n      service: upstream\n  middlewares:\n    dashboard-auth:\n      basicAuth:\n        users:\n          - {{ env \"DASHBOARD_AUTH\" | quote }}\n  services:\n    upstream:\n      loadBalancer:\n        passHostHeader: false\n        servers:\n          - url: {{ env \"UPSTREAM\" | quote }}\nEOF\nexec traefik --api.dashboard=true --entrypoints.dashboard.address=:8080 --entrypoints.web.address=:8000 --providers.file.filename=/tmp/dynamic.yml"
+          ]
+        }
+      ],
+      "http": [
+        {
+          "id": "dashboard",
+          "container": "traefik",
+          "port": 8080
+        },
+        {
+          "id": "proxy",
+          "container": "traefik",
+          "port": 8000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "upstream",
+          "dashboard_auth"
+        ],
+        "properties": {
+          "upstream": {
+            "type": "string",
+            "title": "Upstream URL",
+            "description": "An HTTP or HTTPS URL reachable from the proxy container."
+          },
+          "dashboard_auth": {
+            "type": "string",
+            "title": "Dashboard authentication",
+            "description": "Enter a username:bcrypt-hash line generated by htpasswd."
+          }
+        }
+      }
+    },
+    {
+      "id": "caddy",
+      "logo": "caddy",
+      "category": "networking",
+      "name": "Caddy",
+      "icon": "shield",
+      "description": "Proxy an HTTP route to a configured upstream. Startship terminates HTTPS; Caddy’s admin API is not exposed.",
+      "version": "2.11.9-alpine",
+      "containers": [
+        {
+          "id": "caddy",
+          "image": "caddy:2.11.9-alpine",
+          "env": {
+            "UPSTREAM": "${upstream}"
+          },
+          "command": [
+            "sh",
+            "-ec",
+            "exec caddy reverse-proxy --from http://:8080 --to \"$UPSTREAM\""
+          ],
+          "mounts": {
+            "data": "/data",
+            "config": "/config"
+          }
+        }
+      ],
+      "volumes": [
+        "data",
+        "config"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "caddy",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "upstream"
+        ],
+        "properties": {
+          "upstream": {
+            "type": "string",
+            "title": "Upstream URL",
+            "description": "An HTTP or HTTPS URL reachable from the proxy container."
+          }
+        }
+      }
+    },
+    {
+      "id": "frp",
+      "logo": "frp",
+      "category": "networking",
+      "name": "FRP Server",
+      "icon": "shield",
+      "description": "Authenticated FRP control server. Configure the client to use TCP 7001 as its remote proxy port.",
+      "version": "v0.72.0",
+      "containers": [
+        {
+          "id": "frp",
+          "image": "ghcr.io/fatedier/frps:v0.72.0",
+          "command": [
+            "--token",
+            "${tunnel_token}",
+            "--tls-only",
+            "--allow-ports",
+            "7001",
+            "--dashboard-port",
+            "7500",
+            "--dashboard-pwd",
+            "${admin_password}"
+          ]
+        }
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "frp",
+          "port": 7500
+        }
+      ],
+      "ports": [
+        {
+          "id": "control",
+          "container": "frp",
+          "port": 7000,
+          "protocol": "tcp",
+          "host_port": 7000
+        },
+        {
+          "id": "proxy",
+          "container": "frp",
+          "port": 7001,
+          "protocol": "tcp",
+          "host_port": 7001
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "tunnel_token",
+          "admin_password"
+        ],
+        "properties": {
+          "tunnel_token": {
+            "type": "string",
+            "title": "FRP tunnel token",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          },
+          "admin_password": {
+            "type": "string",
+            "title": "Dashboard password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "ollama",
+      "logo": "ollama",
+      "category": "ai",
+      "name": "Ollama",
+      "icon": "terminal",
+      "description": "Run language models on the CPU. The Ollama API has no authentication; keep it private.",
+      "version": "0.40.18",
+      "containers": [
+        {
+          "id": "ollama",
+          "image": "ollama/ollama:0.40.18",
+          "mounts": {
+            "models": "/root/.ollama"
+          }
+        }
+      ],
+      "volumes": [
+        "models"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "ollama",
+          "port": 11434
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "open-webui",
+      "logo": "open-webui",
+      "category": "ai",
+      "name": "Open WebUI",
+      "icon": "terminal",
+      "description": "A chat interface for a private CPU-based Ollama sidecar. Create the administrator account on first access.",
+      "version": "v0.8.10",
+      "containers": [
+        {
+          "id": "ollama",
+          "image": "ollama/ollama:0.40.18",
+          "mounts": {
+            "models": "/root/.ollama"
+          }
+        },
+        {
+          "id": "open-webui",
+          "image": "ghcr.io/open-webui/open-webui:v0.8.10",
+          "env": {
+            "OLLAMA_BASE_URL": "http://ollama:11434",
+            "WEBUI_SECRET_KEY": "${session_key}"
+          },
+          "mounts": {
+            "data": "/app/backend/data"
+          }
+        }
+      ],
+      "volumes": [
+        "models",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "open-webui",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "session_key"
+        ],
+        "properties": {
+          "session_key": {
+            "type": "string",
+            "title": "Session signing key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "anythingllm",
+      "logo": "anythingllm",
+      "category": "ai",
+      "name": "AnythingLLM",
+      "icon": "terminal",
+      "description": "A workspace for chat and retrieval over your documents; configure a CPU or external model provider in the setup wizard.",
+      "version": "1.20.0",
+      "containers": [
+        {
+          "id": "anythingllm",
+          "image": "mintplexlabs/anythingllm:1.20.0",
+          "env": {
+            "STORAGE_DIR": "/app/server/storage",
+            "JWT_SECRET": "${session_key}"
+          },
+          "mounts": {
+            "data": "/app/server/storage"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "anythingllm",
+          "port": 3001
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "session_key"
+        ],
+        "properties": {
+          "session_key": {
+            "type": "string",
+            "title": "Session signing key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "localai",
+      "logo": "localai",
+      "category": "ai",
+      "name": "LocalAI",
+      "icon": "terminal",
+      "description": "Serve CPU-based AI models through an OpenAI-compatible API.",
+      "version": "v3.12.1",
+      "containers": [
+        {
+          "id": "localai",
+          "image": "localai/localai:v3.12.1",
+          "env": {
+            "LOCALAI_API_KEY": "${api_key}"
+          },
+          "mounts": {
+            "models": "/models"
+          }
+        }
+      ],
+      "volumes": [
+        "models"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "localai",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "api_key"
+        ],
+        "properties": {
+          "api_key": {
+            "type": "string",
+            "title": "API access key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "comfyui",
+      "logo": "comfyui",
+      "category": "ai",
+      "name": "ComfyUI",
+      "icon": "terminal",
+      "description": "Build visual image-generation workflows using the CPU; add model weights to the workspace.",
+      "version": "cpu-22.04",
+      "containers": [
+        {
+          "id": "comfyui",
+          "image": "ghcr.io/ai-dock/comfyui:cpu-22.04@sha256:5f08ab173b4d78babb6b003a875d495a64378815237e8b80c9248923dcda9a52",
+          "env": {
+            "WEB_USER": "admin",
+            "WEB_PASSWORD": "${admin_password}",
+            "COMFYUI_ARGS": "--cpu"
+          },
+          "mounts": {
+            "workspace": "/workspace"
+          }
+        }
+      ],
+      "volumes": [
+        "workspace"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "comfyui",
+          "port": 8188
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "admin_password"
+        ],
+        "properties": {
+          "admin_password": {
+            "type": "string",
+            "title": "Web access password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "invokeai",
+      "logo": "invokeai",
+      "category": "ai",
+      "name": "InvokeAI",
+      "icon": "terminal",
+      "description": "A CPU-only image-generation workspace. Keep the unauthenticated editor on a private route.",
+      "version": "6.9.0-cpu",
+      "containers": [
+        {
+          "id": "invokeai",
+          "image": "ghcr.io/invoke-ai/invokeai:6.9.0-cpu",
+          "env": {
+            "INVOKEAI_DEVICE": "cpu",
+            "INVOKEAI_HOST": "0.0.0.0"
+          },
+          "mounts": {
+            "data": "/invokeai"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "invokeai",
+          "port": 9090
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "stable-diffusion-webui",
+      "logo": "stable-diffusion-webui",
+      "category": "ai",
+      "name": "Stable Diffusion WebUI",
+      "icon": "terminal",
+      "description": "Run AUTOMATIC1111’s image-generation interface on the CPU; add model weights to the workspace.",
+      "version": "v2-cpu-22.04",
+      "containers": [
+        {
+          "id": "stable-diffusion-webui",
+          "image": "ghcr.io/ai-dock/stable-diffusion-webui:v2-cpu-22.04@sha256:2d3b554c622b50a0e9d858eb2f51805a46d3e637a40e4ff2bcaf2caf5ec2adaf",
+          "env": {
+            "WEB_USER": "admin",
+            "WEB_PASSWORD": "${admin_password}",
+            "WEBUI_ARGS": "--use-cpu all --skip-torch-cuda-test --no-half"
+          },
+          "mounts": {
+            "workspace": "/workspace"
+          }
+        }
+      ],
+      "volumes": [
+        "workspace"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "stable-diffusion-webui",
+          "port": 7860
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "admin_password"
+        ],
+        "properties": {
+          "admin_password": {
+            "type": "string",
+            "title": "Web access password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "searxng",
+      "logo": "searxng",
+      "category": "ai",
+      "name": "SearXNG",
+      "icon": "terminal",
+      "description": "A privacy-oriented metasearch engine. Keep an unrestricted instance on a trusted network.",
+      "version": "2026.11.26-b5605b8f2",
+      "containers": [
+        {
+          "id": "searxng",
+          "image": "searxng/searxng:2026.11.26-b5605b8f2",
+          "env": {
+            "SEARXNG_BASE_URL": "${public_url}/",
+            "SEARXNG_SECRET": "${secret_key}"
+          },
+          "mounts": {
+            "config": "/etc/searxng",
+            "cache": "/var/cache/searxng"
+          }
+        }
+      ],
+      "volumes": [
+        "config",
+        "cache"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "searxng",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "secret_key"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "secret_key": {
+            "type": "string",
+            "title": "Application secret key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "wordpress",
+      "logo": "wordpress",
+      "category": "web",
+      "name": "WordPress",
+      "icon": "globe",
+      "description": "Publish a site, blog, or store backed by its own MariaDB database.",
+      "version": "7.1.5-php8.6-apache",
+      "containers": [
+        {
+          "id": "mariadb",
+          "image": "mariadb:10.11.19",
+          "env": {
+            "MARIADB_RANDOM_ROOT_PASSWORD": "yes",
+            "MARIADB_DATABASE": "wordpress",
+            "MARIADB_USER": "wordpress",
+            "MARIADB_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "mariadb": "/var/lib/mysql"
+          }
+        },
+        {
+          "id": "wordpress",
+          "image": "wordpress:7.1.5-php8.6-apache",
+          "env": {
+            "WORDPRESS_DB_HOST": "mariadb:3306",
+            "WORDPRESS_DB_NAME": "wordpress",
+            "WORDPRESS_DB_USER": "wordpress",
+            "WORDPRESS_DB_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "data": "/var/www/html"
+          }
+        }
+      ],
+      "volumes": [
+        "mariadb",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "wordpress",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "db_password"
+        ],
+        "properties": {
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "ghost",
+      "logo": "ghost",
+      "category": "web",
+      "name": "Ghost",
+      "icon": "globe",
+      "description": "Write and publish an independent website or newsletter.",
+      "version": "6.79.0-alpine",
+      "containers": [
+        {
+          "id": "mysql",
+          "image": "mysql:8.4.13",
+          "env": {
+            "MYSQL_RANDOM_ROOT_PASSWORD": "yes",
+            "MYSQL_DATABASE": "ghost",
+            "MYSQL_USER": "ghost",
+            "MYSQL_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "db": "/var/lib/mysql"
+          }
+        },
+        {
+          "id": "ghost",
+          "image": "ghost:6.79.0-alpine",
+          "env": {
+            "url": "${public_url}",
+            "database__client": "mysql",
+            "database__connection__host": "mysql",
+            "database__connection__user": "ghost",
+            "database__connection__password": "${db_password}",
+            "database__connection__database": "ghost"
+          },
+          "mounts": {
+            "content": "/var/lib/ghost/content"
+          }
+        }
+      ],
+      "volumes": [
+        "db",
+        "content"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "ghost",
+          "port": 2368
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "db_password"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "directus",
+      "logo": "directus",
+      "category": "web",
+      "name": "Directus",
+      "icon": "globe",
+      "description": "A data platform and headless CMS backed by dedicated PostgreSQL.",
+      "version": "12.7.0",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "directus",
+            "POSTGRES_DB": "directus",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "directus",
+          "image": "directus/directus:12.7.0",
+          "env": {
+            "PUBLIC_URL": "${public_url}",
+            "SECRET": "${secret_key}",
+            "ADMIN_EMAIL": "${admin_email}",
+            "ADMIN_PASSWORD": "${admin_password}",
+            "DB_CLIENT": "pg",
+            "DB_HOST": "postgres",
+            "DB_PORT": "5432",
+            "DB_DATABASE": "directus",
+            "DB_USER": "directus",
+            "DB_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "uploads": "/directus/uploads",
+            "extensions": "/directus/extensions"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres",
+        "uploads",
+        "extensions"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "directus",
+          "port": 8055
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "secret_key",
+          "admin_email",
+          "admin_password",
+          "db_password"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "secret_key": {
+            "type": "string",
+            "title": "Application secret",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          },
+          "admin_email": {
+            "type": "string",
+            "title": "Initial administrator email"
+          },
+          "admin_password": {
+            "type": "string",
+            "title": "Initial administrator password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "appsmith",
+      "logo": "appsmith",
+      "category": "web",
+      "name": "Appsmith",
+      "icon": "globe",
+      "description": "Build internal tools with a low-code editor and embedded storage.",
+      "version": "v2.7.2",
+      "containers": [
+        {
+          "id": "appsmith",
+          "image": "appsmith/appsmith-ce:v2.7.2",
+          "mounts": {
+            "data": "/appsmith-stacks"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "appsmith",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "id": "budibase",
+      "logo": "budibase",
+      "category": "web",
+      "name": "Budibase",
+      "icon": "globe",
+      "description": "Build internal apps and automate processes with the all-in-one deployment.",
+      "version": "v4.1.0",
+      "containers": [
+        {
+          "id": "budibase",
+          "image": "budibase/budibase:v4.1.0",
+          "env": {
+            "JWT_SECRET": "${session_key}",
+            "INTERNAL_API_KEY": "${internal_key}",
+            "MINIO_ACCESS_KEY": "budibase",
+            "MINIO_SECRET_KEY": "${object_key}",
+            "COUCH_DB_USER": "budibase",
+            "COUCH_DB_PASSWORD": "${db_password}",
+            "REDIS_PASSWORD": "${cache_key}"
+          },
+          "mounts": {
+            "data": "/data"
+          }
+        }
+      ],
+      "volumes": [
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "budibase",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "session_key",
+          "internal_key",
+          "object_key",
+          "db_password",
+          "cache_key"
+        ],
+        "properties": {
+          "session_key": {
+            "type": "string",
+            "title": "Session signing key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          },
+          "internal_key": {
+            "type": "string",
+            "title": "Internal API key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          },
+          "object_key": {
+            "type": "string",
+            "title": "Object store password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          },
+          "cache_key": {
+            "type": "string",
+            "title": "Cache password",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "nocodb",
+      "logo": "nocodb",
+      "category": "web",
+      "name": "NocoDB",
+      "icon": "globe",
+      "description": "Turn a dedicated PostgreSQL database into a collaborative spreadsheet.",
+      "version": "2026.11.0",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "nocodb",
+            "POSTGRES_DB": "nocodb",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "nocodb",
+          "image": "nocodb/nocodb:2026.11.0",
+          "env": {
+            "NC_DB": "pg://postgres:5432?u=nocodb&p=${db_password}&d=nocodb",
+            "NC_AUTH_JWT_SECRET": "${session_key}",
+            "NC_PUBLIC_URL": "${public_url}"
+          },
+          "mounts": {
+            "data": "/usr/app/data"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "nocodb",
+          "port": 8080
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "db_password",
+          "session_key"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          },
+          "session_key": {
+            "type": "string",
+            "title": "Session signing key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "metabase",
+      "logo": "metabase",
+      "category": "web",
+      "name": "Metabase",
+      "icon": "globe",
+      "description": "Explore and visualize databases from a business intelligence dashboard.",
+      "version": "v0.65.7.3",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "metabase",
+            "POSTGRES_DB": "metabase",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "metabase",
+          "image": "metabase/metabase:v0.65.7.3",
+          "env": {
+            "MB_DB_TYPE": "postgres",
+            "MB_DB_HOST": "postgres",
+            "MB_DB_PORT": "5432",
+            "MB_DB_DBNAME": "metabase",
+            "MB_DB_USER": "metabase",
+            "MB_DB_PASS": "${db_password}",
+            "MB_SITE_URL": "${public_url}"
+          },
+          "mounts": {
+            "plugins": "/plugins"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres",
+        "plugins"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "metabase",
+          "port": 3000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "db_password"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "plausible",
+      "logo": "plausible",
+      "category": "web",
+      "name": "Plausible Analytics",
+      "icon": "globe",
+      "description": "Collect privacy-friendly website statistics with dedicated PostgreSQL and ClickHouse stores.",
+      "version": "v3.1.0",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "plausible",
+            "POSTGRES_DB": "plausible",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "clickhouse",
+          "image": "clickhouse/clickhouse-server:24.12.6.70-alpine",
+          "env": {
+            "CLICKHOUSE_DB": "plausible_events",
+            "CLICKHOUSE_USER": "plausible",
+            "CLICKHOUSE_PASSWORD": "${events_password}"
+          },
+          "mounts": {
+            "events": "/var/lib/clickhouse"
+          }
+        },
+        {
+          "id": "plausible",
+          "image": "ghcr.io/plausible/community-edition:v3.1.0",
+          "env": {
+            "BASE_URL": "${public_url}",
+            "SECRET_KEY_BASE": "${secret_key}",
+            "DATABASE_URL": "postgresql://plausible:${db_password}@postgres:5432/plausible",
+            "CLICKHOUSE_DATABASE_URL": "http://plausible:${events_password}@clickhouse:8123/plausible_events",
+            "ENABLE_EMAIL_VERIFICATION": "false",
+            "TMPDIR": "/var/lib/plausible/tmp"
+          },
+          "command": [
+            "sh",
+            "-ec",
+            "/entrypoint.sh db createdb && /entrypoint.sh db migrate && exec /entrypoint.sh run"
+          ],
+          "mounts": {
+            "data": "/var/lib/plausible"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres",
+        "events",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "plausible",
+          "port": 8000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "secret_key",
+          "db_password",
+          "events_password"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "secret_key": {
+            "type": "string",
+            "title": "Application secret key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 64
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          },
+          "events_password": {
+            "type": "string",
+            "title": "ClickHouse password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          }
+        }
+      }
+    },
+    {
+      "id": "umami",
+      "logo": "umami",
+      "category": "web",
+      "name": "Umami",
+      "icon": "globe",
+      "description": "Website analytics backed by a dedicated PostgreSQL database. Change the default administrator password on first login.",
+      "version": "3.5.0",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "postgres:16.16",
+          "env": {
+            "POSTGRES_USER": "umami",
+            "POSTGRES_DB": "umami",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "umami",
+          "image": "ghcr.io/umami-software/umami:3.5.0",
+          "env": {
+            "DATABASE_URL": "postgresql://umami:${db_password}@postgres:5432/umami",
+            "APP_SECRET": "${secret_key}"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "umami",
+          "port": 3000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "db_password",
+          "secret_key"
+        ],
+        "properties": {
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          },
+          "secret_key": {
+            "type": "string",
+            "title": "Application secret key",
+            "description": "Use a unique, strong value. Startship does not generate it.",
+            "minLength": 32
+          }
+        }
+      }
+    },
+    {
+      "id": "flarum",
+      "logo": "flarum",
+      "category": "web",
+      "name": "Flarum",
+      "icon": "globe",
+      "description": "A lightweight discussion forum with a dedicated MariaDB database.",
+      "version": "1.8.20",
+      "containers": [
+        {
+          "id": "mariadb",
+          "image": "mariadb:10.11.19",
+          "env": {
+            "MARIADB_RANDOM_ROOT_PASSWORD": "yes",
+            "MARIADB_DATABASE": "flarum",
+            "MARIADB_USER": "flarum",
+            "MARIADB_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "mariadb": "/var/lib/mysql"
+          }
+        },
+        {
+          "id": "flarum",
+          "image": "crazymax/flarum:1.8.20",
+          "env": {
+            "FLARUM_BASE_URL": "${public_url}",
+            "DB_HOST": "mariadb",
+            "DB_NAME": "flarum",
+            "DB_USER": "flarum",
+            "DB_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "data": "/data"
+          }
+        }
+      ],
+      "volumes": [
+        "mariadb",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "flarum",
+          "port": 8000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "db_password"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "description": "Use at least 12 URL-safe characters (letters, numbers, hyphens, or underscores).",
+            "minLength": 12
+          }
+        }
+      }
     }
   ]
 }
