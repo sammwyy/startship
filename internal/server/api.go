@@ -9,11 +9,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/sammwyy/startship/internal/catalog"
 	"github.com/sammwyy/startship/internal/detect"
 	"github.com/sammwyy/startship/internal/pipeline"
 	"github.com/sammwyy/startship/internal/recipes"
 	"github.com/sammwyy/startship/internal/router"
 	"github.com/sammwyy/startship/internal/routing"
+	"github.com/sammwyy/startship/registry"
 	"golang.org/x/crypto/bcrypt"
 	"io"
 	"net/http"
@@ -27,7 +29,8 @@ type Server struct {
 	sleep                sleepRuntime
 	dockerService        func(...string) (string, error)
 	dockerStream         func(io.Writer, ...string) error
-	recipes              recipes.Registry
+	recipes              *registry.Cache[recipes.Registry]
+	serviceCatalog       *registry.Cache[catalog.Registry]
 	recipeFile           func(recipeApp, recipes.File, string, string) (string, error)
 	resourcesMu          sync.Mutex
 	volumeSizeMu         sync.Mutex
@@ -374,7 +377,7 @@ func (a *Server) api() http.Handler {
 			reply(w, 200, pipeline.Templates())
 			return
 		}
-		if a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.backupsAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) || a.recipeAppsAPI(w, r, p, uid, x) {
+		if a.catalogAPI(w, r, p, x) || a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.backupsAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) || a.recipeAppsAPI(w, r, p, uid, x) {
 			return
 		}
 		if p[1] == "detect" && r.Method == "POST" {

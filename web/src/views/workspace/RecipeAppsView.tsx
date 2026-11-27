@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Heading } from "../../components/Heading";
+import { CatalogRefresh } from "../../components/CatalogRefresh";
 import { HostPicker, pickedHost } from "../../components/HostPicker";
 import { Icon } from "../../components/Icon";
 import { RecipeSchemaFields } from "../../components/RecipeSchemaFields";
@@ -72,16 +73,19 @@ function RecipePorts({
 
 function InstallApp({
   path,
+  workspaceId,
   close,
   installed,
 }: {
   path: string;
+  workspaceId: string;
   close: () => void;
   installed: (app: RecipeApp) => void;
 }) {
   const catalog = useQuery({
     queryKey: ["recipes"],
-    queryFn: () => request<Recipe[]>("recipes"),
+    queryFn: ({ signal }) =>
+      request<Recipe[]>("recipes", undefined, "GET", signal),
   });
   const [recipe, setRecipe] = useState<Recipe>();
   const [config, setConfig] = useState<Values>({});
@@ -137,6 +141,7 @@ function InstallApp({
         </AsyncForm>
       ) : (
         <div className="catalog-scroll">
+          <CatalogRefresh path="recipes" workspaceId={workspaceId} />
           <ErrorMessage error={catalog.error} />
           {catalog.isPending && <Loading />}
           <div className="catalog-grid">
@@ -680,6 +685,13 @@ export function RecipeAppsView() {
     topic: "recipe_apps",
     workspace_id: workspaceId,
   });
+  useLiveSubscription(appId ? null : { topic: "recipes_catalog" });
+  useQuery({
+    queryKey: ["recipes"],
+    queryFn: ({ signal }) =>
+      request<Recipe[]>("recipes", undefined, "GET", signal),
+    enabled: !appId,
+  });
   const [install, setInstall] = useState(false);
   const refresh = () => client.invalidateQueries({ queryKey: [collection] });
   const manage = !!query.data?.can_manage;
@@ -772,6 +784,7 @@ export function RecipeAppsView() {
       {install && (
         <InstallApp
           path={collection}
+          workspaceId={workspaceId}
           close={() => setInstall(false)}
           installed={(item) => {
             client.setQueryData<RecipeApps>(

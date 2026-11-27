@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -70,14 +71,6 @@ func (a *Server) resourceProject(x *access, ws, id, mount string) bool {
 	return err == nil && p.Kind == "projects" && projectWorkspace(p) == ws && x.can(p, "project.settings")
 }
 func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string, uid string, x *access) bool {
-	if len(p) == 2 && p[1] == "catalog" {
-		if r.Method != "GET" {
-			fail(w, 405, "method not allowed")
-		} else {
-			reply(w, 200, catalog.All())
-		}
-		return true
-	}
 	if len(p) == 4 && p[1] == "projects" && p[3] == "services" {
 		pr, err := a.store.Get(p[2])
 		if err != nil || pr.Kind != "projects" || !x.visible(pr) {
@@ -95,7 +88,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 			for _, at := range s.Attachments {
 				if at.ProjectID == pr.ID {
 					found = true
-					e, _ := catalog.Lookup(s.Engine)
+					e, _ := s.engineDefinition()
 					env := e.Connection(at.Alias, e.Port, s.Config)
 					if !x.at(s.WorkspaceID, "")["services.manage"] {
 						for k := range env {
@@ -152,7 +145,8 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				fail(w, 400, "invalid JSON")
 				return true
 			}
-			e, ok := catalog.Lookup(input.Engine)
+			index, _ := a.serviceRegistry()
+			e, ok := index.Lookup(input.Engine)
 			if !ok {
 				fail(w, 400, "unknown engine")
 				return true
@@ -161,7 +155,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				input.Version = e.Versions[0]
 			}
 			config, err := catalog.Validate(e, input.Version, input.Config)
-			s := Service{ID: randomID(), WorkspaceID: ws.ID, Name: input.Name, Engine: e.ID, Version: input.Version, Config: config, ExternalPort: input.ExternalPort, VolumeID: input.VolumeID, Status: "pending", Attachments: []Attachment{}, Created: time.Now().UTC(), CreatedBy: uid}
+			s := Service{ID: randomID(), WorkspaceID: ws.ID, Name: input.Name, Engine: e.ID, Definition: &e, Version: input.Version, Config: config, ExternalPort: input.ExternalPort, VolumeID: input.VolumeID, Status: "pending", Attachments: []Attachment{}, Created: time.Now().UTC(), CreatedBy: uid}
 			s.Updated = s.Created
 			if err == nil {
 				err = a.validateService(s)
@@ -344,7 +338,13 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				fail(w, 400, "invalid patch; name is immutable")
 				return true
 			}
-			if input.Version != nil {
+			e, _ := s.engineDefinition()
+			if input.Version != nil && *input.Version != s.Version {
+				index, _ := a.serviceRegistry()
+				if candidate, ok := index.Lookup(s.Engine); ok && slices.Contains(candidate.Versions, *input.Version) {
+					e = candidate
+					s.Definition = &e
+				}
 				s.Version = *input.Version
 			}
 			if input.ExternalPort != nil {
@@ -357,7 +357,6 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 			for k, v := range input.Config {
 				merged[k] = v
 			}
-			e, _ := catalog.Lookup(s.Engine)
 			s.Config, err = catalog.Validate(e, s.Version, merged)
 			if err == nil {
 				err = a.validateService(s)

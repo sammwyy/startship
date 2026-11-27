@@ -17,6 +17,7 @@ func TestAppsCommands(t *testing.T) {
 		method, path, body string
 	}{
 		{[]string{"recipes", "show", "gitea"}, "GET", "/api/recipes/gitea", ""},
+		{[]string{"recipes", "refresh", "Team"}, "POST", "/api/recipes/refresh?workspace=w", ""},
 		{[]string{"install", "Team", "gitea", "git", "--config", `{"root_url":"https://git.example.com"}`}, "POST", base, `{"name":"git","recipe":"gitea","config":{"root_url":"https://git.example.com"}}`},
 		{[]string{"update", "w", "git"}, "POST", base + "/a/update", ""},
 		{[]string{"config", "set", "w", "git", "--file", "config", "--config", `{"enabled":true}`, "--restart"}, "PUT", base + "/a/files/config", `{"values":{"enabled":true},"restart":true}`},

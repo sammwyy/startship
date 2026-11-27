@@ -1,13 +1,12 @@
 # App recipes
 
 The **Apps** workspace section and `startship apps` use the same recipe registry.
-Startship includes four [built-in recipes](../internal/recipes/builtin/). To
-add your own, set `STARTSHIP_RECIPES_URL` on the daemon, restart it, and serve
-an index containing one JSON object with a `recipes` array. With Docker Compose,
-set the variable in the daemon service's `environment` block. Use a trusted
-HTTPS registry: its operator controls which images and commands are offered for
-installation. A valid remote recipe with the same ID replaces the built-in in
-the catalog; a failed fetch or invalid index leaves the built-ins available.
+The daemon bundles [registry/recipes.json](../registry/recipes.json), and by
+default fetches the latest copy from the repository's `main` branch. Set
+`STARTSHIP_RECIPES_URL` on the daemon and restart it to use a custom index
+with one JSON object containing a `recipes` array. A valid remote index
+replaces the **entire** catalog. See [catalog refresh](catalogs.md) for cache
+behavior, permissions, and the commands to refresh manually.
 Installs retain a snapshot of their recipe, so editing the index does not
 silently alter a running app. **Update images** pulls the installed recipe's
 image references again.

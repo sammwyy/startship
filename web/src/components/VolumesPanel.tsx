@@ -273,6 +273,7 @@ export function VolumesPanel({
                 ),
                 mountPath =
                   v.mount_path ||
+                  service?.definition?.data_path ||
                   catalog.data?.find((e) => e.id === service?.engine)
                     ?.data_path,
                 owner = v.service_id

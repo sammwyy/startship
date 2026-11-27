@@ -1,16 +1,21 @@
 package catalog
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
+	"path"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/sammwyy/startship/registry"
 )
 
 type Field struct {
@@ -35,47 +40,97 @@ type Engine struct {
 	Fields      []Field  `json:"fields"`
 }
 
-func field(key, value string) Field {
-	return Field{Key: key, Label: key, Type: "text", Default: value, Required: true}
-}
-func credentials() []Field {
-	return []Field{field("user", "startship"), {Key: "password", Label: "Password", Type: "password", Generate: true, Required: true}, field("database", "startship")}
-}
+type Registry []Engine
 
-var engines = []Engine{
-	{ID: "postgresql", Name: "PostgreSQL", Category: "database", Image: "postgres", Versions: []string{"17", "16", "15"}, Port: 5432, DataPath: "/var/lib/postgresql/data", Fields: credentials()},
-	{ID: "mysql", Name: "MySQL", Category: "database", Image: "mysql", Versions: []string{"8.4", "8.0"}, Port: 3306, DataPath: "/var/lib/mysql", Fields: credentials()},
-	{ID: "mariadb", Name: "MariaDB", Category: "database", Image: "mariadb", Versions: []string{"11.4", "10.11"}, Port: 3306, DataPath: "/var/lib/mysql", Fields: credentials()},
-	{ID: "mongodb", Name: "MongoDB", Category: "database", Image: "mongo", Versions: []string{"8.0", "7.0"}, Port: 27017, DataPath: "/data/db", Fields: credentials()},
-	{ID: "redis", Name: "Redis", Category: "cache", Image: "redis", Versions: []string{"7.4", "7.2"}, Port: 6379, DataPath: "/data", Fields: credentials()[1:2]},
-	{ID: "valkey", Name: "Valkey", Category: "cache", Image: "valkey/valkey", Versions: []string{"8.0", "7.2"}, Port: 6379, DataPath: "/data", Fields: credentials()[1:2]},
-	{ID: "memcached", Name: "Memcached", Category: "cache", Image: "memcached", Versions: []string{"1.6"}, Port: 11211},
-	{ID: "rabbitmq", Name: "RabbitMQ", Category: "queue", Image: "rabbitmq", Versions: []string{"4.1", "4.0"}, Port: 5672, DataPath: "/var/lib/rabbitmq", Fields: credentials()[:2]},
-	{ID: "kafka", Name: "Kafka", Category: "queue", Image: "apache/kafka", Versions: []string{"3.9.0"}, Port: 9092, DataPath: "/var/lib/kafka/data", Fields: []Field{{Key: "external_host", Label: "External hostname", Type: "text", Default: "localhost", Required: true, Help: "Public hostname or IP advertised to external Kafka clients (without a port)."}}},
-	{ID: "nats", Name: "NATS", Category: "queue", Image: "nats", Versions: []string{"2.10"}, Port: 4222, DataPath: "/data"},
-	{ID: "clickhouse", Name: "ClickHouse", Category: "database", Image: "clickhouse/clickhouse-server", Versions: []string{"25.3", "24.8"}, Port: 8123, DataPath: "/var/lib/clickhouse", Fields: credentials()},
-	{ID: "seaweedfs", Name: "SeaweedFS", Category: "storage", Image: "chrislusf/seaweedfs", Versions: []string{"3.85"}, Port: 8333, DataPath: "/data", Fields: []Field{{Key: "access_key", Label: "Access key", Type: "text", Generate: true, Required: true}, {Key: "secret_key", Label: "Secret key", Type: "password", Generate: true, Required: true}}},
-	{ID: "opensearch", Name: "OpenSearch", Category: "search", Image: "opensearchproject/opensearch", Versions: []string{"2.19.1"}, Port: 9200, DataPath: "/usr/share/opensearch/data", Fields: []Field{field("user", "admin"), credentials()[1]}},
-}
+var engines = builtins()
 
-func All() []Engine {
-	out := make([]Engine, len(engines))
-	for i, e := range engines {
-		e.Icon = e.ID
-		e.Description = e.Name + " " + e.Category + " service."
-		e.Versions = slices.Clone(e.Versions)
-		e.Fields = slices.Clone(e.Fields)
-		out[i] = e
+func builtins() Registry {
+	out, err := Parse(registry.Services)
+	if err != nil {
+		panic(fmt.Errorf("built-in services: %w", err))
 	}
 	return out
 }
-func Lookup(id string) (Engine, bool) {
-	for _, e := range All() {
+
+var engineID = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+var fieldKey = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+var imageName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$`)
+var imageTag = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$`)
+
+func Parse(body []byte) (Registry, error) {
+	var index struct {
+		Engines Registry `json:"engines"`
+	}
+	d := json.NewDecoder(bytes.NewReader(body))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&index); err != nil {
+		return nil, err
+	}
+	if err := d.Decode(new(any)); err != io.EOF || index.Engines == nil {
+		return nil, fmt.Errorf("registry must contain one object with an engines array")
+	}
+	seen := map[string]bool{}
+	for i, e := range index.Engines {
+		if !engineID.MatchString(e.ID) || seen[e.ID] || strings.TrimSpace(e.Name) == "" ||
+			!slices.Contains([]string{"database", "cache", "queue", "search", "storage"}, e.Category) ||
+			!imageName.MatchString(e.Image) || strings.Contains(path.Base(e.Image), ":") ||
+			e.Port < 1 || e.Port > 65535 || len(e.Versions) == 0 ||
+			e.DataPath != "" && (!path.IsAbs(e.DataPath) || e.DataPath == "/" || path.Clean(e.DataPath) != e.DataPath || strings.ContainsAny(e.DataPath, ",\x00")) {
+			return nil, fmt.Errorf("invalid or duplicate service engine %q", e.ID)
+		}
+		seen[e.ID] = true
+		versions := map[string]bool{}
+		for _, v := range e.Versions {
+			if !imageTag.MatchString(v) || versions[v] {
+				return nil, fmt.Errorf("%s: invalid or duplicate version %q", e.ID, v)
+			}
+			versions[v] = true
+		}
+		fields := map[string]bool{}
+		for _, f := range e.Fields {
+			if !fieldKey.MatchString(f.Key) || fields[f.Key] || f.Label == "" ||
+				!slices.Contains([]string{"text", "password"}, f.Type) ||
+				((f.Key == "password" || f.Key == "secret_key") && f.Type != "password") {
+				return nil, fmt.Errorf("%s: invalid or duplicate field %q", e.ID, f.Key)
+			}
+			fields[f.Key] = true
+		}
+		if e.Icon == "" {
+			e.Icon = e.ID
+		}
+		if e.Description == "" {
+			e.Description = e.Name + " " + e.Category + " service."
+		}
+		index.Engines[i] = e
+	}
+	return index.Engines, nil
+}
+
+func All() []Engine { return engines.All() }
+
+func Lookup(id string) (Engine, bool) { return engines.Lookup(id) }
+
+func (r Registry) All() []Engine {
+	out := make([]Engine, len(r))
+	for i, e := range r {
+		out[i] = clone(e)
+	}
+	return out
+}
+
+func (r Registry) Lookup(id string) (Engine, bool) {
+	for _, e := range r {
 		if e.ID == id {
-			return e, true
+			return clone(e), true
 		}
 	}
 	return Engine{}, false
+}
+
+func clone(e Engine) Engine {
+	e.Versions = slices.Clone(e.Versions)
+	e.Fields = slices.Clone(e.Fields)
+	return e
 }
 func Validate(e Engine, version string, values map[string]string) (map[string]string, error) {
 	if !slices.Contains(e.Versions, version) {

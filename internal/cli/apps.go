@@ -15,6 +15,9 @@ func (c *cli) runApps(args []string) error {
 	args = args[1:]
 	switch group {
 	case "recipes":
+		if len(args) > 0 && args[0] == "refresh" {
+			return c.refreshCatalog("recipes", args[1:])
+		}
 		if len(args) == 0 || (len(args) == 1 && args[0] == "list") {
 			v, err := c.request("GET", "recipes", nil)
 			if err != nil {
@@ -23,7 +26,7 @@ func (c *cli) runApps(args []string) error {
 			return c.printAccess(v, "id", "name", "version", "description")
 		}
 		if len(args) != 2 || args[0] != "show" {
-			return fmt.Errorf("use apps recipes [list|show RECIPE]")
+			return fmt.Errorf("use apps recipes [list|show RECIPE|refresh [WORKSPACE]]")
 		}
 		return c.appRequest("GET", "recipes/"+url.PathEscape(args[1]), nil)
 	case "config", "domains":

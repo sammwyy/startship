@@ -1,24 +1,20 @@
 package recipes
 
 import (
-	"context"
-	"embed"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
 	"math"
-	"net/http"
 	"path"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
-)
 
-//go:embed builtin/*.json
-var builtin embed.FS
+	"github.com/sammwyy/startship/registry"
+)
 
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9-]{0,47}$`)
 var variable = regexp.MustCompile(`\$\{([a-zA-Z_][a-zA-Z_0-9]*)\}`)
@@ -230,21 +226,9 @@ func (r Recipe) validate() error {
 }
 
 func Builtins() Registry {
-	entries, _ := builtin.ReadDir("builtin")
-	out := Registry{}
-	for _, entry := range entries {
-		b, err := builtin.ReadFile("builtin/" + entry.Name())
-		var r Recipe
-		if err == nil {
-			err = json.Unmarshal(b, &r)
-		}
-		if err == nil {
-			err = r.validate()
-		}
-		if err != nil {
-			panic(fmt.Errorf("built-in recipe %s: %w", entry.Name(), err))
-		}
-		out[r.ID] = r
+	out, err := Parse(registry.Recipes)
+	if err != nil {
+		panic(fmt.Errorf("built-in recipes: %w", err))
 	}
 	return out
 }
@@ -257,47 +241,32 @@ func (r Registry) All() []Recipe {
 	return out
 }
 
-func (r Registry) Merge(ctx context.Context, url string) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return err
-	}
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("registry returned HTTP %d", resp.StatusCode)
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
-	if err != nil || len(body) > 1<<20 {
-		return fmt.Errorf("unable to read registry (maximum 1 MiB)")
-	}
+func Parse(body []byte) (Registry, error) {
 	var index struct {
 		Recipes []Recipe `json:"recipes"`
 	}
-	d := json.NewDecoder(strings.NewReader(string(body)))
+	d := json.NewDecoder(bytes.NewReader(body))
 	d.DisallowUnknownFields()
 	if err := d.Decode(&index); err != nil {
-		return err
+		return nil, err
 	}
 	if err := d.Decode(new(any)); err != io.EOF {
-		return fmt.Errorf("registry must contain one JSON object")
+		return nil, fmt.Errorf("registry must contain one JSON object")
+	}
+	if index.Recipes == nil {
+		return nil, fmt.Errorf("registry requires a recipes array")
 	}
 	entries := Registry{}
 	for _, recipe := range index.Recipes {
 		if err := recipe.validate(); err != nil {
-			return fmt.Errorf("%s: %w", recipe.ID, err)
+			return nil, fmt.Errorf("%s: %w", recipe.ID, err)
 		}
 		if _, duplicate := entries[recipe.ID]; duplicate {
-			return fmt.Errorf("duplicate recipe %s", recipe.ID)
+			return nil, fmt.Errorf("duplicate recipe %s", recipe.ID)
 		}
 		entries[recipe.ID] = recipe
 	}
-	maps.Copy(r, entries)
-	return nil
+	return entries, nil
 }
 
 func (f File) Read(data string) (map[string]any, error) {

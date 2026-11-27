@@ -1,0 +1,359 @@
+{
+  "engines": [
+    {
+      "id": "postgresql",
+      "description": "The reliable relational database.",
+      "name": "PostgreSQL",
+      "category": "database",
+      "image": "postgres",
+      "versions": [
+        "17",
+        "16",
+        "15"
+      ],
+      "port": 5432,
+      "data_path": "/var/lib/postgresql/data",
+      "fields": [
+        {
+          "key": "user",
+          "label": "user",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "database",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "mysql",
+      "description": "The world’s most popular SQL database.",
+      "name": "MySQL",
+      "category": "database",
+      "image": "mysql",
+      "versions": [
+        "8.4",
+        "8.0"
+      ],
+      "port": 3306,
+      "data_path": "/var/lib/mysql",
+      "fields": [
+        {
+          "key": "user",
+          "label": "user",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "database",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "mariadb",
+      "description": "Community-driven, MySQL-compatible SQL.",
+      "name": "MariaDB",
+      "category": "database",
+      "image": "mariadb",
+      "versions": [
+        "11.4",
+        "10.11"
+      ],
+      "port": 3306,
+      "data_path": "/var/lib/mysql",
+      "fields": [
+        {
+          "key": "user",
+          "label": "user",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "database",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "mongodb",
+      "description": "Flexible documents for evolving apps.",
+      "name": "MongoDB",
+      "category": "database",
+      "image": "mongo",
+      "versions": [
+        "8.0",
+        "7.0"
+      ],
+      "port": 27017,
+      "data_path": "/data/db",
+      "fields": [
+        {
+          "key": "user",
+          "label": "user",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "database",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "redis",
+      "description": "Fast, in-memory data structures.",
+      "name": "Redis",
+      "category": "cache",
+      "image": "redis",
+      "versions": [
+        "7.4",
+        "7.2"
+      ],
+      "port": 6379,
+      "data_path": "/data",
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "valkey",
+      "description": "An open-source, in-memory data store.",
+      "name": "Valkey",
+      "category": "cache",
+      "image": "valkey/valkey",
+      "versions": [
+        "8.0",
+        "7.2"
+      ],
+      "port": 6379,
+      "data_path": "/data",
+      "fields": [
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "memcached",
+      "description": "Lightweight, distributed memory caching.",
+      "name": "Memcached",
+      "category": "cache",
+      "image": "memcached",
+      "versions": [
+        "1.6"
+      ],
+      "port": 11211
+    },
+    {
+      "id": "rabbitmq",
+      "description": "Reliable messaging for your services.",
+      "name": "RabbitMQ",
+      "category": "queue",
+      "image": "rabbitmq",
+      "versions": [
+        "4.1",
+        "4.0"
+      ],
+      "port": 5672,
+      "data_path": "/var/lib/rabbitmq",
+      "fields": [
+        {
+          "key": "user",
+          "label": "user",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "kafka",
+      "description": "High-throughput event streaming.",
+      "name": "Kafka",
+      "category": "queue",
+      "image": "apache/kafka",
+      "versions": [
+        "3.9.0"
+      ],
+      "port": 9092,
+      "data_path": "/var/lib/kafka/data",
+      "fields": [
+        {
+          "key": "external_host",
+          "label": "External hostname",
+          "type": "text",
+          "required": true,
+          "default": "localhost",
+          "help": "Public hostname or IP advertised to external Kafka clients (without a port)."
+        }
+      ]
+    },
+    {
+      "id": "nats",
+      "description": "Simple, cloud-native messaging.",
+      "name": "NATS",
+      "category": "queue",
+      "image": "nats",
+      "versions": [
+        "2.10"
+      ],
+      "port": 4222,
+      "data_path": "/data"
+    },
+    {
+      "id": "clickhouse",
+      "description": "Real-time analytics at any scale.",
+      "name": "ClickHouse",
+      "category": "database",
+      "image": "clickhouse/clickhouse-server",
+      "versions": [
+        "25.3",
+        "24.8"
+      ],
+      "port": 8123,
+      "data_path": "/var/lib/clickhouse",
+      "fields": [
+        {
+          "key": "user",
+          "label": "user",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "database",
+          "label": "database",
+          "type": "text",
+          "required": true,
+          "default": "startship"
+        }
+      ]
+    },
+    {
+      "id": "seaweedfs",
+      "description": "S3-compatible object storage.",
+      "name": "SeaweedFS",
+      "category": "storage",
+      "image": "chrislusf/seaweedfs",
+      "versions": [
+        "3.85"
+      ],
+      "port": 8333,
+      "data_path": "/data",
+      "fields": [
+        {
+          "key": "access_key",
+          "label": "Access key",
+          "type": "text",
+          "required": true,
+          "generate": true
+        },
+        {
+          "key": "secret_key",
+          "label": "Secret key",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    },
+    {
+      "id": "opensearch",
+      "description": "Search, analyze and explore your data.",
+      "name": "OpenSearch",
+      "category": "search",
+      "image": "opensearchproject/opensearch",
+      "versions": [
+        "2.19.1"
+      ],
+      "port": 9200,
+      "data_path": "/usr/share/opensearch/data",
+      "fields": [
+        {
+          "key": "user",
+          "label": "user",
+          "type": "text",
+          "required": true,
+          "default": "admin"
+        },
+        {
+          "key": "password",
+          "label": "Password",
+          "type": "password",
+          "required": true,
+          "generate": true
+        }
+      ]
+    }
+  ]
+}

@@ -33,10 +33,21 @@ RECIPE = {
 
 
 class RegistryHandler(BaseHTTPRequestHandler):
+    requests = []
+    unavailable = False
+
     def do_GET(self):
+        self.requests.append(self.path)
+        if self.unavailable:
+            self.send_error(503)
+            return
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(json.dumps({"recipes": [RECIPE]}).encode())
+        index = {"recipes": [RECIPE]} if self.path == "/recipes" else {
+            "engines": [{"id": "redis", "name": "Remote Redis", "category": "cache",
+                         "image": "redis", "versions": ["7.4"], "port": 6379}]
+        }
+        self.wfile.write(json.dumps(index).encode())
 
     def log_message(self, *_args):
         pass
@@ -65,6 +76,18 @@ def wait(predicate, timeout=80):
     raise AssertionError("timed out waiting for " + str(predicate))
 
 
+def delete_app(request, path):
+    deadline = time.monotonic() + 15
+    while True:
+        try:
+            return request(path, method="DELETE")
+        except urllib.error.HTTPError as error:
+            with error:
+                if error.code != 409 or json.load(error).get("error") != "app is busy" or time.monotonic() >= deadline:
+                    raise
+            time.sleep(0.25)
+
+
 def run():
     docker("pull", IMAGE)
     if docker("image", "inspect", "busybox:1.37", check=False).returncode:
@@ -75,7 +98,8 @@ def run():
         env = dict(os.environ, STARTSHIP_DATA=data, STARTSHIP_SOCKET=data + "/startship.sock",
                    STARTSHIP_DASHBOARD_ADDR=f"127.0.0.1:{dashboard}", STARTSHIP_HTTP_ADDR=f"127.0.0.1:{proxy}",
                    STARTSHIP_HTTPS_ADDR=f"127.0.0.1:{https}",
-                   STARTSHIP_RECIPES_URL=f"http://127.0.0.1:{registry.server_port}/index",
+                   STARTSHIP_RECIPES_URL=f"http://127.0.0.1:{registry.server_port}/recipes",
+                   STARTSHIP_SERVICES_URL=f"http://127.0.0.1:{registry.server_port}/services",
                    STARTSHIP_ADMIN_USER="admin", STARTSHIP_ADMIN_PASSWORD="recipe-test-password")
         client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         apps = []
@@ -109,8 +133,21 @@ def run():
 
         try:
             proc = start()
-            assert {"e2e-web", "gitea", "jellyfin", "minecraft", "teamspeak"} <= {r["id"] for r in request("recipes")}
+            assert RegistryHandler.requests == []
+            wait(lambda: [r["id"] for r in request("recipes")] == ["e2e-web"])
+            assert request("recipes/status")["source"] == "remote"
+            assert RegistryHandler.requests == ["/recipes"]
             ws = request("workspaces")[0]["id"]
+            wait(lambda: [e["name"] for e in request("catalog")] == ["Remote Redis"])
+            assert request(f"catalog/refresh?workspace={ws}", method="POST")["metadata"]["source"] == "remote"
+            assert RegistryHandler.requests == ["/recipes", "/services", "/services"]
+            RegistryHandler.unavailable = True
+            try:
+                request(f"recipes/refresh?workspace={ws}", method="POST")
+                raise AssertionError("failed refresh accepted")
+            except urllib.error.HTTPError as error:
+                assert error.code == 502
+            assert [r["id"] for r in request("recipes")] == ["e2e-web"]
             base = f"workspaces/{ws}/apps"
             for name, configured_port in [("one", published), ("two", 0)]:
                 app = request(base, {"name": name, "recipe": "e2e-web", "ports": {"public": configured_port}})
@@ -162,10 +199,13 @@ def run():
             proc.terminate()
             proc.wait(timeout=15)
             proc = start()
+            assert [r["id"] for r in request("recipes")] == ["e2e-web"]
+            assert [e["name"] for e in request("catalog")] == ["Remote Redis"]
+            assert RegistryHandler.requests == ["/recipes", "/services", "/services", "/recipes"]
             assert wait(lambda: proxy_get(host))["message"] == "persisted"
-            request(path, method="DELETE")
+            delete_app(request, path)
             docker("volume", "inspect", one_network + "-vol-data")
-            request(f"{base}/{two}?purge=true", method="DELETE")
+            delete_app(request, f"{base}/{two}?purge=true")
             assert docker("volume", "inspect", two_network + "-vol-data", check=False).returncode
             print("Recipe apps E2E PASS: remote registry, private networks, public port, domain, config, lifecycle and volume retention")
         except Exception:

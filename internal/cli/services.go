@@ -57,14 +57,40 @@ func (c *cli) resourceList(path, key string, columns ...string) error {
 }
 
 func (c *cli) runCatalog(args []string) error {
+	if len(args) > 0 && args[0] == "refresh" {
+		return c.refreshCatalog("catalog", args[1:])
+	}
 	if len(args) != 0 {
-		return errors.New("use catalog without arguments")
+		return errors.New("use catalog [refresh [WORKSPACE]]")
 	}
 	v, err := c.request("GET", "catalog", nil)
 	if err != nil {
 		return err
 	}
 	return c.printAccess(v, "id", "name", "category", "versions", "port", "image")
+}
+
+func (c *cli) refreshCatalog(path string, args []string) error {
+	path += "/refresh"
+	switch len(args) {
+	case 0:
+	case 1:
+		ws, err := c.resolve("workspaces", args[0])
+		if err != nil {
+			return err
+		}
+		path += "?workspace=" + url.QueryEscape(ws)
+	default:
+		return errors.New("refresh takes at most one workspace")
+	}
+	v, err := c.request("POST", path, nil)
+	if err != nil {
+		return err
+	}
+	if result, ok := v.(map[string]any); ok && result["metadata"] != nil {
+		return c.print(result["metadata"])
+	}
+	return c.print(v)
 }
 
 func (c *cli) runServices(args []string) error {

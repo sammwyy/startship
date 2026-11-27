@@ -11,6 +11,7 @@ import { Icon } from "../../components/Icon";
 import { EngineIcon } from "../../components/EngineIcon";
 import { CopyValue } from "../../components/ServiceUI";
 import { NewServiceModal } from "../../components/NewServiceModal";
+import { useLiveSubscription } from "../../providers/LiveProvider";
 import { ServiceActions } from "../../components/ServiceActions";
 export function WorkspaceServicesView() {
   const id = useParams().workspaceId!,
@@ -21,6 +22,7 @@ export function WorkspaceServicesView() {
     projects = useQuery(queries.projects(id)),
     catalog = useQuery(queries.catalog()),
     [open, setOpen] = useState(false);
+  useLiveSubscription({ topic: "services_catalog" });
   const allowed = can("services.manage", workspace),
     refresh = () => client.invalidateQueries();
   return (
@@ -80,7 +82,8 @@ export function WorkspaceServicesView() {
                   <span>
                     <strong>{s.name}</strong>
                     <span>
-                      {catalog.data?.find((e) => e.id === s.engine)?.name ||
+                      {s.definition?.name ||
+                        catalog.data?.find((e) => e.id === s.engine)?.name ||
                         s.engine}{" "}
                       <span className="service-version">{s.version}</span>
                     </span>

@@ -23,6 +23,7 @@ type Service struct {
 	WorkspaceID  string            `json:"workspace_id"`
 	Name         string            `json:"name"`
 	Engine       string            `json:"engine"`
+	Definition   *catalog.Engine   `json:"definition,omitempty"`
 	Version      string            `json:"version"`
 	Config       map[string]string `json:"config"`
 	ExternalPort int               `json:"external_port"`
@@ -100,8 +101,11 @@ func (a *Server) publicServices(ws string, x *access) []Service {
 	return out
 }
 func publicService(s Service, x *access) Service {
+	e, ok := s.engineDefinition()
+	if ok {
+		s.Definition = &e
+	}
 	if !x.at(s.WorkspaceID, "")["services.manage"] {
-		e, _ := catalog.Lookup(s.Engine)
 		c := map[string]string{}
 		for _, f := range e.Fields {
 			if f.Type != "password" {
@@ -112,6 +116,13 @@ func publicService(s Service, x *access) Service {
 		s.LastError = ""
 	}
 	return s
+}
+
+func (s Service) engineDefinition() (catalog.Engine, bool) {
+	if s.Definition != nil {
+		return *s.Definition, true
+	}
+	return catalog.Lookup(s.Engine)
 }
 
 var serviceName = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,62}$`)
@@ -163,7 +174,7 @@ func (a *Server) serviceAction(id, action string) error {
 	if err != nil {
 		return err
 	}
-	e, _ := catalog.Lookup(s.Engine)
+	e, _ := s.engineDefinition()
 	update := func(status string) { s.Status = status; a.saveService(s) }
 	defer func() {
 		if err != nil {
@@ -268,7 +279,7 @@ func (a *Server) reconcileServices() {
 func (a *Server) projectRunArgs(app Record, network string, test bool) []string {
 	env := map[string]string{}
 	for _, s := range listResources[Service](a, "services", "") {
-		e, ok := catalog.Lookup(s.Engine)
+		e, ok := s.engineDefinition()
 		if !ok {
 			continue
 		}

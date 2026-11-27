@@ -259,6 +259,14 @@ a.attachment-chip:hover {
   min-height: 0;
   padding: 24px 30px 28px;
 }
+.catalog-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
 .catalog-search {
   display: flex;
   align-items: center;

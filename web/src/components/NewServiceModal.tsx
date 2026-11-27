@@ -8,22 +8,8 @@ import { ServiceConfig } from "./ServiceConfig";
 import { EngineIcon } from "./EngineIcon";
 import { ErrorMessage, Loading } from "./ui";
 import { Icon } from "./Icon";
+import { CatalogRefresh } from "./CatalogRefresh";
 
-const descriptions: Record<string, string> = {
-  postgresql: "The reliable relational database.",
-  mysql: "The world’s most popular SQL database.",
-  mariadb: "Community-driven, MySQL-compatible SQL.",
-  mongodb: "Flexible documents for evolving apps.",
-  redis: "Fast, in-memory data structures.",
-  valkey: "An open-source, in-memory data store.",
-  memcached: "Lightweight, distributed memory caching.",
-  rabbitmq: "Reliable messaging for your services.",
-  kafka: "High-throughput event streaming.",
-  nats: "Simple, cloud-native messaging.",
-  clickhouse: "Real-time analytics at any scale.",
-  seaweedfs: "S3-compatible object storage.",
-  opensearch: "Search, analyze and explore your data.",
-};
 export function NewServiceModal({
   workspaceId,
   onClose,
@@ -37,7 +23,7 @@ export function NewServiceModal({
     [engine, setEngine] = useState<ServiceEngine>(),
     [search, setSearch] = useState("");
   const filtered = (catalog.data || []).filter((e) =>
-    `${e.name} ${e.category} ${descriptions[e.id]}`
+    `${e.name} ${e.category} ${e.description}`
       .toLowerCase()
       .includes(search.toLowerCase()),
   );
@@ -67,6 +53,7 @@ export function NewServiceModal({
       ) : (
         <>
           <div className="catalog-scroll">
+            <CatalogRefresh path="catalog" workspaceId={workspaceId} />
             <div className="catalog-search">
               <Icon name="search" />
               <input
@@ -112,7 +99,7 @@ export function NewServiceModal({
                               <Icon name="next" />
                             </span>
                             <span className="catalog-description">
-                              {descriptions[e.id] || e.description}
+                              {e.description}
                             </span>
                             <span className="catalog-versions">
                               {e.versions.slice(0, 3).join(" · ")}

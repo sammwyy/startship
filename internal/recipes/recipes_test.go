@@ -1,15 +1,12 @@
 package recipes
 
 import (
-	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestRegistryMerge(t *testing.T) {
+func TestRegistryParse(t *testing.T) {
 	r := Builtins()
 	for _, id := range []string{"gitea", "jellyfin", "minecraft", "teamspeak"} {
 		if r[id].ID != id {
@@ -17,22 +14,22 @@ func TestRegistryMerge(t *testing.T) {
 		}
 	}
 	recipe := r["minecraft"]
-	recipe.Version = "local"
-	serve := func(entries ...Recipe) error {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			json.NewEncoder(w).Encode(map[string]any{"recipes": entries})
-		}))
-		defer server.Close()
-		return r.Merge(context.Background(), server.URL)
+	recipe.Version = "remote"
+	parse := func(entries ...Recipe) (Registry, error) {
+		b, err := json.Marshal(map[string]any{"recipes": entries})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return Parse(b)
 	}
 	invalid := recipe
 	invalid.Files = append([]File(nil), recipe.Files...)
 	invalid.Files[0].Path = "../server.properties"
-	if err := serve(recipe, invalid); err == nil || r["minecraft"].Version == "local" {
+	if result, err := parse(recipe, invalid); err == nil || result != nil {
 		t.Fatalf("invalid index was not rejected atomically: %v", err)
 	}
-	if err := serve(recipe); err != nil || r["minecraft"].Version != "local" || len(r) != 4 {
-		t.Fatalf("registry overlay failed: %v", err)
+	if result, err := parse(recipe); err != nil || result["minecraft"].Version != "remote" || len(result) != 1 {
+		t.Fatalf("registry replacement failed: %v", err)
 	}
 }
 

@@ -49,13 +49,6 @@ func recipeNetwork(id string) string            { return "startship-app-" + id }
 func recipeContainer(id, service string) string { return recipeNetwork(id) + "-" + service }
 func recipeVolume(id, volume string) string     { return recipeNetwork(id) + "-vol-" + volume }
 
-func (a *Server) recipeRegistry() recipes.Registry {
-	if a.recipes != nil {
-		return a.recipes
-	}
-	return builtinRecipes
-}
-
 var builtinRecipes = recipes.Builtins()
 
 func (a *Server) appDocker(args ...string) (string, error) {

@@ -1,6 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { queries } from "./queries";
 import { refreshAccess } from "./api";
+import { applyCatalogSnapshot, type CatalogSnapshot } from "./catalogs";
 import type {
   Container,
   DomainRoute,
@@ -15,6 +16,7 @@ import type {
 } from "./types";
 
 export type LiveSubscription =
+  | { topic: "recipes_catalog" | "services_catalog" }
   | { topic: "services" | "volumes" | "backups"; workspace_id: string }
   | { topic: "recipe_apps"; workspace_id: string }
   | { topic: "certificates"; workspace_id: string }
@@ -220,6 +222,17 @@ export function applyLiveMessage(
   event: LiveMessage,
 ) {
   if (event.type === "error") return;
+  if (
+    (spec.topic === "recipes_catalog" || spec.topic === "services_catalog") &&
+    event.type === "snapshot"
+  ) {
+    applyCatalogSnapshot(
+      client,
+      spec.topic === "recipes_catalog" ? "recipes" : "catalog",
+      event.data as CatalogSnapshot,
+    );
+    return;
+  }
   if (spec.topic === "workspaces" && event.type === "snapshot") {
     const queryKey = queries.workspaces().queryKey;
     void client.cancelQueries({ queryKey, exact: true });

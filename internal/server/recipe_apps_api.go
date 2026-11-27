@@ -78,23 +78,6 @@ func (a *Server) validateRecipePorts(app recipeApp) error {
 }
 
 func (a *Server) recipeAppsAPI(w http.ResponseWriter, r *http.Request, p []string, uid string, x *access) bool {
-	if len(p) >= 2 && p[1] == "recipes" {
-		switch {
-		case r.Method != "GET":
-			fail(w, 405, "method not allowed")
-		case len(p) == 2:
-			reply(w, 200, a.recipeRegistry().All())
-		case len(p) == 3:
-			if recipe, ok := a.recipeRegistry()[p[2]]; ok {
-				reply(w, 200, recipe)
-			} else {
-				fail(w, 404, "recipe not found")
-			}
-		default:
-			fail(w, 404, "not found")
-		}
-		return true
-	}
 	if len(p) < 4 || p[1] != "workspaces" || p[3] != "apps" {
 		return false
 	}
@@ -233,7 +216,8 @@ func (a *Server) installRecipeApp(w http.ResponseWriter, r *http.Request, ws, ui
 		fail(w, 400, "invalid app name")
 		return
 	}
-	recipe, ok := a.recipeRegistry()[input.Recipe]
+	index, _ := a.recipeRegistry()
+	recipe, ok := index[input.Recipe]
 	if !ok {
 		fail(w, 400, "unknown recipe")
 		return
