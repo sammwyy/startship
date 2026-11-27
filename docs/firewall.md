@@ -310,9 +310,9 @@ values accept Go's `strconv.ParseBool` forms, including 1/0 and true/false;
 flags override environment, which overrides TOML. Default is false.
 Install `ipset`, `iptables` and `ip6tables`; the daemon needs CAP_NET_ADMIN and
 CAP_NET_RAW (or root) and kernel support for ipset hash:net and xt_set. Install
-with `sudo STARTSHIP_NETWORK_FIREWALL=1 sh install.sh` to opt in: the installer
-checks binaries, writes the TOML/environment setting and adds these capabilities
-to both systemd capability sets. Without that flag the default install is unchanged.
+with `sudo sh install.sh --network-firewall` (or `STARTSHIP_NETWORK_FIREWALL=1`) to
+opt in: the installer checks binaries, writes the TOML setting and adds these
+capabilities to both systemd capability sets. Without that flag the default install is unchanged.
 For an existing installation, set the configuration and capabilities together.
 
 Only platform `network.firewall` holders (Platform Admin by default) may use:
