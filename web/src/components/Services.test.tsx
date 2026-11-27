@@ -90,6 +90,33 @@ function catalog() {
   );
 }
 describe("service catalog", () => {
+  it("filters the modal marketplace by category", async () => {
+    vi.mocked(request).mockImplementation(async (path) =>
+      path === "catalog/status"
+        ? { source: "bundled" }
+        : [
+            engine,
+            {
+              ...engine,
+              id: "redis",
+              name: "Redis",
+              category: "cache",
+              description: "In-memory data store.",
+            },
+          ],
+    );
+    catalog();
+    expect(
+      screen.getByRole("dialog", { name: "Service marketplace" }),
+    ).toBeInTheDocument();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Caches" }),
+    );
+    expect(screen.getByRole("button", { name: /Redis/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /PostgreSQL/ }),
+    ).not.toBeInTheDocument();
+  });
   it("refreshes the catalog and shows the cached source and timestamp", async () => {
     const updated = "2026-01-01T12:00:00Z";
     vi.mocked(request).mockImplementation(async (path) => {

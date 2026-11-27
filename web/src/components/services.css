@@ -306,15 +306,6 @@ a.attachment-chip:hover {
   font-size: 10px;
   white-space: nowrap;
 }
-.catalog-category + .catalog-category {
-  margin-top: 25px;
-}
-.catalog-category h3 {
-  font-size: 11px;
-  color: var(--muted);
-  font-weight: 500;
-  margin: 0 0 12px;
-}
 .catalog-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -368,13 +359,6 @@ a.attachment-chip:hover {
   font-weight: 400;
   line-height: 1.6;
   min-height: 32px;
-}
-.catalog-versions {
-  color: var(--faint);
-  font-size: 9px;
-  font-weight: 400;
-  margin-top: auto;
-  overflow-wrap: anywhere;
 }
 .service-modal-foot {
   border-top: 1px solid var(--line);

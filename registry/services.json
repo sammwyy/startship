@@ -2,6 +2,7 @@
   "engines": [
     {
       "id": "postgresql",
+      "logo": "postgresql",
       "description": "The reliable relational database.",
       "name": "PostgreSQL",
       "category": "database",
@@ -39,6 +40,7 @@
     },
     {
       "id": "mysql",
+      "logo": "mysql",
       "description": "The world’s most popular SQL database.",
       "name": "MySQL",
       "category": "database",
@@ -75,6 +77,7 @@
     },
     {
       "id": "mariadb",
+      "logo": "mariadb",
       "description": "Community-driven, MySQL-compatible SQL.",
       "name": "MariaDB",
       "category": "database",
@@ -111,6 +114,7 @@
     },
     {
       "id": "mongodb",
+      "logo": "mongodb",
       "description": "Flexible documents for evolving apps.",
       "name": "MongoDB",
       "category": "database",
@@ -147,6 +151,7 @@
     },
     {
       "id": "redis",
+      "logo": "redis",
       "description": "Fast, in-memory data structures.",
       "name": "Redis",
       "category": "cache",
@@ -169,6 +174,7 @@
     },
     {
       "id": "valkey",
+      "logo": "valkey",
       "description": "An open-source, in-memory data store.",
       "name": "Valkey",
       "category": "cache",
@@ -191,6 +197,7 @@
     },
     {
       "id": "memcached",
+      "logo": "memcached",
       "description": "Lightweight, distributed memory caching.",
       "name": "Memcached",
       "category": "cache",
@@ -202,6 +209,7 @@
     },
     {
       "id": "rabbitmq",
+      "logo": "rabbitmq",
       "description": "Reliable messaging for your services.",
       "name": "RabbitMQ",
       "category": "queue",
@@ -231,6 +239,7 @@
     },
     {
       "id": "kafka",
+      "logo": "kafka",
       "description": "High-throughput event streaming.",
       "name": "Kafka",
       "category": "queue",
@@ -253,6 +262,7 @@
     },
     {
       "id": "nats",
+      "logo": "nats",
       "description": "Simple, cloud-native messaging.",
       "name": "NATS",
       "category": "queue",
@@ -265,6 +275,7 @@
     },
     {
       "id": "clickhouse",
+      "logo": "clickhouse",
       "description": "Real-time analytics at any scale.",
       "name": "ClickHouse",
       "category": "database",
@@ -301,6 +312,7 @@
     },
     {
       "id": "seaweedfs",
+      "logo": "seaweedfs",
       "description": "S3-compatible object storage.",
       "name": "SeaweedFS",
       "category": "storage",
@@ -329,6 +341,7 @@
     },
     {
       "id": "opensearch",
+      "logo": "opensearch",
       "description": "Search, analyze and explore your data.",
       "name": "OpenSearch",
       "category": "search",

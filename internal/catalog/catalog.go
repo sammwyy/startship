@@ -30,6 +30,7 @@ type Field struct {
 type Engine struct {
 	ID          string   `json:"id"`
 	Icon        string   `json:"icon"`
+	Logo        string   `json:"logo,omitempty"`
 	Name        string   `json:"name"`
 	Category    string   `json:"category"`
 	Description string   `json:"description"`

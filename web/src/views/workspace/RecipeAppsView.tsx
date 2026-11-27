@@ -3,8 +3,14 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Heading } from "../../components/Heading";
 import { CatalogRefresh } from "../../components/CatalogRefresh";
+import {
+  CollectionLayout,
+  useCollectionLayout,
+} from "../../components/CollectionLayout";
+import { EngineIcon } from "../../components/EngineIcon";
 import { HostPicker, pickedHost } from "../../components/HostPicker";
 import { Icon } from "../../components/Icon";
+import { categoryLabel, Marketplace } from "../../components/Marketplace";
 import { RecipeSchemaFields } from "../../components/RecipeSchemaFields";
 import { ServiceModal, ServicePicker } from "../../components/ServiceUI";
 import {
@@ -73,101 +79,177 @@ function RecipePorts({
 
 function InstallApp({
   path,
-  workspaceId,
+  recipe,
   close,
   installed,
 }: {
   path: string;
-  workspaceId: string;
+  recipe: Recipe;
   close: () => void;
   installed: (app: RecipeApp) => void;
 }) {
+  const [config, setConfig] = useState<Values>({});
+  const [ports, setPorts] = useState<Ports>({});
+  return (
+    <ServiceModal
+      title={`Install ${recipe.name}`}
+      description={recipe.description}
+      onClose={close}
+    >
+      <AsyncForm
+        className="recipe-install-form"
+        onSubmit={async (form) => {
+          const app = await request<RecipeApp>(path, {
+            name: form.get("name"),
+            recipe: recipe.id,
+            config: filledValues(recipe.config_schema, config),
+            ports,
+          });
+          installed(app);
+        }}
+      >
+        <div className="service-config-body">
+          <Field
+            name="name"
+            label="App name"
+            defaultValue={recipe.id}
+            pattern="[a-z][a-z0-9_\-]{0,62}"
+            required
+          />
+          <div className="recipe-fields">
+            <RecipeSchemaFields
+              schema={recipe.config_schema}
+              values={config}
+              change={setConfig}
+            />
+          </div>
+          <RecipePorts recipe={recipe} ports={ports} change={setPorts} />
+        </div>
+        <div className="service-modal-foot">
+          <button type="button" onClick={close}>
+            Cancel
+          </button>
+          <button className="primary">Install app</button>
+        </div>
+      </AsyncForm>
+    </ServiceModal>
+  );
+}
+
+export function AppsMarketplaceView() {
+  const { workspaceId = "", entryId } = useParams();
+  const { workspace } = useDashboard();
+  const navigate = useNavigate();
+  const client = useQueryClient();
+  const [installing, setInstalling] = useState<Recipe>();
+  const collection = `workspaces/${workspaceId}/apps`;
+  const base = `/workspace/${workspaceId}/apps`;
+  const url = `${base}/marketplace`;
+  const apps = useQuery({
+    queryKey: [collection],
+    queryFn: ({ signal }) =>
+      request<RecipeApps>(collection, undefined, "GET", signal),
+  });
   const catalog = useQuery({
     queryKey: ["recipes"],
     queryFn: ({ signal }) =>
       request<Recipe[]>("recipes", undefined, "GET", signal),
   });
-  const [recipe, setRecipe] = useState<Recipe>();
-  const [config, setConfig] = useState<Values>({});
-  const [ports, setPorts] = useState<Ports>({});
+  const liveError = useLiveSubscription({ topic: "recipes_catalog" });
+  const entry = catalog.data?.find((item) => item.id === entryId);
+
+  function installed(item: RecipeApp) {
+    setInstalling(undefined);
+    client.setQueryData<RecipeApps>(
+      [collection],
+      (old) =>
+        old && {
+          ...old,
+          apps: [...(old.apps || []).filter((app) => app.id !== item.id), item],
+        },
+    );
+    void client.invalidateQueries({ queryKey: [collection] });
+    navigate(`${base}/${item.id}`);
+  }
+
   return (
-    <ServiceModal
-      className="catalog-modal"
-      title={recipe ? `Install ${recipe.name}` : "App recipes"}
-      eyebrow={recipe ? "02 / INSTALL SETTINGS" : "01 / APP CATALOG"}
-      description={
-        recipe?.description ||
-        "Install self-hosted software without setting up a project."
-      }
-      onClose={close}
-    >
-      {recipe ? (
-        <AsyncForm
-          key={recipe.id}
-          className="recipe-install-form"
-          onSubmit={async (form) => {
-            const app = await request<RecipeApp>(path, {
-              name: form.get("name"),
-              recipe: recipe.id,
-              config: filledValues(recipe.config_schema, config),
-              ports,
-            });
-            installed(app);
-          }}
-        >
-          <div className="service-config-body">
-            <Field
-              name="name"
-              label="App name"
-              defaultValue={recipe.id}
-              pattern="[a-z][a-z0-9_\-]{0,62}"
-              required
-            />
-            <div className="recipe-fields">
-              <RecipeSchemaFields
-                schema={recipe.config_schema}
-                values={config}
-                change={setConfig}
-              />
-            </div>
-            <RecipePorts recipe={recipe} ports={ports} change={setPorts} />
-          </div>
-          <div className="service-modal-foot">
-            <button type="button" onClick={() => setRecipe(undefined)}>
-              Back to recipes
+    <div className="services-page recipe-page">
+      <Link to={entryId ? url : base} className="recipe-back">
+        <Icon name="back" /> {entryId ? "Marketplace" : "Apps"}
+      </Link>
+      <Heading
+        kicker={workspace?.name}
+        title={entry?.name ?? "App marketplace"}
+        subtitle={
+          entry?.description ??
+          "Find self-hosted apps to install in this workspace."
+        }
+        actions={
+          entry &&
+          apps.data?.can_manage && (
+            <button className="primary" onClick={() => setInstalling(entry)}>
+              <Icon name="plus" /> Install app
             </button>
-            <button className="primary">Install app</button>
+          )
+        }
+      />
+      <ErrorMessage error={apps.error || catalog.error || liveError} />
+      {catalog.isPending ? (
+        <Loading />
+      ) : entry ? (
+        <section className="panel marketplace-detail">
+          <EngineIcon
+            engine={entry.logo ?? entry.id}
+            fallback={entry.icon || "box"}
+          />
+          <div>
+            <strong>{entry.name}</strong>
+            <p className="muted">
+              {categoryLabel(entry.category)} · Version {entry.version}
+            </p>
+            <p>
+              {entry.containers.length}{" "}
+              {entry.containers.length === 1 ? "container" : "containers"} ·
+              Private network
+            </p>
           </div>
-        </AsyncForm>
+        </section>
+      ) : entryId ? (
+        <Empty title="App not found">
+          <Link to={url}>Back to marketplace</Link>
+        </Empty>
       ) : (
-        <div className="catalog-scroll">
-          <CatalogRefresh path="recipes" workspaceId={workspaceId} />
-          <ErrorMessage error={catalog.error} />
-          {catalog.isPending && <Loading />}
-          <div className="catalog-grid">
-            {catalog.data?.map((entry) => (
-              <button
-                key={entry.id}
-                className="catalog-tile"
-                onClick={() => {
-                  setConfig({});
-                  setPorts({});
-                  setRecipe(entry);
-                }}
-              >
-                <span className="catalog-tile-top">
-                  <Icon name={entry.icon} />
-                  <strong>{entry.name}</strong>
-                  <Icon name="next" />
-                </span>
-                <span className="catalog-description">{entry.description}</span>
-                <span className="catalog-versions">Recipe {entry.version}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        catalog.data && (
+          <section className="panel marketplace-panel">
+            <Marketplace
+              entries={catalog.data}
+              kind="app"
+              renderTile={(item, content) => (
+                <Link
+                  className="catalog-tile"
+                  to={`${url}/${encodeURIComponent(item.id)}`}
+                  key={item.id}
+                >
+                  {content}
+                </Link>
+              )}
+            />
+            {apps.data?.can_manage && (
+              <CatalogRefresh path="recipes" workspaceId={workspaceId} />
+            )}
+          </section>
+        )
       )}
-    </ServiceModal>
+      {installing && entryId === installing.id && apps.data?.can_manage && (
+        <InstallApp
+          key={installing.id}
+          path={collection}
+          recipe={installing}
+          close={() => setInstalling(undefined)}
+          installed={installed}
+        />
+      )}
+    </div>
   );
 }
 
@@ -254,7 +336,7 @@ function EditApp({
     <ServiceModal
       title="App configuration"
       eyebrow={app.recipe.name.toUpperCase()}
-      description={`Install settings and recipe-declared files for ${app.name}.`}
+      description={`Install settings and editable files for ${app.name}.`}
       onClose={close}
     >
       <div className="service-config-body">
@@ -315,7 +397,7 @@ function EditApp({
             <RecipePorts recipe={app.recipe} ports={ports} change={setPorts} />
             {!Object.keys(app.recipe.config_schema.properties || {}).length &&
               !app.recipe.ports?.length && (
-                <p className="muted">This recipe has no install settings.</p>
+                <p className="muted">This app has no install settings.</p>
               )}
             <div className="recipe-actions">
               <p className="small muted">
@@ -365,7 +447,7 @@ function BindDomain({
     <ServiceModal
       title="Connect domain"
       eyebrow="HTTP ROUTING"
-      description="Send web traffic to a recipe endpoint without publishing a host port."
+      description="Send web traffic to an app endpoint without publishing a host port."
       onClose={close}
     >
       <div className="service-config-body">
@@ -474,7 +556,7 @@ function AppDetail({
       </Link>
       <Heading
         title={app.name}
-        kicker={`${app.recipe.name} / RECIPE ${app.recipe.version}`}
+        kicker={`${app.recipe.name} · ${app.recipe.version}`}
         subtitle={app.recipe.description}
         actions={
           manage && (
@@ -673,7 +755,6 @@ export function RecipeAppsView() {
   const { workspaceId = "", appId } = useParams();
   const { workspace } = useDashboard();
   const client = useQueryClient();
-  const navigate = useNavigate();
   const collection = `workspaces/${workspaceId}/apps`;
   const base = `/workspace/${workspaceId}/apps`;
   const query = useQuery({
@@ -686,13 +767,13 @@ export function RecipeAppsView() {
     workspace_id: workspaceId,
   });
   useLiveSubscription(appId ? null : { topic: "recipes_catalog" });
-  useQuery({
+  const catalog = useQuery({
     queryKey: ["recipes"],
     queryFn: ({ signal }) =>
       request<Recipe[]>("recipes", undefined, "GET", signal),
     enabled: !appId,
   });
-  const [install, setInstall] = useState(false);
+  const [layout, setLayout] = useCollectionLayout("apps");
   const refresh = () => client.invalidateQueries({ queryKey: [collection] });
   const manage = !!query.data?.can_manage;
   const apps = query.data?.apps || [];
@@ -706,9 +787,9 @@ export function RecipeAppsView() {
           subtitle="Self-hosted software on private networks with its own persistent storage."
           actions={
             manage && (
-              <button className="primary" onClick={() => setInstall(true)}>
+              <Link className="button primary" to={`${base}/marketplace`}>
                 <Icon name="plus" /> Install app
-              </button>
+              </Link>
             )
           }
         />
@@ -734,75 +815,75 @@ export function RecipeAppsView() {
         )
       ) : apps.length ? (
         <>
-          <div className="service-list-meta">
-            <span>{apps.length} installed</span>
+          <div className="collection-toolbar">
             <span>
-              <i className="live-dot" /> Live updates
+              {apps.length} installed{" "}
+              <span className="collection-live">
+                <i className="live-dot" /> Live updates
+              </span>
             </span>
+            <CollectionLayout layout={layout} change={setLayout} />
           </div>
-          <div className="panel recipe-list">
-            <div className="recipe-list-head">
-              <span>App</span>
-              <span>Status</span>
-              <span>Containers</span>
-              <span>Domains</span>
-            </div>
-            {apps.map((item) => (
-              <Link
-                className="recipe-list-row"
-                to={`${base}/${item.id}`}
-                key={item.id}
-              >
-                <div className="service-identity">
-                  <span className="card-icon">
-                    <Icon name={item.recipe.icon} />
+          <div className={`collection collection-${layout}`}>
+            {apps.map((item) => {
+              const entry = catalog.data?.find(
+                (entry) => entry.id === item.recipe.id,
+              );
+              const domains = item.domains.map((domain) => domain.host);
+              const ports = (item.recipe.ports ?? []).flatMap((port) => {
+                const host = item.ports?.[port.id] ?? port.host_port;
+                return host ? [`${host}/${port.protocol}`] : [];
+              });
+              const endpoints = [...domains, ...ports];
+              return (
+                <Link
+                  className="collection-item"
+                  to={`${base}/${item.id}`}
+                  key={item.id}
+                >
+                  <span className="collection-identity">
+                    <EngineIcon
+                      engine={item.recipe.logo ?? entry?.logo ?? item.recipe.id}
+                      fallback={item.recipe.icon || "box"}
+                    />
+                    <span>
+                      <strong>{item.name}</strong>
+                      {layout !== "grid" && (
+                        <small>
+                          {item.recipe.name} · {item.recipe.version}
+                        </small>
+                      )}
+                    </span>
                   </span>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <small>
-                      {item.recipe.name} · {item.recipe.version}
-                    </small>
-                  </div>
-                </div>
-                <Badge status={item.status} />
-                <span>{item.recipe.containers.length}</span>
-                <span>{item.domains.length}</span>
-              </Link>
-            ))}
+                  {layout !== "grid" && (
+                    <>
+                      <Badge status={item.status} />
+                      <span
+                        className="collection-endpoint"
+                        title={endpoints.join(", ")}
+                      >
+                        {[domains[0], ports[0]].filter(Boolean).join(" · ") ||
+                          "Private"}
+                        {domains.length > 1 || ports.length > 1
+                          ? ` +${Math.max(0, domains.length - 1) + Math.max(0, ports.length - 1)}`
+                          : ""}
+                      </span>
+                    </>
+                  )}
+                </Link>
+              );
+            })}
           </div>
         </>
       ) : (
         <Empty title="No apps installed">
-          <p>
-            Start with a recipe for media, games, voice chat or Git hosting.
-          </p>
+          <p>Find apps for media, games, voice chat or Git hosting.</p>
           {manage && (
-            <button onClick={() => setInstall(true)}>Browse recipes</button>
+            <Link className="button" to={`${base}/marketplace`}>
+              Browse marketplace
+            </Link>
           )}
         </Empty>
-      )}
-      {install && (
-        <InstallApp
-          path={collection}
-          workspaceId={workspaceId}
-          close={() => setInstall(false)}
-          installed={(item) => {
-            client.setQueryData<RecipeApps>(
-              [collection],
-              (old) =>
-                old && {
-                  ...old,
-                  apps: [
-                    ...(old.apps || []).filter((a) => a.id !== item.id),
-                    item,
-                  ],
-                },
-            );
-            setInstall(false);
-            navigate(`${base}/${item.id}`);
-            void refresh();
-          }}
-        />
       )}
     </div>
   );

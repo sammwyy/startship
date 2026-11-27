@@ -46,7 +46,17 @@ func (a *Server) serviceRegistry() (catalog.Registry, registry.Metadata) {
 func (a *Server) catalogData(topic string) (any, registry.Metadata) {
 	if topic == "recipes_catalog" {
 		index, meta := a.recipeRegistry()
-		return index.All(), meta
+		entries := index.All()
+		for i := range entries {
+			bundled := builtinRecipes[entries[i].ID]
+			if entries[i].Category == "" {
+				entries[i].Category = bundled.Category
+			}
+			if entries[i].Logo == "" {
+				entries[i].Logo = bundled.Logo
+			}
+		}
+		return entries, meta
 	}
 	index, meta := a.serviceRegistry()
 	return index.All(), meta

@@ -1,0 +1,197 @@
+.collection-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 1.4rem 0 0.7rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.collection-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: 0.7rem;
+  padding-left: 0.7rem;
+  border-left: 1px solid var(--line);
+}
+.collection-switcher,
+.marketplace-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.collection-switcher {
+  padding: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.collection-switcher button,
+.marketplace-filters button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.85rem;
+  padding: 0.2rem 0.55rem;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.collection-switcher button:hover,
+.marketplace-filters button:hover,
+.collection-switcher button[aria-pressed="true"],
+.marketplace-filters button[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  background: var(--raised);
+  color: var(--text);
+}
+.collection-switcher .icon {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+.collection {
+  display: grid;
+  gap: 0.6rem;
+}
+.collection-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(8rem, 100%), 1fr));
+}
+.collection-cards {
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+}
+.collection-list {
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.collection-item {
+  display: grid;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: inherit;
+}
+.collection-item:hover {
+  background: var(--raised);
+  border-color: var(--line-strong);
+}
+.collection-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.collection-identity > span:last-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+.collection-identity :is(strong, small),
+.collection-endpoint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.collection-identity small,
+.collection-endpoint {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.collection-grid .collection-identity {
+  flex-direction: column;
+  text-align: center;
+}
+.collection-cards .collection-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.collection-cards .collection-identity {
+  grid-column: 1 / -1;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--line);
+}
+.collection-item > .badge {
+  justify-self: start;
+}
+.collection-list .collection-item {
+  grid-template-columns: minmax(0, 2fr) minmax(5rem, 0.7fr) minmax(0, 1.4fr);
+  padding: 0.5rem 0.85rem;
+  border: 0;
+  border-radius: 0;
+}
+.collection-list .collection-item + .collection-item {
+  border-top: 1px solid var(--line);
+}
+.collection-list .engine-icon {
+  width: 2rem;
+  height: 2rem;
+}
+.engine-icon svg.icon {
+  fill: none;
+}
+.marketplace-panel {
+  padding: clamp(0.75rem, 2.4vw, 1.5rem);
+  margin-top: 1.15rem;
+}
+.marketplace-filters {
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+}
+.marketplace-filters button {
+  border-color: var(--line);
+  border-radius: 999px;
+}
+.marketplace-panel .catalog-refresh {
+  padding-top: 0.8rem;
+  margin: 1rem 0 0;
+  border-top: 1px solid var(--line);
+}
+.marketplace .catalog-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr));
+}
+.marketplace .catalog-tile {
+  border: 1px solid var(--line);
+  color: inherit;
+}
+.marketplace .catalog-tile:hover {
+  border-color: var(--line-strong);
+}
+.catalog-modal .marketplace + .catalog-refresh {
+  margin: 1rem 0 0;
+}
+.marketplace-tile-label {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+  flex: 1;
+}
+.marketplace-tile-label > span {
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: normal;
+}
+.marketplace-detail {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem;
+  margin-top: 1.15rem;
+}
+.marketplace-detail p {
+  margin: 0.25rem 0 0;
+}
+@media (max-width: 540px) {
+  .collection-list .collection-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .collection-list .collection-endpoint {
+    display: none;
+  }
+}
