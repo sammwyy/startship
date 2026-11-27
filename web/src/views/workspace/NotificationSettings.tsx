@@ -150,7 +150,7 @@ export function NotificationPanel({
                 }}
               >
                 <ChannelFields channel={channel} />
-                <div className="row">
+                <div className="row notification-actions">
                   <button className="primary">Save channel</button>
                   <button
                     type="button"
@@ -169,9 +169,20 @@ export function NotificationPanel({
                     type="button"
                     className="danger"
                     onClick={() =>
-                      ui.run(async () => {
-                        await request(path, undefined, "DELETE");
-                        ui.notify("Notification channel removed");
+                      ui.dialog({
+                        title: "Delete notification channel?",
+                        description:
+                          "This stops delivery to this channel and removes its delivery history.",
+                        fields: (
+                          <strong className="notification-delete-name">
+                            {channel.name}
+                          </strong>
+                        ),
+                        submit: "Delete channel",
+                        onSubmit: async () => {
+                          await request(path, undefined, "DELETE");
+                          ui.notify("Notification channel removed");
+                        },
                       })
                     }
                   >

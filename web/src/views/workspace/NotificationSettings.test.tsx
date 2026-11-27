@@ -6,8 +6,9 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { useLiveFeed } from "../../providers/LiveProvider";
+import { UIProvider } from "../../providers/UIProvider";
 import { request } from "../../services/api";
 import { NotificationSettings } from "./NotificationSettings";
 
@@ -15,12 +16,14 @@ vi.mock("../../services/api", () => ({
   request: vi.fn().mockResolvedValue({}),
 }));
 vi.mock("../../providers/LiveProvider", () => ({ useLiveFeed: vi.fn() }));
-vi.mock("../../providers/UIProvider", () => ({
-  useUI: () => ({
-    notify: vi.fn(),
-    run: (action: () => Promise<unknown>) => void action(),
-  }),
-}));
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
+});
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -35,6 +38,11 @@ const channel = {
   events: ["deploy.failed"],
 };
 const base = "workspaces/ws/notifications/channels";
+const settings = (
+  <UIProvider>
+    <NotificationSettings id="ws" />
+  </UIProvider>
+);
 
 it("opts in to selected events when adding a channel", async () => {
   vi.mocked(useLiveFeed).mockReturnValue({
@@ -42,7 +50,7 @@ it("opts in to selected events when adding a channel", async () => {
     status: "connected",
   });
   const user = userEvent.setup();
-  render(<NotificationSettings id="ws" />);
+  render(settings);
   expect(useLiveFeed).toHaveBeenCalledWith({
     topic: "notifications",
     workspace_id: "ws",
@@ -80,7 +88,7 @@ it("edits, tests and deletes a masked channel and shows live delivery results", 
   const data = { channels: [channel], deliveries: [] };
   vi.mocked(useLiveFeed).mockReturnValue({ data, status: "connected" });
   const user = userEvent.setup();
-  const view = render(<NotificationSettings id="ws" />);
+  const view = render(settings);
   const summary = screen.getByText("Team alerts");
   await user.click(summary);
   const editor = within(summary.closest("details")!);
@@ -127,9 +135,68 @@ it("edits, tests and deletes a masked channel and shows live delivery results", 
     },
     status: "connected",
   });
-  view.rerender(<NotificationSettings id="ws" />);
+  view.rerender(
+    <UIProvider>
+      <NotificationSettings id="ws" />
+    </UIProvider>,
+  );
   expect(screen.getByText("Test notification")).toBeInTheDocument();
   expect(screen.getByText(/Delivered · HTTP 204/)).toBeInTheDocument();
   await user.click(editor.getByRole("button", { name: "Delete channel" }));
+  const dialog = screen.getByRole("dialog", {
+    name: "Delete notification channel?",
+  });
+  expect(within(dialog).getByText("Team alerts")).toBeInTheDocument();
+  expect(request).not.toHaveBeenCalledWith(
+    `${base}/receiver`,
+    undefined,
+    "DELETE",
+  );
+  await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(request).not.toHaveBeenCalledWith(
+    `${base}/receiver`,
+    undefined,
+    "DELETE",
+  );
+  await user.click(editor.getByRole("button", { name: "Delete channel" }));
+  await user.click(
+    within(screen.getByRole("dialog")).getByRole("button", {
+      name: "Delete channel",
+    }),
+  );
   expect(request).toHaveBeenCalledWith(`${base}/receiver`, undefined, "DELETE");
+});
+
+it("replaces the webhook URL only when the editor supplies one", async () => {
+  vi.mocked(useLiveFeed).mockReturnValue({
+    data: { channels: [channel], deliveries: [] },
+    status: "connected",
+  });
+  const user = userEvent.setup();
+  render(settings);
+  const summary = screen.getByText("Team alerts");
+  await user.click(summary);
+  const editor = within(summary.closest("details")!);
+  const name = editor.getByLabelText("Channel name");
+  await user.clear(name);
+  await user.type(name, "Updated alerts");
+  const url = editor.getByLabelText("Replace webhook URL (optional)");
+  expect(url).toHaveValue("");
+  await user.type(url, "https://hooks.example/new-private-path");
+  await user.click(editor.getByRole("checkbox", { name: "Deployment failed" }));
+  await user.click(editor.getByRole("checkbox", { name: "Uptime recovered" }));
+  await user.click(editor.getByRole("button", { name: "Save channel" }));
+  await waitFor(() => expect(url).toHaveValue(""));
+  expect(request).toHaveBeenCalledWith(
+    `${base}/receiver`,
+    {
+      name: "Updated alerts",
+      kind: "slack",
+      url: "https://hooks.example/new-private-path",
+      events: ["uptime.recovered"],
+      enabled: true,
+    },
+    "PATCH",
+  );
 });

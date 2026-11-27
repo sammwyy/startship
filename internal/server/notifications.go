@@ -345,6 +345,9 @@ func dialNotification(ctx context.Context, network, addr string) (net.Conn, erro
 		if err == nil {
 			return conn, nil
 		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 	}
 	return nil, errors.New("webhook destination unavailable")
 }
@@ -362,7 +365,11 @@ func (a *Server) deliverNotification(workspace string, c notificationChannel, pa
 	status, reason, code := "failed", "could not reach webhook", 0
 	if req, err := http.NewRequest(http.MethodPost, c.target, bytes.NewReader(content)); err == nil {
 		req.Header.Set("Content-Type", "application/json")
-		if resp, err := notificationClient.Do(req); err == nil {
+		resp, err := notificationClient.Do(req)
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			reason = "webhook request timed out"
+		case err == nil:
 			resp.Body.Close()
 			code = resp.StatusCode
 			if code >= 200 && code < 300 {

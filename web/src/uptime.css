@@ -214,12 +214,24 @@
 
 .notification-settings {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
+  overflow-wrap: anywhere;
 }
 
 .notification-settings .form-fields {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 10px;
+}
+
+.notification-actions {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.notification-delete-name {
+  overflow-wrap: anywhere;
 }
 
 .notification-settings h3 {
@@ -301,6 +313,7 @@
 
 .notification-deliveries {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   margin: 0;
   padding: 0;
