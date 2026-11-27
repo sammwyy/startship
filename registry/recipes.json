@@ -5119,6 +5119,284 @@
           }
         }
       }
+    },
+    {
+      "id": "rocket-chat",
+      "logo": "rocket-chat",
+      "category": "communication",
+      "name": "Rocket.Chat",
+      "icon": "users",
+      "description": "Team chat with a private MongoDB replica set and NATS message broker.",
+      "version": "8.0.1",
+      "containers": [
+        {
+          "id": "mongodb",
+          "image": "mongo:8.0.38-noble",
+          "mounts": {
+            "mongodb": "/data/db"
+          },
+          "command": [
+            "sh",
+            "-ec",
+            "(\n  until mongosh --quiet --eval 'quit(db.adminCommand({ping:1}).ok === 1 ? 0 : 1)' >/dev/null 2>&1; do sleep 2; done\n  mongosh --quiet --eval 'try { rs.status() } catch (error) { if (error.code !== 94) throw error; rs.initiate({_id: \"rs0\", members: [{_id: 0, host: \"mongodb:27017\"}]}); }'\n) &\nexec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all"
+          ]
+        },
+        {
+          "id": "nats",
+          "image": "nats:2.15.3-alpine"
+        },
+        {
+          "id": "rocket-chat",
+          "image": "registry.rocket.chat/rocketchat/rocket.chat:8.0.1",
+          "mounts": {
+            "uploads": "/app/uploads"
+          },
+          "env": {
+            "ROOT_URL": "${public_url}",
+            "PORT": "3000",
+            "MONGO_URL": "mongodb://mongodb:27017/rocketchat?replicaSet=rs0",
+            "TRANSPORTER": "monolith+nats://nats:4222",
+            "DEPLOY_METHOD": "docker"
+          }
+        }
+      ],
+      "volumes": [
+        "mongodb",
+        "uploads"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "rocket-chat",
+          "port": 3000
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          }
+        }
+      }
+    },
+    {
+      "id": "koel",
+      "logo": "koel",
+      "category": "media",
+      "name": "Koel",
+      "icon": "headphones",
+      "description": "Stream your music library with a browser player. Sign in as admin@koel.dev with the administrator password you provide.",
+      "version": "9.15.0",
+      "containers": [
+        {
+          "id": "koel",
+          "image": "phanan/koel:9.15.0",
+          "mounts": {
+            "data": "/var/www/html/storage/app",
+            "music": "/music"
+          },
+          "env": {
+            "APP_URL": "${public_url}",
+            "DB_CONNECTION": "sqlite-persistent",
+            "DB_DATABASE": "/var/www/html/storage/app/startship/koel.sqlite",
+            "MEDIA_PATH": "/music",
+            "SKIP_INIT": "true",
+            "ADMIN_PASSWORD": "${admin_password}"
+          },
+          "command": [
+            "sh",
+            "-ec",
+            "state=/var/www/html/storage/app/startship\numask 077\nmkdir -p \"$state\"\nif [ ! -f \"$state/.env\" ]; then\n  cp .env.example \"$state/.env\"\nfi\nln -sf \"$state/.env\" .env\nchown -h www-data:www-data .env\ntouch \"$DB_DATABASE\"\nchown -R www-data:www-data \"$state\"\nrunuser -u www-data -- php artisan koel:init --no-assets --no-scheduler --no-interaction\nif [ ! -f \"$state/admin-initialized\" ]; then\n  printf '%s\\n%s\\n' \"$ADMIN_PASSWORD\" \"$ADMIN_PASSWORD\" | runuser -u www-data -- php artisan koel:admin:change-password\n  touch \"$state/admin-initialized\"\nfi\nexec apache2-foreground"
+          ]
+        }
+      ],
+      "volumes": [
+        "data",
+        "music"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "koel",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "public_url",
+          "admin_password"
+        ],
+        "properties": {
+          "public_url": {
+            "type": "string",
+            "title": "Public HTTPS URL",
+            "description": "Enter the mapped HTTPS URL without a trailing slash."
+          },
+          "admin_password": {
+            "type": "string",
+            "title": "Initial administrator password",
+            "minLength": 12,
+            "description": "Provide a unique value; Startship does not generate this secret."
+          }
+        }
+      }
+    },
+    {
+      "id": "zulip",
+      "logo": "zulip",
+      "category": "communication",
+      "name": "Zulip",
+      "icon": "users",
+      "description": "Topic-based team chat. After installation, use Zulip’s generate_realm_creation_link management command to create the first organization.",
+      "version": "11.6-0",
+      "containers": [
+        {
+          "id": "postgres",
+          "image": "zulip/zulip-postgresql:14",
+          "env": {
+            "POSTGRES_DB": "zulip",
+            "POSTGRES_USER": "zulip",
+            "POSTGRES_PASSWORD": "${db_password}"
+          },
+          "mounts": {
+            "postgres": "/var/lib/postgresql/data"
+          }
+        },
+        {
+          "id": "memcached",
+          "image": "memcached:1.6.40-alpine",
+          "env": {
+            "SASL_CONF_PATH": "/home/memcache/memcached.conf",
+            "MEMCACHED_SASL_PWDB": "/home/memcache/memcached-sasl-db",
+            "MEMCACHED_PASSWORD": "${memcached_password}"
+          },
+          "command": [
+            "sh",
+            "-euc",
+            "printf 'mech_list: plain\\n' > \"$SASL_CONF_PATH\"\nprintf 'zulip@%s:%s\\nzulip@localhost:%s\\n' \"$HOSTNAME\" \"$MEMCACHED_PASSWORD\" \"$MEMCACHED_PASSWORD\" > \"$MEMCACHED_SASL_PWDB\"\nexec memcached -S"
+          ]
+        },
+        {
+          "id": "rabbitmq",
+          "image": "rabbitmq:4.1.8-alpine",
+          "env": {
+            "RABBITMQ_DEFAULT_USER": "zulip",
+            "RABBITMQ_DEFAULT_PASS": "${broker_password}"
+          },
+          "mounts": {
+            "rabbitmq": "/var/lib/rabbitmq"
+          }
+        },
+        {
+          "id": "redis",
+          "image": "redis:8.6.8-trixie",
+          "command": [
+            "redis-server",
+            "--requirepass",
+            "${redis_password}"
+          ],
+          "mounts": {
+            "redis": "/data"
+          }
+        },
+        {
+          "id": "zulip",
+          "image": "zulip/docker-zulip:11.6-0",
+          "env": {
+            "DB_HOST": "postgres",
+            "DB_HOST_PORT": "5432",
+            "DB_USER": "zulip",
+            "DISABLE_HTTPS": "True",
+            "TRUST_GATEWAY_IP": "True",
+            "SETTING_EXTERNAL_HOST": "${domain}",
+            "SETTING_ZULIP_ADMINISTRATOR": "${admin_email}",
+            "SETTING_MEMCACHED_LOCATION": "memcached:11211",
+            "SETTING_RABBITMQ_HOST": "rabbitmq",
+            "SETTING_REDIS_HOST": "redis",
+            "SECRETS_rabbitmq_password": "${broker_password}",
+            "SECRETS_postgres_password": "${db_password}",
+            "SECRETS_memcached_password": "${memcached_password}",
+            "SECRETS_redis_password": "${redis_password}",
+            "SECRETS_secret_key": "${secret_key}"
+          },
+          "mounts": {
+            "data": "/data"
+          }
+        }
+      ],
+      "volumes": [
+        "postgres",
+        "rabbitmq",
+        "redis",
+        "data"
+      ],
+      "http": [
+        {
+          "id": "web",
+          "container": "zulip",
+          "port": 80
+        }
+      ],
+      "config_schema": {
+        "type": "object",
+        "required": [
+          "domain",
+          "admin_email",
+          "broker_password",
+          "db_password",
+          "memcached_password",
+          "redis_password",
+          "secret_key"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "title": "Public hostname",
+            "description": "Enter the hostname without the scheme or path."
+          },
+          "admin_email": {
+            "type": "string",
+            "title": "Administrator email"
+          },
+          "broker_password": {
+            "type": "string",
+            "title": "RabbitMQ password",
+            "minLength": 12,
+            "description": "Use a unique password containing letters, numbers, hyphens, or underscores."
+          },
+          "db_password": {
+            "type": "string",
+            "title": "Database password",
+            "minLength": 12,
+            "description": "Use a unique password containing letters, numbers, hyphens, or underscores."
+          },
+          "memcached_password": {
+            "type": "string",
+            "title": "Memcached password",
+            "minLength": 12,
+            "description": "Use a unique password containing letters, numbers, hyphens, or underscores."
+          },
+          "redis_password": {
+            "type": "string",
+            "title": "Redis password",
+            "minLength": 12,
+            "description": "Use a unique password containing letters, numbers, hyphens, or underscores."
+          },
+          "secret_key": {
+            "type": "string",
+            "title": "Zulip secret key",
+            "minLength": 50,
+            "description": "Use a unique password containing letters, numbers, hyphens, or underscores."
+          }
+        }
+      }
     }
   ]
 }

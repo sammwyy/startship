@@ -84,6 +84,8 @@ import {
   siMetabase,
   siPlausibleanalytics,
   siUmami,
+  siRocketdotchat,
+  siZulip,
 } from "simple-icons";
 import { Icon } from "./Icon";
 const brands = {
@@ -171,6 +173,8 @@ const brands = {
   metabase: siMetabase,
   plausible: siPlausibleanalytics,
   umami: siUmami,
+  "rocket-chat": siRocketdotchat,
+  zulip: siZulip,
 };
 const glyphs: Record<string, [string, string]> = {
   minecraft: ["box", "#55a047"],
@@ -229,6 +233,7 @@ const glyphs: Record<string, [string, string]> = {
   "stable-diffusion-webui": ["grid", "#a1589d"],
   nocodb: ["database", "#4c80db"],
   flarum: ["users", "#de7550"],
+  koel: ["headphones", "#57a18f"],
 };
 
 export function EngineIcon({
