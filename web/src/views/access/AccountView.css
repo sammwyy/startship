@@ -101,17 +101,26 @@
 }
 .account-theme-options {
   border: 0;
-  margin: 0;
-  padding: 20px 22px;
+  margin: 18px 0 0;
+  padding: 8px 22px 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   min-inline-size: 0;
 }
+.account-theme-options:last-child {
+  padding-bottom: 22px;
+}
+.account-theme-options legend {
+  padding: 0;
+  font-weight: 500;
+}
+.account-theme-styles {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 .account-theme {
   position: relative;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
+  display: flex;
   align-items: center;
   gap: 9px;
   min-width: 0;
@@ -120,6 +129,10 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
+}
+.account-theme-copy {
+  flex: 1;
+  overflow-wrap: anywhere;
 }
 .account-theme input {
   position: absolute;
@@ -140,20 +153,28 @@
   background: var(--raised);
 }
 .account-theme:has(:checked) {
-  border-color: var(--accent);
+  border-color: var(--accent-ink);
 }
 .account-theme:has(:focus-visible) {
-  border-color: var(--success);
-  box-shadow: inset 0 0 0 1px var(--success);
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 2px;
 }
 .account-theme-indicator {
+  flex: none;
   width: 14px;
   height: 14px;
   border: 1px solid var(--muted);
   border-radius: 50%;
 }
 .account-theme:has(:checked) .account-theme-indicator {
-  border: 4px solid var(--accent);
+  border: 4px solid var(--accent-ink);
+}
+.account-accent-swatch {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border: 1px solid #0004;
+  border-radius: 4px;
 }
 .activity-list,
 .account-sessions {
@@ -183,11 +204,8 @@
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  color: var(--accent);
+  color: var(--accent-ink);
   background: var(--accent-soft);
-}
-:root[data-theme="light"] .activity-icon {
-  color: var(--success);
 }
 .activity-entry,
 .session-client {
@@ -266,6 +284,9 @@
   .account-password,
   .account-theme-options {
     grid-template-columns: 1fr;
+  }
+  .account-accent-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 520px) {
