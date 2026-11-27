@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
@@ -130,6 +130,30 @@ describe("service catalog", () => {
       screen.getByRole("button", { name: /Prometheus/ }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Redis/ })).toBeNull();
+  });
+  it("uses a compact browse header and keeps the configuration header", async () => {
+    vi.mocked(request).mockImplementation(async (path) =>
+      path === "catalog/status" ? { source: "bundled" } : [engine],
+    );
+    catalog();
+    const dialog = screen.getByRole("dialog", { name: "Service marketplace" });
+    const browse = within(dialog);
+    expect(dialog).toHaveClass("service-marketplace");
+    expect(
+      browse.getByRole("button", { name: "Close dialog" }),
+    ).toBeInTheDocument();
+    expect(browse.queryByText("ADD SERVICE")).not.toBeInTheDocument();
+    expect(
+      browse.queryByRole("button", { name: "Cancel" }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(
+      await browse.findByRole("button", { name: /PostgreSQL/ }),
+    );
+    const config = screen.getByRole("dialog", { name: "Configure PostgreSQL" });
+    expect(config).not.toHaveClass("service-marketplace");
+    expect(
+      within(config).getByText(/we’ll handle the container/i),
+    ).toBeInTheDocument();
   });
   it("refreshes the catalog and shows the cached source and timestamp", async () => {
     const updated = "2026-01-01T12:00:00Z";
