@@ -111,7 +111,7 @@
 }
 a.service-identity:hover strong,
 .service-text-link:hover {
-  color: var(--success);
+  color: var(--accent-ink);
 }
 .service-version {
   font-size: 9px;
@@ -292,7 +292,7 @@ a.attachment-chip:hover {
   outline: 0;
 }
 .catalog-search:focus-within {
-  outline: 2px solid var(--success);
+  outline: 2px solid var(--accent-ink);
   outline-offset: 3px;
 }
 .catalog-search > span {
@@ -526,7 +526,7 @@ a.attachment-chip:hover {
   padding: 14px;
 }
 .service-persistence .icon {
-  color: var(--success);
+  color: var(--accent-ink);
   width: 16px;
   height: 16px;
   margin-top: 2px;
@@ -615,7 +615,7 @@ a.attachment-chip:hover {
   min-height: 29px;
 }
 .env-line > span:first-child {
-  color: var(--success);
+  color: var(--accent-ink);
   overflow-wrap: anywhere;
 }
 .env-line > span:first-child::after {
@@ -676,7 +676,7 @@ a.attachment-chip:hover {
   font-size: 9px;
 }
 .connect-option.selected {
-  border-color: var(--success);
+  border-color: var(--accent-ink);
   background: var(--accent-soft);
 }
 .connect-option:disabled {
@@ -684,7 +684,7 @@ a.attachment-chip:hover {
   opacity: 0.6;
 }
 .connect-option > .icon {
-  color: var(--success);
+  color: var(--accent-ink);
   width: 14px;
   height: 14px;
 }
@@ -696,7 +696,7 @@ a.attachment-chip:hover {
   border: 1px solid var(--line);
   background: var(--terminal);
   border-radius: 8px;
-  color: var(--success);
+  color: var(--accent-ink);
 }
 .alias-preview code {
   overflow-wrap: anywhere;
@@ -768,7 +768,7 @@ a.attachment-chip:hover {
 }
 .service-tabs button.active {
   color: var(--text);
-  box-shadow: inset 0 -2px var(--success);
+  box-shadow: inset 0 -2px var(--accent-ink);
 }
 .service-detail-grid {
   display: grid;

@@ -261,8 +261,8 @@
 }
 
 .notification-settings .status-option input:checked {
-  background: var(--success);
-  border-color: var(--success);
+  background: var(--accent-ink);
+  border-color: var(--accent-ink);
 }
 
 .notification-settings .status-option input:checked::before {

@@ -9,22 +9,37 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Ctext y='32' font-size='32'%3E↗%3C/text%3E%3C/svg%3E"
     />
     <script>
+      const themeData = document.documentElement.dataset;
       try {
-        const saved = localStorage.getItem(
-          location.pathname.startsWith("/status/")
-            ? "startship-status-theme"
-            : "startship-theme",
-        );
-        document.documentElement.dataset.themePreference =
+        const key = location.pathname.startsWith("/status/")
+          ? "startship-status-theme"
+          : "startship-theme";
+        const saved = localStorage.getItem(key);
+        const style = localStorage.getItem(key + "-style");
+        const accent = localStorage.getItem(key + "-accent");
+        themeData.themeStyle = style === "carbon" ? "carbon" : "tinted";
+        themeData.accent = [
+          "green",
+          "blue",
+          "violet",
+          "pink",
+          "orange",
+          "cyan",
+        ].includes(accent)
+          ? accent
+          : "green";
+        themeData.themePreference =
           saved === "light" || saved === "dark" ? saved : "system";
-        document.documentElement.dataset.theme =
+        themeData.theme =
           saved === "light" || saved === "dark"
             ? saved
             : matchMedia("(prefers-color-scheme: light)").matches
               ? "light"
               : "dark";
       } catch {
-        document.documentElement.dataset.theme = "dark";
+        themeData.theme = "dark";
+        themeData.themeStyle = "tinted";
+        themeData.accent = "green";
       }
     </script>
   </head>

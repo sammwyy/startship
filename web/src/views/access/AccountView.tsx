@@ -4,7 +4,16 @@ import { Heading } from "../../components/Heading";
 import { Icon } from "../../components/Icon";
 import { AsyncForm, ErrorMessage, Field, Loading } from "../../components/ui";
 import { text } from "../../lib/project";
-import { setThemePreference, useThemePreference } from "../../lib/theme";
+import {
+  accents,
+  setAccent,
+  setThemePreference,
+  setThemeStyle,
+  themeStyles,
+  useAccent,
+  useThemePreference,
+  useThemeStyle,
+} from "../../lib/theme";
 import { useLiveFeed } from "../../providers/LiveProvider";
 import { useSession } from "../../providers/SessionProvider";
 import { useUI } from "../../providers/UIProvider";
@@ -196,40 +205,113 @@ function Profile() {
   );
 }
 
-const themes = [
+const modes = [
   ["system", "System", "Follow your device", "server"],
   ["light", "Light", "Always use light colors", "sun"],
   ["dark", "Dark", "Always use dark colors", "moon"],
 ] as const;
 
+const themeDescriptions = {
+  carbon: "Neutral backgrounds",
+  tinted: "Backgrounds tinted with your accent",
+};
+
 function Appearance() {
-  const selected = useThemePreference();
+  const mode = useThemePreference();
+  const theme = useThemeStyle();
+  const accent = useAccent();
   return (
     <section className="panel account-panel">
       <PanelHeading
-        title="Color theme"
+        title="Appearance"
         description="Choose how Startship looks in this browser."
       />
-      <fieldset className="account-theme-options" aria-label="Color theme">
-        {themes.map(([value, name, description, icon]) => (
-          <label key={value} className="account-theme">
-            <input
-              type="radio"
-              name="theme"
-              value={value}
-              checked={selected === value}
-              onChange={() => setThemePreference(value)}
-            />
-            <Icon name={icon} />
-            <span>
-              <strong>{name}</strong>
-              <small>{description}</small>
-            </span>
-            <span className="account-theme-indicator" aria-hidden="true" />
-          </label>
+      <fieldset className="account-theme-options">
+        <legend>Mode</legend>
+        {modes.map(([value, label, description, icon]) => (
+          <AppearanceOption
+            key={value}
+            group="mode"
+            value={value}
+            label={label}
+            description={description}
+            checked={mode === value}
+            onChange={() => setThemePreference(value)}
+            preview={<Icon name={icon} />}
+          />
+        ))}
+      </fieldset>
+      <fieldset className="account-theme-options account-theme-styles">
+        <legend>Theme</legend>
+        {themeStyles.map((value) => (
+          <AppearanceOption
+            key={value}
+            group="theme-style"
+            value={value}
+            label={value === "carbon" ? "Carbon" : "Tinted"}
+            description={themeDescriptions[value]}
+            checked={theme === value}
+            onChange={() => setThemeStyle(value)}
+          />
+        ))}
+      </fieldset>
+      <fieldset className="account-theme-options account-accent-options">
+        <legend>Accent</legend>
+        {accents.map((value) => (
+          <AppearanceOption
+            key={value}
+            group="accent"
+            value={value}
+            label={value[0].toUpperCase() + value.slice(1)}
+            checked={accent === value}
+            onChange={() => setAccent(value)}
+            preview={
+              <span
+                className="account-accent-swatch"
+                style={{ backgroundColor: `var(--accent-${value})` }}
+                aria-hidden="true"
+              />
+            }
+          />
         ))}
       </fieldset>
     </section>
+  );
+}
+
+function AppearanceOption({
+  group,
+  value,
+  label,
+  description,
+  checked,
+  onChange,
+  preview,
+}: {
+  group: string;
+  value: string;
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: () => void;
+  preview?: ReactNode;
+}) {
+  return (
+    <label className="account-theme">
+      <input
+        type="radio"
+        name={group}
+        value={value}
+        checked={checked}
+        onChange={onChange}
+      />
+      {preview}
+      <span className="account-theme-copy">
+        <strong>{label}</strong>
+        {description && <small>{description}</small>}
+      </span>
+      <span className="account-theme-indicator" aria-hidden="true" />
+    </label>
   );
 }
 
