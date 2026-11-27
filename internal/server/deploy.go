@@ -171,6 +171,8 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 			a.logDeploymentResult(logger, app, e)
 		} else if e != nil {
 			fmt.Fprintf(logger, "Container failed: %v\n", e)
+		} else if d.StaticDir == "" && readinessDisabled(app) && !app.Pipeline.Deploy.Static {
+			fmt.Fprintln(logger, "Readiness check disabled; container started")
 		} else {
 			fmt.Fprintln(logger, "Container healthy; ready for project activation")
 		}
@@ -440,8 +442,12 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 	return a.activate(app, id)
 }
 
+func readinessDisabled(app Record) bool {
+	return app.Pipeline != nil && app.Pipeline.Deploy.HealthDisabled
+}
+
 func probeRelease(app Record, container, ip string, logger io.Writer) (e error) {
-	if app.Pipeline != nil && app.Pipeline.Deploy.HealthDisabled {
+	if readinessDisabled(app) {
 		return nil
 	}
 	timeout := 60 * time.Second
@@ -466,7 +472,7 @@ func probeRelease(app Record, container, ip string, logger io.Writer) (e error) 
 
 func probeOnce(app Record, ip string) error {
 	address := net.JoinHostPort(ip, fmt.Sprint(app.Port))
-	if app.Pipeline != nil && !app.Pipeline.Deploy.HealthDisabled && app.Pipeline.Deploy.HealthPath != "" {
+	if app.Pipeline != nil && !readinessDisabled(app) && app.Pipeline.Deploy.HealthPath != "" {
 		client := http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		response, err := client.Get("http://" + address + app.Pipeline.Deploy.HealthPath)
 		if err != nil {
@@ -517,6 +523,10 @@ func (a *Server) logDeploymentResult(out io.Writer, app Record, err error) {
 	target := app.Name
 	if len(hosts) > 0 {
 		target = strings.Join(hosts, ", ")
+	}
+	if readinessDisabled(app) && !app.Pipeline.Deploy.Static {
+		fmt.Fprintf(out, "Deployment activated (readiness check disabled); now serving %s\n", target)
+		return
 	}
 	fmt.Fprintf(out, "Deployment healthy; now serving %s\n", target)
 }
