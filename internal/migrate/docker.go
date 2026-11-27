@@ -129,13 +129,22 @@ func captureContainerLogs(ctx context.Context, host Host, container string, tail
 }
 
 func queryPostgresJSON(ctx context.Context, host Host, container, user, db, query string) (string, error) {
+	return queryPostgresJSONWithPassword(ctx, host, container, user, db, "", query)
+}
+
+func queryPostgresJSONWithPassword(ctx context.Context, host Host, container, user, db, password, query string) (string, error) {
 	if user == "" {
 		user = "postgres"
 	}
 	if db == "" {
 		db = "postgres"
 	}
-	out, err := host.RunDocker(ctx, "exec", "-i", container, "psql", "-U", user, "-d", db, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", query)
+	args := []string{"exec", "-i"}
+	if password != "" {
+		args = append(args, "-e", "PGPASSWORD="+password)
+	}
+	args = append(args, container, "psql", "-U", user, "-d", db, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", query)
+	out, err := host.RunDocker(ctx, args...)
 	if err != nil {
 		return "", fmt.Errorf("psql query on %s: %w (%s)", container, err, strings.TrimSpace(out))
 	}
