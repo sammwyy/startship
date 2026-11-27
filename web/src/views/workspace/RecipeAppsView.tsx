@@ -7,8 +7,13 @@ import {
   CollectionLayout,
   useCollectionLayout,
 } from "../../components/CollectionLayout";
+import { CertificatePicker } from "../../components/CertificatePicker";
 import { EngineIcon } from "../../components/EngineIcon";
-import { HostPicker, pickedHost } from "../../components/HostPicker";
+import {
+  domainPatterns,
+  HostPicker,
+  pickedHost,
+} from "../../components/HostPicker";
 import { Icon } from "../../components/Icon";
 import { categoryLabel, Marketplace } from "../../components/Marketplace";
 import { RecipeSchemaFields } from "../../components/RecipeSchemaFields";
@@ -39,7 +44,7 @@ import type {
   Values,
 } from "../../services/recipeApps";
 import { filledValues } from "../../services/recipeApps";
-import type { WorkspaceDomain } from "../../services/types";
+import type { Certificate, WorkspaceDomain } from "../../services/types";
 import "./recipeApps.css";
 
 type Ports = Record<string, number>;
@@ -432,21 +437,14 @@ function BindDomain({
   const { workspace } = useDashboard();
   const { user, can } = useSession();
   const admin = !!user?.platform_admin;
-  const certificates = useCertificates(
-    workspaceId,
-    admin || can("workspace.domains", workspace),
-  );
+  const certificateAccess =
+    admin || (!!workspace && can("workspace.domains", workspace));
+  const certificates = useCertificates(workspaceId, certificateAccess);
   const domainsPath = `workspaces/${workspaceId}/domains`;
   const domains = useQuery({
     queryKey: [domainsPath],
     queryFn: () => request<{ domains: WorkspaceDomain[] }>(domainsPath),
   });
-  const [host, setHost] = useState("");
-  const [endpoint, setEndpoint] = useState(app.recipe.http?.[0]?.id ?? "");
-  const [certificate, setCertificate] = useState("");
-  const matches =
-    certificates.data?.certificates.filter((c) => certificateCovers(c, host)) ||
-    [];
   return (
     <ServiceModal
       title="Connect domain"
@@ -455,68 +453,117 @@ function BindDomain({
       onClose={close}
     >
       <div className="service-config-body">
-        <ErrorMessage error={domains.error} />
+        <ErrorMessage error={domains.error || certificates.error} />
         {domains.isPending ? (
           <Loading />
         ) : (
-          <AsyncForm
-            className="recipe-editor"
-            onSubmit={async (form) => {
-              await request(`${path}/domains`, {
-                endpoint,
-                host: pickedHost(form),
-                certificate_id: matches.some((c) => c.id === certificate)
-                  ? certificate
-                  : "",
-                force_https: form.get("https") === "on",
-              });
-              await refresh();
-              close();
-            }}
-          >
-            <ServicePicker
-              label="HTTP endpoint"
-              value={endpoint}
-              onChange={setEndpoint}
-              options={(app.recipe.http || []).map((e) => ({
-                value: e.id,
-                label: `${e.id} · ${e.container}:${e.port}`,
-              }))}
-            />
-            <HostPicker
-              domains={domains.data?.domains || []}
-              admin={admin}
-              onHostChange={setHost}
-            />
-            {!!matches.length && (
-              <ServicePicker
-                label="Certificate"
-                value={certificate}
-                onChange={setCertificate}
-                options={[
-                  { value: "", label: "Automatic" },
-                  ...matches.map((c) => ({
-                    value: c.id,
-                    label: c.domains.join(", "),
-                  })),
-                ]}
-              />
-            )}
-            <label className="recipe-check">
-              <input type="checkbox" name="https" /> Redirect HTTP to HTTPS
-            </label>
-            <div className="recipe-actions">
-              <button
-                className="primary"
-                disabled={!admin && !domains.data?.domains?.length}
-              >
-                Connect
-              </button>
-            </div>
-          </AsyncForm>
+          <BindDomainForm
+            app={app}
+            path={path}
+            workspaceId={workspaceId}
+            domains={domains.data?.domains || []}
+            admin={admin}
+            certificates={certificates.data?.certificates || []}
+            certificatesAvailable={
+              certificateAccess && !!certificates.data && !certificates.error
+            }
+            close={close}
+            refresh={refresh}
+          />
         )}
       </div>
     </ServiceModal>
+  );
+}
+
+function BindDomainForm({
+  app,
+  path,
+  workspaceId,
+  domains,
+  admin,
+  certificates,
+  certificatesAvailable,
+  close,
+  refresh,
+}: {
+  app: RecipeApp;
+  path: string;
+  workspaceId: string;
+  domains: WorkspaceDomain[];
+  admin: boolean;
+  certificates: Certificate[];
+  certificatesAvailable: boolean;
+  close: () => void;
+  refresh: () => Promise<unknown>;
+}) {
+  const [host, setHost] = useState(
+    domains.flatMap(domainPatterns)[0]?.replace("*.", "[subdomain].") || "",
+  );
+  const [endpoint, setEndpoint] = useState(app.recipe.http?.[0]?.id ?? "");
+  const [certificate, setCertificate] = useState("");
+  const [createdCertificates, setCreatedCertificates] = useState<Certificate[]>(
+    [],
+  );
+  const allCertificates = [
+    ...certificates,
+    ...createdCertificates.filter(
+      (c) => !certificates.some((x) => x.id === c.id),
+    ),
+  ];
+  return (
+    <AsyncForm
+      className="recipe-editor"
+      onSubmit={async (form) => {
+        const finalHost = pickedHost(form);
+        const selectedCert = allCertificates.find((c) => c.id === certificate);
+        await request(`${path}/domains`, {
+          endpoint,
+          host: finalHost,
+          certificate_id:
+            selectedCert && certificateCovers(selectedCert, finalHost)
+              ? certificate
+              : "",
+          force_https: form.get("https") === "on",
+        });
+        await refresh();
+        close();
+      }}
+    >
+      <ServicePicker
+        label="HTTP endpoint"
+        value={endpoint}
+        onChange={setEndpoint}
+        options={(app.recipe.http || []).map((e) => ({
+          value: e.id,
+          label: `${e.id} · ${e.container}:${e.port}`,
+        }))}
+      />
+      <HostPicker domains={domains} admin={admin} onHostChange={setHost} />
+      <CertificatePicker
+        host={host}
+        domains={domains}
+        admin={admin}
+        workspaceId={workspaceId}
+        certificates={allCertificates}
+        available={certificatesAvailable}
+        value={certificate}
+        onChange={setCertificate}
+        onCreated={(created) =>
+          setCreatedCertificates((prev) =>
+            prev.some((c) => c.id === created.id) ? prev : [...prev, created],
+          )
+        }
+      />
+      <label className="recipe-check">
+        <input type="checkbox" name="https" /> Redirect HTTP to HTTPS
+      </label>
+      <div className="recipe-actions">
+        <button className="primary" disabled={!admin && !domains.length}>
+          Connect
+        </button>
+      </div>
+    </AsyncForm>
   );
 }
 

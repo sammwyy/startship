@@ -23,6 +23,7 @@ export function CertificatePicker({
   available,
   value,
   onChange,
+  onCreated,
 }: {
   host: string;
   domains: WorkspaceDomain[];
@@ -32,17 +33,23 @@ export function CertificatePicker({
   available: boolean;
   value: string;
   onChange: (id: string) => void;
+  onCreated?: (certificate: Certificate) => void;
 }) {
   const id = useId();
-  const [created, setCreated] = useState<Certificate>();
+  const [created, setCreated] = useState<Certificate[]>([]);
   const [generating, setGenerating] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [showUpload, setShowUpload] = useState(false);
+  const [certPem, setCertPem] = useState("");
+  const [keyPem, setKeyPem] = useState("");
+  const [uploadError, setUploadError] = useState("");
   const [error, setError] = useState("");
   const currentHost = useRef(host);
   currentHost.current = host;
-  const all =
-    created && !certificates.some((c) => c.id === created.id)
-      ? [...certificates, created]
-      : certificates;
+  const all = [
+    ...certificates,
+    ...created.filter((c) => !certificates.some((x) => x.id === c.id)),
+  ];
   const normalized = host.trim().toLowerCase().replace(/\.$/, "");
   const matching = all.filter((c) => certificateCovers(c, normalized));
   const selected = all.find((c) => c.id === value);
@@ -53,6 +60,11 @@ export function CertificatePicker({
         (d.apex && normalized === d.name.toLowerCase()) ||
         (d.subdomains && normalized.endsWith(`.${d.name.toLowerCase()}`)),
     );
+  const uploadReason = !available
+    ? "Requires workspace.domains permission and access to certificates."
+    : !workspaceId
+      ? "Workspace unavailable."
+      : "";
   const reason = !available
     ? "Requires workspace.domains permission and access to certificates."
     : !workspaceId
@@ -76,6 +88,12 @@ export function CertificatePicker({
                 : generating
                   ? "Certificate request in progress."
                   : "";
+  function remember(certificate: Certificate) {
+    setCreated((prev) =>
+      prev.some((c) => c.id === certificate.id) ? prev : [...prev, certificate],
+    );
+    onCreated?.(certificate);
+  }
   async function generate() {
     if (reason || !workspaceId) return;
     const requestedHost = host;
@@ -86,7 +104,7 @@ export function CertificatePicker({
         certificatesPath(workspaceId),
         { source: "acme", domains: [normalized], auto_renew: true },
       );
-      setCreated(certificate);
+      remember(certificate);
       if (currentHost.current === requestedHost) onChange(certificate.id);
     } catch (error) {
       setError(
@@ -94,6 +112,33 @@ export function CertificatePicker({
       );
     } finally {
       setGenerating(false);
+    }
+  }
+  async function upload() {
+    if (uploadReason || !workspaceId || uploading) return;
+    if (!certPem.trim() || !keyPem.trim()) {
+      setUploadError("Certificate chain PEM and private key PEM are required.");
+      return;
+    }
+    setUploading(true);
+    setUploadError("");
+    setError("");
+    try {
+      const certificate = await request<Certificate>(
+        certificatesPath(workspaceId),
+        { source: "upload", cert_pem: certPem, key_pem: keyPem },
+      );
+      remember(certificate);
+      onChange(certificate.id);
+      setCertPem("");
+      setKeyPem("");
+      setShowUpload(false);
+    } catch (err) {
+      setUploadError(
+        err instanceof Error ? err.message : "Certificate upload failed.",
+      );
+    } finally {
+      setUploading(false);
     }
   }
   return (
@@ -153,6 +198,7 @@ export function CertificatePicker({
           type="button"
           role="option"
           aria-selected={false}
+          className="certificate-picker-action-first"
           disabled={!!reason}
           onClick={() => void generate()}
         >
@@ -166,7 +212,111 @@ export function CertificatePicker({
               "Let’s Encrypt · DNS must point here and port 80 must be reachable."}
           </small>
         </button>
+        <button
+          type="button"
+          role="option"
+          aria-selected={false}
+          disabled={!!uploadReason}
+          onClick={() => {
+            setUploadError("");
+            setShowUpload(true);
+          }}
+        >
+          <strong>Upload certificate…</strong>
+          <small>
+            {uploadReason || "Paste or choose a PEM chain and private key."}
+          </small>
+        </button>
       </Popover>
+      {showUpload && (
+        <div
+          className="certificate-picker-upload"
+          role="region"
+          aria-label="Upload certificate"
+        >
+          <div className="certificate-picker-upload-head">
+            <strong>Upload certificate</strong>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Close certificate upload"
+              onClick={() => {
+                setShowUpload(false);
+                setKeyPem("");
+                setUploadError("");
+              }}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+          {(
+            [
+              ["Certificate chain PEM", certPem, setCertPem],
+              ["Private key PEM", keyPem, setKeyPem],
+            ] as const
+          ).map(([label, pemValue, setPemValue]) => (
+            <div className="certificate-picker-pem" key={label}>
+              <label>
+                {label}
+                <textarea
+                  aria-label={label}
+                  value={pemValue}
+                  onChange={(event) => setPemValue(event.target.value)}
+                  rows={4}
+                  spellCheck={false}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="certificate-picker-file">
+                Choose {label.toLowerCase()} file
+                <input
+                  type="file"
+                  accept=".pem,.crt,.cer,.key,text/plain"
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    try {
+                      setPemValue(await file.text());
+                      setUploadError("");
+                    } catch (err) {
+                      setUploadError(
+                        err instanceof Error
+                          ? err.message
+                          : "Could not read file.",
+                      );
+                    }
+                  }}
+                />
+              </label>
+            </div>
+          ))}
+          {uploadError && (
+            <p className="certificate-picker-error small" role="alert">
+              {uploadError}
+            </p>
+          )}
+          <div className="certificate-picker-upload-actions">
+            <button
+              type="button"
+              onClick={() => {
+                setShowUpload(false);
+                setKeyPem("");
+                setUploadError("");
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="primary"
+              disabled={uploading || !certPem.trim() || !keyPem.trim()}
+              onClick={() => void upload()}
+            >
+              {uploading ? "Uploading…" : "Upload certificate"}
+            </button>
+          </div>
+        </div>
+      )}
       {!available && (
         <p className="small muted">
           Certificate selection requires workspace.domains permission and access

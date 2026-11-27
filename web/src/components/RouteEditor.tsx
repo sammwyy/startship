@@ -59,8 +59,17 @@ export function RouteEditor({
   const [certificateId, setCertificateId] = useState(
     route?.certificate_id || "",
   );
+  const [createdCertificates, setCreatedCertificates] = useState<Certificate[]>(
+    [],
+  );
   const [forceHTTPS, setForceHTTPS] = useState(route?.force_https || false);
-  const matching = certificates.filter((certificate) =>
+  const allCertificates = [
+    ...certificates,
+    ...createdCertificates.filter(
+      (c) => !certificates.some((x) => x.id === c.id),
+    ),
+  ];
+  const matching = allCertificates.filter((certificate) =>
     certificateCovers(certificate, host),
   );
   const secure = matching.some(
@@ -145,10 +154,17 @@ export function RouteEditor({
               domains={domains}
               admin={admin}
               workspaceId={workspaceId}
-              certificates={certificates}
+              certificates={allCertificates}
               available={certificatesAvailable}
               value={certificateId}
               onChange={setCertificateId}
+              onCreated={(certificate) =>
+                setCreatedCertificates((prev) =>
+                  prev.some((c) => c.id === certificate.id)
+                    ? prev
+                    : [...prev, certificate],
+                )
+              }
             />
             <label className="inline-check">
               <input

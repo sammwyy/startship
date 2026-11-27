@@ -84,6 +84,10 @@ describe("route certificate dropdown", () => {
     expect(onChange).toHaveBeenCalledWith("new");
     expect(trigger).toHaveFocus();
     await user.keyboard("{ArrowUp}");
+    expect(
+      screen.getByRole("option", { name: /Upload certificate/ }),
+    ).toHaveFocus();
+    await user.keyboard("{ArrowUp}");
     expect(screen.getByRole("option", { name: /Generate/ })).toHaveFocus();
     await user.keyboard("{Escape}");
     expect(trigger).toHaveFocus();
@@ -178,6 +182,60 @@ describe("route certificate dropdown", () => {
       <CertificatePicker {...defaults} host="deep.app.example.com" />,
     );
     expect(screen.getByRole("option", { name: /Generate/ })).toBeEnabled();
+  });
+  it("uploads a PEM certificate inline, selects it, and handles errors", async () => {
+    const user = userEvent.setup(),
+      onChange = vi.fn(),
+      onCreated = vi.fn();
+    const uploaded: Certificate = {
+      ...certificate,
+      id: "uploaded",
+      source: "upload",
+      status: "active",
+      cert_pem: "CERT",
+      not_before: "2020-01-01T00:00:00Z",
+      not_after: "2099-01-01T00:00:00Z",
+    };
+    vi.mocked(request)
+      .mockRejectedValueOnce(new Error("invalid PEM"))
+      .mockResolvedValueOnce(uploaded);
+    render(
+      <CertificatePicker
+        {...defaults}
+        onChange={onChange}
+        onCreated={onCreated}
+      />,
+    );
+    await user.click(
+      screen.getByRole("option", { name: /Upload certificate/ }),
+    );
+    expect(
+      screen.getByRole("region", { name: "Upload certificate" }),
+    ).toBeInTheDocument();
+    const submit = screen.getByRole("button", { name: "Upload certificate" });
+    expect(submit).toBeDisabled();
+    await user.type(
+      screen.getByLabelText("Certificate chain PEM"),
+      "-----BEGIN CERTIFICATE-----",
+    );
+    await user.type(
+      screen.getByLabelText("Private key PEM"),
+      "-----BEGIN PRIVATE KEY-----",
+    );
+    expect(submit).toBeEnabled();
+    await user.click(submit);
+    expect(screen.getByRole("alert")).toHaveTextContent("invalid PEM");
+    await user.click(submit);
+    expect(request).toHaveBeenLastCalledWith("workspaces/w/certificates", {
+      source: "upload",
+      cert_pem: "-----BEGIN CERTIFICATE-----",
+      key_pem: "-----BEGIN PRIVATE KEY-----",
+    });
+    expect(onCreated).toHaveBeenCalledWith(uploaded);
+    expect(onChange).toHaveBeenCalledWith("uploaded");
+    expect(
+      screen.queryByRole("region", { name: "Upload certificate" }),
+    ).not.toBeInTheDocument();
   });
   it("filters certificates by coverage and can switch back to Automatic", async () => {
     const onChange = vi.fn(),
