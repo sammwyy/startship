@@ -12,6 +12,7 @@
   --accent-pink: #ffa9ce; --accent-orange: #ffc084; --accent-cyan: #7de3e8;
   --accent: var(--accent-green); --accent-text: #172005;
   --accent-ink: var(--accent);
+  accent-color: var(--accent-ink);
   --accent-soft: color-mix(in srgb, var(--accent-ink) 7%, transparent);
   --accent-hover: color-mix(in srgb, var(--accent) 70%, white);
   --surface-tint: var(--accent);
@@ -198,7 +199,7 @@ input::placeholder, textarea::placeholder { color: var(--faint); }
 input:focus, select:focus, textarea:focus { border-color: var(--success); box-shadow: 0 0 0 3px var(--accent-soft); }
 label { display: block; font-size: 10px; font-weight: 400; color: var(--muted); margin-bottom: 16px; }
 label > input, label > select, label > textarea { margin-top: 8px; }
-input[type=checkbox] { width: auto; accent-color: var(--success); margin-right: 8px; }
+input[type=checkbox] { width: auto; margin-right: 8px; }
 textarea { min-height: 110px; resize: vertical; font-family: ui-monospace, monospace; }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .form-error { color: var(--error); margin: 12px 0; font-size: 11px; }
