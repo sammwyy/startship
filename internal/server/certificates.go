@@ -271,7 +271,7 @@ func (a *Server) certificatesAPI(w http.ResponseWriter, r *http.Request, p []str
 			fail(w, 409, "certificate is issuing")
 			return true
 		}
-		for _, route := range a.store.List("routes", "") {
+		for _, route := range a.publicRouteRecords() {
 			if route.CertificateID == c.ID {
 				fail(w, 409, "certificate is bound to a route")
 				return true

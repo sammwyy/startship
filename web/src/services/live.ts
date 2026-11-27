@@ -15,6 +15,7 @@ import type {
 
 export type LiveSubscription =
   | { topic: "services" | "volumes" | "backups"; workspace_id: string }
+  | { topic: "recipe_apps"; workspace_id: string }
   | { topic: "certificates"; workspace_id: string }
   | { topic: "firewall"; workspace_id: string }
   | { topic: "project"; project_id: string }
@@ -221,6 +222,12 @@ export function applyLiveMessage(
     const queryKey = queries.workspaces().queryKey;
     void client.cancelQueries({ queryKey, exact: true });
     client.setQueryData<Workspace[]>(queryKey, event.data as Workspace[]);
+    return;
+  }
+  if (spec.topic === "recipe_apps" && event.type === "snapshot") {
+    const queryKey = [`workspaces/${spec.workspace_id}/apps`];
+    void client.cancelQueries({ queryKey, exact: true });
+    client.setQueryData(queryKey, event.data);
     return;
   }
   if (

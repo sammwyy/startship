@@ -73,13 +73,19 @@ func parseDomain(name string, subdomains bool) (WorkspaceDomain, bool) {
 
 func (a *Server) domainsAPI(w http.ResponseWriter, r *http.Request, p []string, uid string, ws Record, x *access) {
 	manage := x.at(ws.ID, "")["workspace.domains"]
+	inWorkspace := func(route Record) bool {
+		if route.ProjectID == "" && route.WorkspaceID != "" {
+			return route.WorkspaceID == ws.ID
+		}
+		return projectWorkspace(x.project(route.ProjectID)) == ws.ID
+	}
 	switch {
 	case len(p) == 4 && r.Method == "GET":
 		list := a.domains(ws.ID)
-		routes := a.store.List("routes", "")
+		routes := a.publicRouteRecords()
 		for i := range list {
 			for _, route := range routes {
-				if list[i].matches(route.Host) && projectWorkspace(x.project(route.ProjectID)) == ws.ID {
+				if list[i].matches(route.Host) && inWorkspace(route) {
 					list[i].Routes++
 				}
 			}
@@ -129,6 +135,8 @@ func (a *Server) domainsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 			forbidden(w)
 			return
 		}
+		a.certMu.Lock()
+		defer a.certMu.Unlock()
 		var d WorkspaceDomain
 		for _, o := range a.domains(ws.ID) {
 			if o.ID == p[4] {
@@ -139,8 +147,8 @@ func (a *Server) domainsAPI(w http.ResponseWriter, r *http.Request, p []string, 
 			fail(w, 404, "not found")
 			return
 		}
-		for _, route := range a.store.List("routes", "") {
-			if projectWorkspace(x.project(route.ProjectID)) == ws.ID && d.matches(route.Host) && !a.routeAllowedExcept(ws.ID, route.Host, d.ID) {
+		for _, route := range a.publicRouteRecords() {
+			if inWorkspace(route) && d.matches(route.Host) && !a.routeAllowedExcept(ws.ID, route.Host, d.ID) {
 				fail(w, 409, route.Host+" still routes through "+d.Name+"; disconnect it first")
 				return
 			}

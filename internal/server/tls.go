@@ -8,7 +8,7 @@ import (
 
 func (a *Server) storedCertificate(host string) *Certificate {
 	host = routing.NormalizeHost(host)
-	for _, r := range a.store.List("routes", "") {
+	for _, r := range a.publicRouteRecords() {
 		if routing.NormalizeHost(r.Host) == host && r.CertificateID != "" {
 			if c, err := a.certificate(r.CertificateID); err == nil && c.usable() && c.covers(host) {
 				return &c

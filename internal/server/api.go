@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/sammwyy/startship/internal/detect"
 	"github.com/sammwyy/startship/internal/pipeline"
+	"github.com/sammwyy/startship/internal/recipes"
 	"github.com/sammwyy/startship/internal/router"
 	"github.com/sammwyy/startship/internal/routing"
 	"golang.org/x/crypto/bcrypt"
@@ -26,6 +27,8 @@ type Server struct {
 	sleep                sleepRuntime
 	dockerService        func(...string) (string, error)
 	dockerStream         func(io.Writer, ...string) error
+	recipes              recipes.Registry
+	recipeFile           func(recipeApp, recipes.File, string, string) (string, error)
 	resourcesMu          sync.Mutex
 	volumeSizeMu         sync.Mutex
 	volumeSizeAt         time.Time
@@ -370,7 +373,7 @@ func (a *Server) api() http.Handler {
 			reply(w, 200, pipeline.Templates())
 			return
 		}
-		if a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.backupsAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) {
+		if a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.backupsAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) || a.recipeAppsAPI(w, r, p, uid, x) {
 			return
 		}
 		if p[1] == "detect" && r.Method == "POST" {
@@ -616,6 +619,10 @@ func (a *Server) api() http.Handler {
 					}
 				}
 			}
+			if old.Kind == "workspaces" && len(listResources[recipeApp](a, "recipe_apps", old.ID)) > 0 {
+				fail(w, 409, "delete workspace apps first")
+				return
+			}
 			if old.Kind == "workspaces" && (len(listResources[Service](a, "services", old.ID)) > 0 || len(listResources[Volume](a, "volumes", old.ID)) > 0) {
 				fail(w, 409, "delete workspace services and volumes first")
 				return
@@ -808,7 +815,7 @@ func (a *Server) api() http.Handler {
 				fail(w, 403, v.Host+" is not one of this workspace's domains")
 				return
 			}
-			for _, other := range a.store.List("routes", "") {
+			for _, other := range a.publicRouteRecords() {
 				if other.ID != v.ID && other.Host == v.Host && other.PathPrefix == v.PathPrefix {
 					fail(w, 409, "route already exists")
 					return
