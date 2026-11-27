@@ -11,7 +11,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"strings"
 	"testing"
@@ -32,7 +34,15 @@ type mockHost struct {
 	files    map[string]string
 	dirs     map[string]bool
 	onDocker func(args []string) (string, error)
+	onHTTP   func(req *http.Request) (*http.Response, error)
 	calls    [][]string
+}
+
+func (m *mockHost) DoHTTP(req *http.Request) (*http.Response, error) {
+	if m.onHTTP != nil {
+		return m.onHTTP(req)
+	}
+	return nil, errors.New("unexpected http call")
 }
 
 func (m *mockHost) RunDocker(_ context.Context, args ...string) (string, error) {
@@ -416,5 +426,157 @@ func TestCopyVolumeData(t *testing.T) {
 	}
 	if len(host.calls) != 2 || host.calls[0][0] != "volume" || host.calls[1][0] != "run" {
 		t.Fatalf("unexpected docker calls: %#v", host.calls)
+	}
+}
+
+func TestDetectOpenshipCustomComposeAndFlexibleJSON(t *testing.T) {
+	secret := "custom-compose-secret"
+	encVal := encryptOpenshipForTest(t, secret, "db-secret-val")
+	sawPGPassword := false
+	host := &mockHost{
+		home: "/root",
+		files: map[string]string{
+			"/home/sammwy/.openship/compose/.env": "POSTGRES_USER=osuser\nPOSTGRES_PASSWORD=ospass\nPOSTGRES_DB=osdb\nBETTER_AUTH_SECRET=" + secret + "\n",
+		},
+		onDocker: func(args []string) (string, error) {
+			switch args[0] {
+			case "ps":
+				// Compose project is "compose" (pre-v1 `openship up` default), not "openship".
+				// Postgres container uses stock postgres:16-alpine with name compose-postgres-1.
+				return `{"ID":"1","Names":"compose-postgres-1","Image":"postgres:16-alpine","State":"running","Labels":"com.docker.compose.project=compose,com.docker.compose.service=postgres,com.docker.compose.project.working_dir=/home/sammwy/.openship/compose"}` + "\n" +
+					`{"ID":"2","Names":"compose-api-1","Image":"ghcr.io/oblien/openship-api:0.9.12","State":"running","Labels":"com.docker.compose.project=compose,com.docker.compose.service=api,com.docker.compose.project.working_dir=/home/sammwy/.openship/compose"}`, nil
+			case "inspect":
+				if strings.Contains(args[2], ".Config.Env") {
+					return `["DATABASE_URL=postgresql://osuser:ospass@postgres:5432/osdb"]`, nil
+				}
+				return `[]`, nil
+			case "exec":
+				for _, a := range args {
+					if a == "PGPASSWORD=ospass" {
+						sawPGPassword = true
+					}
+				}
+				resp := map[string]any{
+					"orgs": []map[string]any{{"id": "org_1", "name": "Studio"}},
+					"projects": []map[string]any{
+						{
+							"id": "proj_live", "organization_id": "org_1", "name": "Live App", "slug": "live-app",
+							"git_provider": "github", "git_owner": "sammwyy", "git_repo": "live",
+							"git_branch": "main", "port": 3000, "has_server": true,
+							"volumes": []map[string]any{{"source": "uploads_vol", "target": "/app/uploads"}},
+						},
+						{
+							"id": "proj_deleted", "organization_id": "org_1", "name": "Deleted App",
+							"deleted_at": "2026-11-01T00:00:00Z",
+						},
+					},
+					"env_vars": []map[string]any{{
+						"project_id": "proj_live", "key": "SECRET_KEY", "value": encVal, "environment": "production",
+					}},
+					"services": []map[string]any{
+						{
+							"id": "svc_pg", "project_id": "proj_live", "kind": "compose", "name": "db",
+							"image": "postgres:16-alpine", "ports": []int{5432},
+							"environment":   map[string]any{"POSTGRES_USER": "app", "POSTGRES_PASSWORD": "pw", "POSTGRES_DB": "appdb", "MAX_CONN": 100, "DEBUG": false},
+							"volumes":       []string{"pg_data:/var/lib/postgresql/data"},
+							"custom_domain": "db.studio.test",
+						},
+						{
+							"id": "svc_old", "project_id": "proj_live", "kind": "compose", "name": "old-db",
+							"image": "redis:7-alpine", "archived_at": "2026-10-01T00:00:00Z",
+						},
+					},
+					"domains": []map[string]any{
+						// Older Openship schema without owner_type column.
+						{"project_id": "proj_live", "hostname": "live.studio.test", "target_port": 3000},
+					},
+					"deployments": []map[string]any{},
+				}
+				b, _ := json.Marshal(resp)
+				return string(b), nil
+			}
+			return "", nil
+		},
+	}
+
+	got := DetectOpenship(context.Background(), host)
+	if !got.Detected || got.Status != "detected" {
+		t.Fatalf("expected detected openship, got %+v", got)
+	}
+	if !sawPGPassword {
+		t.Fatalf("expected PGPASSWORD to be passed to docker exec psql")
+	}
+	if got.Container != "compose-postgres-1" {
+		t.Fatalf("expected compose-postgres-1, got %q", got.Container)
+	}
+	if len(got.Projects) != 1 || got.Projects[0].ID != "proj_live" {
+		t.Fatalf("expected 1 active project, got %+v", got.Projects)
+	}
+	if len(got.Services) != 1 || got.Services[0].ID != "svc_pg" {
+		t.Fatalf("expected 1 active service, got %+v", got.Services)
+	}
+	if got.Projects[0].Env["SECRET_KEY"] != "db-secret-val" {
+		t.Fatalf("expected decrypted env var, got %+v", got.Projects[0].Env)
+	}
+	if len(got.Projects[0].Volumes) != 1 || got.Projects[0].Volumes[0].MountPath != "/app/uploads" {
+		t.Fatalf("expected object-format volume parsed, got %+v", got.Projects[0].Volumes)
+	}
+	if len(got.Projects[0].Domains) != 2 {
+		t.Fatalf("expected both domain row and service custom_domain, got %+v", got.Projects[0].Domains)
+	}
+}
+
+func TestDetectOpenshipBareLocalAPI(t *testing.T) {
+	jsonResp := func(status int, body string) *http.Response {
+		return &http.Response{
+			StatusCode: status,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}
+	}
+	host := &mockHost{
+		home: "/home/dev",
+		dirs: map[string]bool{
+			"/home/dev/.openship/data": true,
+		},
+		files: map[string]string{
+			"/home/dev/.openship/internal-token": "bare-internal-tok",
+			"/home/dev/.openship/ports.json":     `{"apiPort":4123,"dashboardPort":3001}`,
+		},
+		onDocker: func(args []string) (string, error) {
+			if args[0] == "ps" {
+				return "", nil
+			}
+			return "", nil
+		},
+		onHTTP: func(req *http.Request) (*http.Response, error) {
+			switch {
+			case req.Method == http.MethodPost && req.URL.Path == "/api/system/cli-session":
+				if req.Header.Get("X-Internal-Token") != "bare-internal-tok" {
+					return jsonResp(401, `{"error":"Unauthorized"}`), nil
+				}
+				return jsonResp(200, `{"token":"sess-tok-1"}`), nil
+			case req.Method == http.MethodGet && req.URL.Path == "/api/projects":
+				return jsonResp(200, `{"data":[{"id":"proj_bare","name":"Bare App","slug":"bare-app","gitProvider":"github","gitOwner":"sammwyy","gitRepo":"bare","gitBranch":"main","port":3000}]}`), nil
+			case req.Method == http.MethodGet && req.URL.Path == "/api/projects/proj_bare/env":
+				return jsonResp(200, `{"data":[{"key":"NODE_ENV","value":"production","environment":"production"}]}`), nil
+			case req.Method == http.MethodGet && req.URL.Path == "/api/projects/proj_bare/services":
+				return jsonResp(200, `{"data":[{"id":"svc_redis","projectId":"proj_bare","name":"cache","image":"redis:7-alpine","environment":{"REDIS_PASSWORD":"secret"}}]}`), nil
+			case req.Method == http.MethodPost && req.URL.Path == "/api/auth/sign-out":
+				return jsonResp(200, `{}`), nil
+			}
+			return jsonResp(404, `{}`), nil
+		},
+	}
+
+	got := DetectOpenship(context.Background(), host)
+	if !got.Detected || got.Status != "detected" {
+		t.Fatalf("expected detected bare openship, got %+v", got)
+	}
+	if len(got.Projects) != 1 || got.Projects[0].Name != "Bare App" || got.Projects[0].Env["NODE_ENV"] != "production" {
+		t.Fatalf("unexpected bare openship projects: %+v", got.Projects)
+	}
+	if len(got.Services) != 1 || got.Services[0].Engine != "redis" || got.Services[0].Config["password"] != "secret" {
+		t.Fatalf("unexpected bare openship services: %+v", got.Services)
 	}
 }
