@@ -41,8 +41,17 @@ for redeploy health checks.
 
 `deploy.health_timeout` sets the readiness wait in seconds (0–600). Zero or omitted
 keeps the 60-second default. An empty `health_path` checks TCP on the deployment
-port; otherwise Startship sends HTTP GET requests until `expect_status` (default
-200) is returned. Static artifacts do not use container health checks.
+port; otherwise Startship sends HTTP GET requests. With no explicit
+`expect_status`, HTTP 200 and redirects to the same path over HTTPS count as
+ready. Startship does not follow the redirect. Set `deploy.health_disabled` to
+`true` to skip readiness checks on deployment and wake. These settings apply to
+the next deployment via Pipeline → Health check or a pipeline JSON update
+(`startship projects update ID JSON`).
+
+Project containers do not run Docker image `HEALTHCHECK` commands. Periodic
+checks run only when Uptime monitoring is enabled; with no enabled HTTP health
+path, monitoring checks the deployment's TCP port. Static artifacts do not use
+container health checks.
 
 ## Additional engines
 

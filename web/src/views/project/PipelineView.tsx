@@ -85,6 +85,7 @@ function stageValues(p: Pipeline, tab: (typeof tabs)[number], auto: boolean) {
           ];
     case "health":
       return [
+        !!deploy.health_disabled,
         deploy.health_path || "",
         deploy.expect_status || 0,
         deploy.health_timeout || 0,
@@ -618,14 +619,27 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
               <p className="small muted">
                 {staticServing
                   ? "Static files are served directly by Startship; container health checks do not apply."
-                  : pipeline.deploy.health_path
-                    ? `HTTP GET ${pipeline.deploy.health_path} — expect status ${pipeline.deploy.expect_status || 200}`
-                    : `TCP connection on port ${pipeline.deploy.port || portHint || "auto-detected at deployment"}`}
+                  : pipeline.deploy.health_disabled
+                    ? "Deployment readiness checks are disabled."
+                    : pipeline.deploy.health_path
+                      ? `HTTP GET ${pipeline.deploy.health_path} — expect ${pipeline.deploy.expect_status || "200 or an HTTPS redirect"}`
+                      : `TCP connection on port ${pipeline.deploy.port || portHint || "auto-detected at deployment"}`}
               </p>
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  disabled={staticServing}
+                  checked={!pipeline.deploy.health_disabled}
+                  onChange={(e) =>
+                    stage("deploy", { health_disabled: !e.target.checked })
+                  }
+                />
+                Check readiness on deployment and wake
+              </label>
               <div className="split">
                 <Field
                   label="Health check path"
-                  disabled={staticServing}
+                  disabled={staticServing || pipeline.deploy.health_disabled}
                   placeholder="TCP check"
                   value={pipeline.deploy.health_path || ""}
                   onChange={(e) =>
@@ -634,7 +648,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                 />
                 <Field
                   label="HTTP status"
-                  disabled={staticServing}
+                  disabled={staticServing || pipeline.deploy.health_disabled}
                   type="number"
                   min={100}
                   max={599}
@@ -652,7 +666,7 @@ function PipelineEditor({ templates }: { templates: PipelineTemplate[] }) {
                 type="number"
                 min={0}
                 max={600}
-                disabled={staticServing}
+                disabled={staticServing || pipeline.deploy.health_disabled}
                 placeholder="60 (default)"
                 value={pipeline.deploy.health_timeout || ""}
                 onChange={(e) =>

@@ -373,7 +373,7 @@ describe("project pipeline", () => {
       target: { value: "90" },
     });
     expect(
-      screen.getByText("HTTP GET /ready — expect status 200"),
+      screen.getByText("HTTP GET /ready — expect 200 or an HTTPS redirect"),
     ).toBeVisible();
     fireEvent.keyDown(health, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: /1 Build/ })).toHaveFocus();
@@ -522,6 +522,34 @@ describe("project pipeline", () => {
       );
     },
   );
+
+  it("saves disabled readiness checks without clearing the health path", async () => {
+    state.project.build_type = "go";
+    show("/?tab=health");
+    const path = await screen.findByLabelText("Health check path");
+    fireEvent.change(path, { target: { value: "/ready" } });
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Check readiness on deployment and wake",
+      }),
+    );
+    expect(path).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Save pipeline" }));
+    await waitFor(() =>
+      expect(state.request).toHaveBeenCalledWith(
+        "projects/p1",
+        expect.objectContaining({
+          pipeline: expect.objectContaining({
+            deploy: expect.objectContaining({
+              health_disabled: true,
+              health_path: "/ready",
+            }),
+          }),
+        }),
+        "PATCH",
+      ),
+    );
+  });
 
   it("filters templates by search and category", async () => {
     show();

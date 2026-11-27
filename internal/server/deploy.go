@@ -441,6 +441,9 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 }
 
 func probeRelease(app Record, container, ip string, logger io.Writer) (e error) {
+	if app.Pipeline != nil && app.Pipeline.Deploy.HealthDisabled {
+		return nil
+	}
 	timeout := 60 * time.Second
 	if app.Pipeline != nil && app.Pipeline.Deploy.HealthTimeout > 0 {
 		timeout = time.Duration(app.Pipeline.Deploy.HealthTimeout) * time.Second
@@ -463,7 +466,7 @@ func probeRelease(app Record, container, ip string, logger io.Writer) (e error) 
 
 func probeOnce(app Record, ip string) error {
 	address := net.JoinHostPort(ip, fmt.Sprint(app.Port))
-	if app.Pipeline != nil && app.Pipeline.Deploy.HealthPath != "" {
+	if app.Pipeline != nil && !app.Pipeline.Deploy.HealthDisabled && app.Pipeline.Deploy.HealthPath != "" {
 		client := http.Client{Timeout: time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 		response, err := client.Get("http://" + address + app.Pipeline.Deploy.HealthPath)
 		if err != nil {
@@ -472,7 +475,10 @@ func probeOnce(app Record, ip string) error {
 		response.Body.Close()
 		expected := app.Pipeline.Deploy.ExpectStatus
 		if expected == 0 {
-			expected = 200
+			if redirectsToHTTPS(response) {
+				return nil
+			}
+			expected = http.StatusOK
 		}
 		if response.StatusCode != expected {
 			return fmt.Errorf("expected HTTP status %d, got %d", expected, response.StatusCode)
@@ -484,6 +490,17 @@ func probeOnce(app Record, ip string) error {
 		c.Close()
 	}
 	return err
+}
+
+func redirectsToHTTPS(response *http.Response) bool {
+	switch response.StatusCode {
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+		target, err := response.Location()
+		return err == nil && target.Scheme == "https" && target.Hostname() != "" &&
+			target.User == nil && target.Path == response.Request.URL.Path &&
+			target.RawQuery == response.Request.URL.RawQuery
+	}
+	return false
 }
 
 func (a *Server) logDeploymentResult(out io.Writer, app Record, err error) {

@@ -42,7 +42,7 @@ func appRunArgs(app Record, network string, test bool) []string {
 		"--pids-limit", limitEnv("STARTSHIP_APP_PIDS", "512"),
 		"--cap-drop", "ALL", "--cap-add", "CHOWN", "--cap-add", "SETUID",
 		"--cap-add", "SETGID", "--cap-add", "NET_BIND_SERVICE",
-		"--security-opt", "no-new-privileges", "-e", fmt.Sprintf("PORT=%d", app.Port)}
+		"--security-opt", "no-new-privileges", "--no-healthcheck", "-e", fmt.Sprintf("PORT=%d", app.Port)}
 	if test {
 		args = append(args, "--rm", "--label", "startship.test="+app.ID)
 	} else {

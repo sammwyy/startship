@@ -59,6 +59,87 @@ func TestUptimeIncidentTransitionsAndWindows(t *testing.T) {
 	}
 }
 
+func TestUptimeToggleResetsCurrentStateButKeepsHistory(t *testing.T) {
+	a := testServer(t)
+	now := time.Now()
+	p := Record{ID: "project", Kind: "projects", Active: "release", UptimeMonitoring: true}
+	if err := a.store.Save(p); err != nil {
+		t.Fatal(err)
+	}
+	for _, at := range []time.Time{now.Add(-2 * time.Second), now.Add(-time.Second)} {
+		if _, err := a.recordUptime(p.ID, at, 1, "bad"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stale := p
+	for _, enabled := range []bool{false, true} {
+		p.UptimeMonitoring, p.UptimeSince = enabled, now.UnixMilli()
+		if err := a.saveUptimeSettings(p); err != nil {
+			t.Fatal(err)
+		}
+		summary, err := a.summarizeUptime(p, now, 1, true)
+		want := "disabled"
+		if enabled {
+			want = "pending"
+		}
+		if err != nil || summary.State != want || len(summary.Checks) != 2 || len(summary.Incidents) != 1 || summary.Incidents[0].End == nil {
+			t.Fatalf("wanted %s and preserved history: %+v, %v", want, summary, err)
+		}
+	}
+	if err := a.commitUptime(stale, now, 1, "stale"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.commitUptime(p, now.Add(time.Millisecond), 1, "first failure"); err != nil {
+		t.Fatal(err)
+	}
+	summary, err := a.summarizeUptime(p, now.Add(time.Millisecond), 1, true)
+	if err != nil || summary.State != "degraded" || len(summary.Checks) != 3 || len(summary.Incidents) != 1 {
+		t.Fatalf("wanted degraded without a new incident: %+v, %v", summary, err)
+	}
+}
+
+func TestProjectHTTPProbe(t *testing.T) {
+	var requests atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		switch r.URL.Path {
+		case "/ready":
+			http.Redirect(w, r, "https://project.example.test/ready", http.StatusPermanentRedirect)
+		case "/login":
+			http.Redirect(w, r, "https://project.example.test/login-form", http.StatusFound)
+		default:
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		}
+	}))
+	defer upstream.Close()
+	address, _ := url.Parse(upstream.URL)
+	port, _ := strconv.Atoi(address.Port())
+	p := Record{Port: port, Pipeline: &pipeline.Pipeline{}}
+	if err := probeOnce(p, address.Hostname()); err != nil || requests.Load() != 0 {
+		t.Fatalf("no configured path should use TCP only: %v, %d HTTP requests", err, requests.Load())
+	}
+	for _, tc := range []struct {
+		path           string
+		expectedStatus int
+		wantOK         bool
+	}{
+		{"/ready", 0, true},
+		{"/ready", http.StatusOK, false},
+		{"/ready", http.StatusPermanentRedirect, true},
+		{"/login", 0, false},
+		{"/missing", 0, false},
+	} {
+		p.Pipeline.Deploy.HealthPath, p.Pipeline.Deploy.ExpectStatus = tc.path, tc.expectedStatus
+		if err := probeOnce(p, address.Hostname()); (err == nil) != tc.wantOK {
+			t.Errorf("%s with expected status %d: %v", tc.path, tc.expectedStatus, err)
+		}
+	}
+	p.Pipeline.Deploy.HealthDisabled = true
+	if err := probeRelease(p, "", address.Hostname(), nil); err != nil || requests.Load() != 5 {
+		t.Fatalf("disabled readiness must not probe: %v, %d HTTP requests", err, requests.Load())
+	}
+}
+
 func TestPublicStatusOnlyExposesSelectedProjects(t *testing.T) {
 	a := testServer(t)
 	for _, rec := range []Record{
@@ -227,6 +308,12 @@ func TestActiveReleaseProbePushesUptimeSnapshots(t *testing.T) {
 	failing.Store(false)
 	a.sampleUptime(p)
 	summary("operational", 5)
+
+	current.UptimeMonitoring = false
+	save(current)
+	sample()
+	summary("disabled", 5)
+	current.UptimeMonitoring = true
 
 	save(Record{ID: "static-only", Kind: "releases", ProjectID: p.ID, ContainerReleases: []string{"static"}})
 	current.Active = "static-only"

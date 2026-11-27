@@ -79,6 +79,7 @@ func resolvedCandidate(dir, root, kind string, p Record) (pipelineCandidate, err
 	}
 	if p.Pipeline != nil {
 		resolved.Deploy.HealthTimeout = p.Pipeline.Deploy.HealthTimeout
+		resolved.Deploy.HealthDisabled = p.Pipeline.Deploy.HealthDisabled
 		resolved.Build.Engine = p.Pipeline.Build.Engine
 		if p.Pipeline.Deploy.Port != 0 {
 			resolved.Deploy.Port = p.Pipeline.Deploy.Port
@@ -408,12 +409,16 @@ func (a *Server) activateProject(projectID, releaseID string, containers []Recor
 	}
 	p.Active, job.Status, job.Finished = releaseID, "running", &now
 	p.Sleeping = false
+	p.UptimeSince = now.UnixMilli()
 	changes = append(changes, p, job)
 	tx, err := a.store.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err = closeUptimeIncident(tx, p.ID, p.UptimeSince); err != nil {
+		return err
+	}
 	for _, record := range changes {
 		b, e := json.Marshal(record)
 		if e != nil {
