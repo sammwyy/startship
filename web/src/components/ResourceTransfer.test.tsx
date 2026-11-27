@@ -6,6 +6,7 @@ import { UIProvider } from "../providers/UIProvider";
 import { request } from "../services/api";
 import { ResourceTransfer } from "./ResourceTransfer";
 
+const can = vi.hoisted(() => vi.fn(() => true));
 vi.mock("../layouts/DashboardLayout", () => ({
   useDashboard: () => ({
     workspaces: [
@@ -15,7 +16,7 @@ vi.mock("../layouts/DashboardLayout", () => ({
   }),
 }));
 vi.mock("../providers/SessionProvider", () => ({
-  useSession: () => ({ can: () => true }),
+  useSession: () => ({ can }),
 }));
 vi.mock("../services/api", () => ({ request: vi.fn() }));
 
@@ -136,6 +137,44 @@ it("hides a previously authorized plan while reopening and after permission is d
     );
     expectNoPlan();
   } finally {
+    HTMLDialogElement.prototype.showModal = showModal;
+  }
+});
+
+it("keeps Transfer available and explains when no destination permits creation", () => {
+  const showModal = HTMLDialogElement.prototype.showModal;
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  can.mockReturnValue(false);
+  vi.mocked(request).mockClear();
+  try {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <UIProvider>
+            <ResourceTransfer
+              kind="projects"
+              id="p"
+              name="API"
+              workspaceId="from"
+            />
+          </UIProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Transfer" }));
+    const error = screen.getByRole("alert");
+    expect(error).toHaveTextContent(
+      "You need permission to create this type of resource in another workspace.",
+    );
+    expect(error.closest(".transfer-plan-error")).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Copy resources" }),
+    ).not.toBeInTheDocument();
+    expect(request).not.toHaveBeenCalled();
+  } finally {
+    can.mockReturnValue(true);
     HTMLDialogElement.prototype.showModal = showModal;
   }
 });

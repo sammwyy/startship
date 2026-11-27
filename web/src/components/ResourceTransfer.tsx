@@ -46,7 +46,6 @@ export function ResourceTransfer({
     (workspace) =>
       workspace.id !== workspaceId && can?.(createPermission[kind], workspace),
   );
-  if (destinations.length === 0) return null;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}>
@@ -81,15 +80,24 @@ function TransferDialog({
   const { can } = useSession();
   const ui = useUI();
   const navigate = useNavigate();
+  const hasDestination = destinations.length > 0;
   const plan = useQuery({
     queryKey: ["transfer-plan", resource],
     queryFn: () => request<Plan>("transfers/plan", { resource }, "POST"),
+    enabled: hasDestination,
     staleTime: 0,
     refetchOnWindowFocus: false,
     retry: false,
   });
   const target = destinations.find((workspace) => workspace.id === destination);
-  const data = plan.isSuccess && !plan.isFetching ? plan.data : undefined;
+  const data =
+    hasDestination && plan.isSuccess && !plan.isFetching
+      ? plan.data
+      : undefined;
+  const loading = hasDestination && (plan.isFetching || plan.isPending);
+  const error = hasDestination
+    ? plan.error
+    : "You need permission to create this type of resource in another workspace.";
   const linked = data?.linked ?? [];
   const eligible = (item: Linked) =>
     item.allowed && (!target || can(createPermission[item.kind], target));
@@ -104,11 +112,11 @@ function TransferDialog({
       onClose={close}
       className="resource-transfer"
     >
-      {plan.isFetching || plan.isPending ? (
+      {loading ? (
         <Loading />
-      ) : plan.isError ? (
+      ) : error ? (
         <div className="transfer-plan-error">
-          <ErrorMessage error={plan.error} />
+          <ErrorMessage error={error} />
         </div>
       ) : null}
       {data && (
