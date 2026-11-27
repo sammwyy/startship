@@ -172,7 +172,7 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 			return x, Record{}, "forbidden"
 		}
 		return x, Record{}, ""
-	case "system_update", "account_activity", "account_sessions", "account_tokens", "workspaces":
+	case "system_update", "account_activity", "account_sessions", "account_tokens", "workspaces", "recipes_catalog", "services_catalog":
 		return x, Record{}, ""
 	default:
 		return x, Record{}, "invalid subscription"
@@ -208,6 +208,10 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return out
 	}
 	switch s.Topic {
+	case "recipes_catalog", "services_catalog":
+		a.ensureCatalog(s.Topic)
+		entries, meta := a.catalogData(s.Topic)
+		return map[string]any{"entries": entries, "metadata": meta}, nil, r, ""
 	case "workspaces":
 		out := []apiRecord{}
 		for _, v := range a.store.List("workspaces", "") {
@@ -556,6 +560,8 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 				periodic = periodic || s.Topic == "firewall" && s.firewallDirty && !now.Before(s.next)
 				key := s.activityKey(uid)
 				switch s.Topic {
+				case "recipes_catalog", "services_catalog":
+					key = s.Topic
 				case "uptime":
 					key = "uptime:" + s.ProjectID
 				case "status_page":

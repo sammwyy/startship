@@ -326,8 +326,8 @@ const usage = `startship [--json] COMMAND
   containers list [PROJECT] | containers get ID
   routes list [PROJECT] | routes add PROJECT CONTAINER HOST [PATH] | routes rm ID
   routes update ID JSON          edit an existing route
-  catalog                        service engines, versions and ports
-  apps recipes [list|show RECIPE]
+  catalog [refresh [WORKSPACE]]   service engines, versions and ports
+  apps recipes [list|show RECIPE|refresh [WORKSPACE]]
   apps ls WORKSPACE | apps show WORKSPACE APP
   apps install WORKSPACE RECIPE NAME [--config JSON] [--ports JSON]
   apps start|stop|restart|update WORKSPACE APP

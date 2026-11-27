@@ -90,6 +90,35 @@ function catalog() {
   );
 }
 describe("service catalog", () => {
+  it("refreshes the catalog and shows the cached source and timestamp", async () => {
+    const updated = "2026-01-01T12:00:00Z";
+    vi.mocked(request).mockImplementation(async (path) => {
+      if (path === "catalog/status") return { source: "bundled" };
+      if (path === "catalog/refresh?workspace=w")
+        return {
+          entries: [{ ...engine, name: "Remote PostgreSQL" }],
+          metadata: { source: "remote", updated_at: updated },
+        };
+      return [engine];
+    });
+    catalog();
+    expect(await screen.findByText("Bundled catalog")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Refresh catalog" }),
+    );
+    expect(await screen.findByText(/Remote cache/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Remote cache/).querySelector("time"),
+    ).toHaveAttribute("datetime", updated);
+    expect(
+      screen.getByRole("button", { name: /Remote PostgreSQL/ }),
+    ).toBeInTheDocument();
+    expect(request).toHaveBeenCalledWith(
+      "catalog/refresh?workspace=w",
+      undefined,
+      "POST",
+    );
+  });
   it("uses readable dark brand marks and a memcached monogram", () => {
     const { container } = render(
       <>
@@ -186,9 +215,11 @@ describe("service catalog", () => {
     );
   });
   it("keeps configuration after a deployment error", async () => {
-    vi.mocked(request)
-      .mockResolvedValueOnce([engine])
-      .mockRejectedValueOnce(new Error("Port already reserved"));
+    vi.mocked(request).mockImplementation(async (path) => {
+      if (path === "catalog/status") return { source: "bundled" };
+      if (path === "catalog") return [engine];
+      throw new Error("Port already reserved");
+    });
     const user = userEvent.setup();
     catalog();
     await user.click(await screen.findByRole("button", { name: /PostgreSQL/ }));

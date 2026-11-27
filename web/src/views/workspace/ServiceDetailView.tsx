@@ -58,7 +58,8 @@ export function ServiceDetailView() {
     [open, setOpen] = useState(false),
     [changed, setChanged] = useState(false);
   const s = list.data?.services.find((s) => s.id === serviceId),
-    engine = catalog.data?.find((e) => e.id === s?.engine),
+    listed = catalog.data?.find((e) => e.id === s?.engine),
+    engine = s?.definition || listed,
     allowed = can("services.manage", workspace);
   const logs = useQuery({
     queryKey: [`services/${serviceId}/logs?tail=200`],
@@ -71,7 +72,7 @@ export function ServiceDetailView() {
   async function refresh() {
     await client.invalidateQueries();
   }
-  if (list.isPending || catalog.isPending) return <Loading />;
+  if (list.isPending || (!engine && catalog.isPending)) return <Loading />;
   if (!s || !engine)
     return (
       <>
@@ -372,7 +373,12 @@ export function ServiceDetailView() {
           <ServiceConfig
             key={`${s.version}-${s.external_port}-${JSON.stringify(s.config)}`}
             service={s}
-            engine={engine}
+            engine={{
+              ...engine,
+              versions: [
+                ...new Set([...engine.versions, ...(listed?.versions || [])]),
+              ],
+            }}
             onSave={async (body) => {
               await request(`services/${s.id}`, body, "PATCH");
               await refresh();

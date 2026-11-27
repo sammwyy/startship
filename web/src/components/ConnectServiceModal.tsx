@@ -35,7 +35,8 @@ export function ConnectServiceModal({
     [projectId, setProjectId] = useState(project?.id || ""),
     [alias, setAlias] = useState(service?.name || "");
   const current = services.find((s) => s.id === selected),
-    engine = engines.find((e) => e.id === current?.engine),
+    engine =
+      current?.definition || engines.find((e) => e.id === current?.engine),
     eligible = projects.filter(
       (p) => !current?.attachments.some((a) => a.project_id === p.id),
     );

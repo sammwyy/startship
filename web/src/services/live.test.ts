@@ -31,6 +31,26 @@ afterEach(() => {
   vi.useRealTimers();
 });
 describe("authenticated live connection", () => {
+  it("replaces catalog and metadata queries on catalog snapshots", () => {
+    const client = new QueryClient();
+    for (const [topic, path] of [
+      ["recipes_catalog", "recipes"],
+      ["services_catalog", "catalog"],
+    ] as const) {
+      const data = {
+        entries: [{ id: "remote" }],
+        metadata: { source: "remote", updated_at: "2026-01-01T12:00:00Z" },
+      };
+      client.setQueryData([path], [{ id: "bundled" }]);
+      applyLiveMessage(
+        client,
+        { topic },
+        { type: "snapshot", id: "1", topic, data },
+      );
+      expect(client.getQueryData([path])).toEqual(data.entries);
+      expect(client.getQueryData([`${path}/status`])).toEqual(data.metadata);
+    }
+  });
   it("uses a single same-origin cookie socket and deduplicates topic subscriptions", () => {
     const ready = vi.fn();
     const connection = new LiveConnection(vi.fn(), vi.fn(), ready);

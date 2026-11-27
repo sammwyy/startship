@@ -65,7 +65,7 @@ startship apps domains add WORKSPACE git web git.example.com
 startship apps ls WORKSPACE
 ```
 
-See [the recipe format and remote registry setup](docs/recipes.md).
+See [the recipe format](docs/recipes.md) and [catalog refresh and remote registry setup](docs/catalogs.md).
 
 ## Documentation
 

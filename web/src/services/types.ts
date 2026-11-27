@@ -27,6 +27,7 @@ export interface Service {
   workspace_id: string;
   name: string;
   engine: string;
+  definition?: ServiceEngine;
   version: string;
   config: Record<string, string>;
   external_port: number;
