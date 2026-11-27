@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net"
 	"net/url"
 	"path"
@@ -28,17 +29,21 @@ type Field struct {
 	Help     string `json:"help"`
 }
 type Engine struct {
-	ID          string   `json:"id"`
-	Icon        string   `json:"icon"`
-	Logo        string   `json:"logo,omitempty"`
-	Name        string   `json:"name"`
-	Category    string   `json:"category"`
-	Description string   `json:"description"`
-	Image       string   `json:"image"`
-	Versions    []string `json:"versions"`
-	Port        int      `json:"port"`
-	DataPath    string   `json:"data_path"`
-	Fields      []Field  `json:"fields"`
+	ID           string            `json:"id"`
+	Icon         string            `json:"icon"`
+	Logo         string            `json:"logo,omitempty"`
+	Name         string            `json:"name"`
+	Category     string            `json:"category"`
+	Description  string            `json:"description"`
+	Image        string            `json:"image"`
+	Versions     []string          `json:"versions"`
+	Port         int               `json:"port"`
+	DataPath     string            `json:"data_path"`
+	Fields       []Field           `json:"fields"`
+	EnvTemplate  map[string]string `json:"env,omitzero"`
+	ArgsTemplate []string          `json:"command,omitzero"`
+	Entrypoint   string            `json:"entrypoint,omitempty"`
+	Scheme       string            `json:"scheme,omitempty"`
 }
 
 type Registry []Engine
@@ -57,6 +62,8 @@ var engineID = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 var fieldKey = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 var imageName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$`)
 var imageTag = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$`)
+var templateField = regexp.MustCompile(`\${[^}]*}`)
+var urlScheme = regexp.MustCompile(`^[a-z][a-z0-9+.-]*$`)
 
 func Parse(body []byte) (Registry, error) {
 	var index struct {
@@ -73,8 +80,10 @@ func Parse(body []byte) (Registry, error) {
 	seen := map[string]bool{}
 	for i, e := range index.Engines {
 		if !engineID.MatchString(e.ID) || seen[e.ID] || strings.TrimSpace(e.Name) == "" ||
-			!slices.Contains([]string{"database", "cache", "queue", "search", "storage"}, e.Category) ||
+			!slices.Contains([]string{"database", "cache", "queue", "search", "storage", "observability"}, e.Category) ||
 			!imageName.MatchString(e.Image) || strings.Contains(path.Base(e.Image), ":") ||
+			e.Entrypoint != "" && (!path.IsAbs(e.Entrypoint) || path.Clean(e.Entrypoint) != e.Entrypoint || strings.ContainsAny(e.Entrypoint, "\x00\r\n")) ||
+			e.Scheme != "" && !urlScheme.MatchString(e.Scheme) ||
 			e.Port < 1 || e.Port > 65535 || len(e.Versions) == 0 ||
 			e.DataPath != "" && (!path.IsAbs(e.DataPath) || e.DataPath == "/" || path.Clean(e.DataPath) != e.DataPath || strings.ContainsAny(e.DataPath, ",\x00")) {
 			return nil, fmt.Errorf("invalid or duplicate service engine %q", e.ID)
@@ -95,6 +104,16 @@ func Parse(body []byte) (Registry, error) {
 				return nil, fmt.Errorf("%s: invalid or duplicate field %q", e.ID, f.Key)
 			}
 			fields[f.Key] = true
+		}
+		for _, template := range slices.Concat(slices.Collect(maps.Values(e.EnvTemplate)), e.ArgsTemplate) {
+			for _, ref := range templateField.FindAllString(template, -1) {
+				if !fields[ref[2:len(ref)-1]] {
+					return nil, fmt.Errorf("%s: undeclared template field %q", e.ID, ref)
+				}
+			}
+			if strings.Contains(templateField.ReplaceAllString(template, ""), "${") {
+				return nil, fmt.Errorf("%s: unterminated template field", e.ID)
+			}
 		}
 		if e.Icon == "" {
 			e.Icon = e.ID
@@ -131,6 +150,8 @@ func (r Registry) Lookup(id string) (Engine, bool) {
 func clone(e Engine) Engine {
 	e.Versions = slices.Clone(e.Versions)
 	e.Fields = slices.Clone(e.Fields)
+	e.EnvTemplate = maps.Clone(e.EnvTemplate)
+	e.ArgsTemplate = slices.Clone(e.ArgsTemplate)
 	return e
 }
 func Validate(e Engine, version string, values map[string]string) (map[string]string, error) {
@@ -177,8 +198,19 @@ func Validate(e Engine, version string, values map[string]string) (map[string]st
 	}
 	return out, nil
 }
+func expandTemplate(template string, fields map[string]string) string {
+	return templateField.ReplaceAllStringFunc(template, func(ref string) string {
+		return fields[ref[2:len(ref)-1]]
+	})
+}
 func (e Engine) Env(v map[string]string) map[string]string {
 	out := map[string]string{}
+	if e.EnvTemplate != nil {
+		for k, template := range e.EnvTemplate {
+			out[k] = expandTemplate(template, v)
+		}
+		return out
+	}
 	set := func(prefix string) {
 		for k, val := range v {
 			out[prefix+strings.ToUpper(k)] = val
@@ -217,6 +249,13 @@ func (e Engine) Env(v map[string]string) map[string]string {
 	return out
 }
 func (e Engine) Command(v map[string]string) []string {
+	if e.ArgsTemplate != nil {
+		args := make([]string, len(e.ArgsTemplate))
+		for i, template := range e.ArgsTemplate {
+			args[i] = expandTemplate(template, v)
+		}
+		return args
+	}
 	switch e.ID {
 	case "redis", "valkey":
 		args := []string{"--appendonly", "yes"}
@@ -237,7 +276,10 @@ var separator = regexp.MustCompile(`[^A-Z0-9]`)
 func (e Engine) Connection(alias string, port int, v map[string]string) map[string]string {
 	host := alias + ".local"
 	prefix := separator.ReplaceAllString(strings.ToUpper(alias), "_") + "_"
-	scheme := map[string]string{"postgresql": "postgres", "mariadb": "mysql", "rabbitmq": "amqp", "valkey": "redis", "clickhouse": "http", "seaweedfs": "http", "opensearch": "https"}[e.ID]
+	scheme := e.Scheme
+	if scheme == "" {
+		scheme = map[string]string{"postgresql": "postgres", "mariadb": "mysql", "rabbitmq": "amqp", "valkey": "redis", "clickhouse": "http", "seaweedfs": "http", "opensearch": "https"}[e.ID]
+	}
 	if scheme == "" {
 		scheme = e.ID
 	}
@@ -257,7 +299,7 @@ func (e Engine) Connection(alias string, port int, v map[string]string) map[stri
 			out[prefix+strings.ToUpper(k)] = v[k]
 		}
 	}
-	if e.ID == "seaweedfs" {
+	if e.ID == "seaweedfs" || e.ID == "minio" {
 		out[prefix+"ENDPOINT"] = u.String()
 	}
 	return out

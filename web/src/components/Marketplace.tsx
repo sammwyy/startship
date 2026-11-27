@@ -16,11 +16,17 @@ const categories = new Map([
   ["games", "Games"],
   ["communication", "Communication"],
   ["dev-tools", "Developer tools"],
+  ["files", "Files & storage"],
+  ["automation", "Automation & productivity"],
+  ["networking", "Networking & security"],
+  ["ai", "AI & machine learning"],
+  ["web", "Web & apps"],
   ["database", "Databases"],
   ["cache", "Caches"],
   ["queue", "Messaging & queues"],
   ["search", "Search"],
   ["storage", "Object storage"],
+  ["observability", "Observability"],
   ["other", "Other"],
 ]);
 

@@ -55,3 +55,37 @@ func TestSchemaAndProperties(t *testing.T) {
 		t.Fatal(got, err)
 	}
 }
+
+func TestContainerEntrypoint(t *testing.T) {
+	for _, tc := range []struct {
+		name, entrypoint string
+		valid            bool
+	}{
+		{"omitted", "", true},
+		{"absolute", "/bin/sh", true},
+		{"relative", "bin/sh", false},
+		{"unclean", "/bin/../bin/sh", false},
+		{"NUL", "/bin/sh\x00", false},
+		{"CR", "/bin/sh\r", false},
+		{"LF", "/bin/sh\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recipe := Builtins()["minecraft"]
+			recipe.Containers[0].Entrypoint = tc.entrypoint
+			b, err := json.Marshal(map[string][]Recipe{"recipes": {recipe}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := Parse(b)
+			if !tc.valid {
+				if err == nil || !strings.Contains(err.Error(), "invalid entrypoint for container") {
+					t.Fatalf("expected entrypoint error, got %v", err)
+				}
+				return
+			}
+			if err != nil || got[recipe.ID].Containers[0].Entrypoint != tc.entrypoint {
+				t.Fatalf("entrypoint not retained: %v", err)
+			}
+		})
+	}
+}

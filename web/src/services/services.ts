@@ -55,6 +55,7 @@ export function connectionEnv(
     host = `${alias}.local`,
     config = service.config;
   const scheme =
+    engine.scheme ||
     (
       {
         postgresql: "postgres",
@@ -65,7 +66,8 @@ export function connectionEnv(
         seaweedfs: "http",
         opensearch: "https",
       } as Record<string, string>
-    )[engine.id] || engine.id;
+    )[engine.id] ||
+    engine.id;
   const escape = (value: string) =>
     encodeURIComponent(value).replace(
       /[!'()*]/g,
@@ -91,7 +93,7 @@ export function connectionEnv(
     "secret_key",
   ])
     if (config[key]) result[`${prefix}_${key.toUpperCase()}`] = config[key];
-  if (engine.id === "seaweedfs")
+  if (engine.id === "seaweedfs" || engine.id === "minio")
     result[`${prefix}_ENDPOINT`] = result[`${prefix}_URL`];
   return Object.fromEntries(orderedConnectionEnv(result));
 }

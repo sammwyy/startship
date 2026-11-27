@@ -18,6 +18,7 @@ export interface ServiceEngine {
   category: string;
   description: string;
   image: string;
+  scheme?: string;
   versions: string[];
   port: number;
   data_path: string;
