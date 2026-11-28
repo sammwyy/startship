@@ -8,6 +8,7 @@ import { queries } from "../../services/queries";
 import { TemplateIcon } from "../../components/TemplateIcon";
 import { useSession } from "../../providers/SessionProvider";
 import { FileExplorerButton } from "../../components/FileExplorerButton";
+import { TerminalButton } from "../../components/TerminalButton";
 export function ContainersView() {
   const { project, containers } = useProject();
   const { can } = useSession();
@@ -48,6 +49,9 @@ export function ContainersView() {
                 target={`containers/${c.id}`}
                 label={c.name}
               />
+            )}
+            {c.active_deployment && can("containers.exec", project) && (
+              <TerminalButton target={`containers/${c.id}`} label={c.name} />
             )}
             <Link className="button" to={`/project/${project.id}/logs/${c.id}`}>
               <Icon name="terminal" />

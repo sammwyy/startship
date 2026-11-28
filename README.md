@@ -103,6 +103,18 @@ startship files zip volume:VOLUME_ID /config.zip /settings.json
 startship files unzip volume:VOLUME_ID /config.zip /restored
 ```
 
+## Container terminal
+
+Select **Terminal** beside **Files** on a running project or App container, or on a Service's detail page. Startship opens an interactive shell with Bash when available and falls back to sh. The **Open container terminals** permission (`containers.exec`) can be granted at project scope for project containers or at workspace scope for the workspace's containers. Grant it only to users you trust to run commands with the container's configured user and access, including its environment and mounted data.
+
+The CLI uses the same terminal over HTTPS or the local admin socket. Use Startship IDs and pass a command after `--` if you don't want a shell:
+
+```sh
+startship exec container:CONTAINER_ID
+startship exec app:WORKSPACE_ID/APP_ID/web
+startship exec service:SERVICE_ID -- redis-cli --help
+```
+
 ## Self-hosted apps
 
 Open **Apps** in a workspace and select **Install app** to choose a recipe. App
