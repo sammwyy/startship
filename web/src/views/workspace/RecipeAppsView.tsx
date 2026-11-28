@@ -30,6 +30,7 @@ import {
 import { useDashboard } from "../../layouts/DashboardLayout";
 import { useLiveSubscription } from "../../providers/LiveProvider";
 import { useSession } from "../../providers/SessionProvider";
+import { ConnectionsPanel } from "../../components/ConnectionsPanel";
 import { useUI } from "../../providers/UIProvider";
 import { remove, request } from "../../services/api";
 import {
@@ -684,6 +685,14 @@ function AppDetail({
               </div>
             );
           })}
+        </section>
+        <section className="panel recipe-section">
+          <ConnectionsPanel
+            workspaceId={workspaceId}
+            endpoint={{ kind: "app", id: app.id }}
+            canManage={manage}
+            onChanged={() => void refresh()}
+          />
         </section>
         <section className="panel recipe-section">
           <h2>

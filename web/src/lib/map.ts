@@ -1,4 +1,4 @@
-import type { Project, Service, Volume } from "../services/types";
+import type { Connection, Project, Service, Volume } from "../services/types";
 
 export type MapKind = "projects" | "services" | "volumes";
 export interface MapEdge {
@@ -13,7 +13,14 @@ export function buildWorkspaceMap(
   projects: Project[],
   services: Service[],
   volumes: Volume[],
+  connections: Connection[] = [],
 ) {
+  const attachments = (s: Service) =>
+    connections.flatMap((c) =>
+      c.to.kind === "service" && c.to.id === s.id && c.from.kind === "project"
+        ? [{ project_id: c.from.id, alias: c.alias }]
+        : [],
+    );
   const positions = new Map(projects.map((p, i) => [p.id, i]));
   const mean = (ids: string[]) => {
     const values = [...new Set(ids)].flatMap((id) =>
@@ -25,8 +32,8 @@ export function buildWorkspaceMap(
   };
   const orderedServices = [...services].sort(
     (a, b) =>
-      mean(a.attachments.map((x) => x.project_id)) -
-      mean(b.attachments.map((x) => x.project_id)),
+      mean(attachments(a).map((x) => x.project_id)) -
+      mean(attachments(b).map((x) => x.project_id)),
   );
   const orderedVolumes = [...volumes].sort(
     (a, b) =>
@@ -34,20 +41,20 @@ export function buildWorkspaceMap(
         a.project_id,
         ...services
           .filter((s) => s.volume_id === a.id)
-          .flatMap((s) => s.attachments.map((x) => x.project_id)),
+          .flatMap((s) => attachments(s).map((x) => x.project_id)),
       ]) -
       mean([
         b.project_id,
         ...services
           .filter((s) => s.volume_id === b.id)
-          .flatMap((s) => s.attachments.map((x) => x.project_id)),
+          .flatMap((s) => attachments(s).map((x) => x.project_id)),
       ]),
   );
   const serviceSlots = [
     ...orderedServices.map((s) => ({
       key: mapKey("services", s.id),
       lane: false,
-      position: mean(s.attachments.map((a) => a.project_id)),
+      position: mean(attachments(s).map((a) => a.project_id)),
     })),
     ...orderedVolumes
       .filter((v) => positions.has(v.project_id))
@@ -61,7 +68,7 @@ export function buildWorkspaceMap(
     .map(({ key, lane }) => ({ key, lane }));
   const edges: MapEdge[] = [];
   for (const service of orderedServices) {
-    for (const attachment of service.attachments) {
+    for (const attachment of attachments(service)) {
       if (positions.has(attachment.project_id))
         edges.push({
           from: mapKey("projects", attachment.project_id),

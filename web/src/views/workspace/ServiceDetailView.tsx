@@ -10,7 +10,7 @@ import { useDashboard } from "../../layouts/DashboardLayout";
 import { useSession } from "../../providers/SessionProvider";
 import { useUI } from "../../providers/UIProvider";
 import { queries } from "../../services/queries";
-import { request, remove } from "../../services/api";
+import { request } from "../../services/api";
 import {
   connectionEnv,
   externalEndpoint,
@@ -35,7 +35,7 @@ import {
 import { ServiceConfig } from "../../components/ServiceConfig";
 import { ServiceActions } from "../../components/ServiceActions";
 import { ResourceTransfer } from "../../components/ResourceTransfer";
-import { ConnectServiceModal } from "../../components/ConnectServiceModal";
+import { ConnectionsPanel } from "../../components/ConnectionsPanel";
 import {
   BackupStorage,
   BackupsPanel,
@@ -49,14 +49,12 @@ export function ServiceDetailView() {
     client = useQueryClient(),
     navigate = useNavigate();
   const list = useServices(id!),
-    catalog = useQuery(queries.catalog()),
-    projects = useQuery(queries.projects(id!));
+    catalog = useQuery(queries.catalog());
   const [tab, setTab] = useState(
       useSearchParams()[0].get("tab") || "connection",
     ),
     [alias, setAlias] = useState(""),
     [reveal, setReveal] = useState(false),
-    [open, setOpen] = useState(false),
     [changed, setChanged] = useState(false);
   const s = list.data?.services.find((s) => s.id === serviceId),
     listed = catalog.data?.find((e) => e.id === s?.engine),
@@ -87,10 +85,7 @@ export function ServiceDetailView() {
         </Empty>
       </>
     );
-  const env = connectionEnv(s, engine, alias || s.name),
-    editableProjects = (projects.data || []).filter((p) =>
-      can("project.settings", p),
-    );
+  const env = connectionEnv(s, engine, alias || s.name);
   return (
     <div className="services-page">
       <Link className="service-back" to={`/workspace/${id}/services`}>
@@ -273,61 +268,15 @@ export function ServiceDetailView() {
               )}
             </section>
             <section className="panel service-panel">
-              <div className="service-section-head">
-                <h2>Attached projects</h2>
-                {allowed && (
-                  <button
-                    className="icon-button"
-                    aria-label="Attach project"
-                    onClick={() => setOpen(true)}
-                  >
-                    <Icon name="plus" />
-                  </button>
-                )}
-              </div>
-              {s.attachments.length ? (
-                s.attachments.map((a) => (
-                  <div className="attached-project-row" key={a.project_id}>
-                    <Icon name="plug" />
-                    <Link to={`/project/${a.project_id}/connections`}>
-                      <strong>
-                        {projects.data?.find((p) => p.id === a.project_id)
-                          ?.name || a.project_id}
-                      </strong>
-                      <span>{a.alias}.local</span>
-                    </Link>
-                    {allowed &&
-                      editableProjects.some((p) => p.id === a.project_id) && (
-                        <button
-                          className="icon-button"
-                          aria-label={`Detach ${a.alias}`}
-                          onClick={() =>
-                            ui.dialog({
-                              title: `Disconnect ${a.alias}?`,
-                              description:
-                                "Redeploy the project to apply this change. Service data is kept.",
-                              submit: "Disconnect",
-                              onSubmit: async () => {
-                                await remove(
-                                  `services/${s.id}/attachments/${a.project_id}`,
-                                );
-                                setChanged(true);
-                                await refresh();
-                              },
-                            })
-                          }
-                        >
-                          <Icon name="close" />
-                        </button>
-                      )}
-                  </div>
-                ))
-              ) : (
-                <p>
-                  No projects connected yet. Attach a project to share a private
-                  connection.
-                </p>
-              )}
+              <ConnectionsPanel
+                workspaceId={id!}
+                endpoint={{ kind: "service", id: s.id }}
+                canManage={allowed}
+                onChanged={() => {
+                  setChanged(true);
+                  void refresh();
+                }}
+              />
             </section>
           </aside>
         </div>
@@ -396,20 +345,6 @@ export function ServiceDetailView() {
             }}
           />
         </section>
-      )}
-      {open && (
-        <ConnectServiceModal
-          workspaceId={id!}
-          engines={catalog.data || []}
-          services={list.data?.services || []}
-          projects={editableProjects}
-          service={s}
-          onClose={() => setOpen(false)}
-          onSaved={async () => {
-            setChanged(true);
-            await refresh();
-          }}
-        />
       )}
     </div>
   );

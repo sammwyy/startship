@@ -1,4 +1,5 @@
 import {
+  Network,
   Activity,
   ArrowDownUp,
   ArrowLeft,
@@ -57,6 +58,7 @@ const icons = {
   "hard-drive": HardDrive,
   plug: Plug,
   pipeline: Workflow,
+  share: Network,
   check: Check,
   activity: Activity,
   arrow: ArrowUpRight,

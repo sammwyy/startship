@@ -36,7 +36,6 @@ export interface Service {
   volume_id: string;
   backup?: BackupPolicy;
   next_backup?: string;
-  attachments: { project_id: string; alias: string }[];
   status: string;
   last_error: string;
   container: string;
@@ -86,9 +85,28 @@ export interface Backups {
   backups: Backup[];
   volume: Volume | null;
 }
-export interface ProjectServices {
-  attached: { service: Service; alias: string; env: Record<string, string> }[];
-  available: Service[];
+export type EndpointKind = "project" | "app" | "service";
+export interface Endpoint {
+  kind: EndpointKind;
+  id: string;
+}
+export interface Connection {
+  id: string;
+  workspace_id: string;
+  from: Endpoint;
+  to: Endpoint;
+  alias: string;
+  env: Record<string, string>;
+  created: string;
+  created_by: string;
+}
+export interface WorkspaceNetwork {
+  id: string;
+  workspace_id: string;
+  name: string;
+  members: Endpoint[];
+  created: string;
+  created_by: string;
 }
 export interface Pipeline {
   build: {

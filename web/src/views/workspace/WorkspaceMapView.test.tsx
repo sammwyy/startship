@@ -74,10 +74,6 @@ vi.mock("../../services/services", () => {
                 version: "17",
                 status: "running",
                 volume_id: "v",
-                attachments: [
-                  { project_id: "p", alias: "db" },
-                  { project_id: "q", alias: "shared-db" },
-                ],
               },
               {
                 id: "other",
@@ -85,7 +81,6 @@ vi.mock("../../services/services", () => {
                 engine: "valkey",
                 version: "8",
                 status: "stopped",
-                attachments: [],
               },
             ],
       },
@@ -115,12 +110,23 @@ vi.mock("../../services/services", () => {
     }),
   };
   const services = hooks.useServices(),
-    volumes = hooks.useVolumes();
+    volumes = hooks.useVolumes(),
+    link = (from: string, alias: string) => ({
+      id: from,
+      from: { kind: "project", id: from },
+      to: { kind: "service", id: "s" },
+      alias,
+    }),
+    connections = {
+      data: { connections: [link("p", "db"), link("q", "shared-db")] },
+    },
+    emptyConnections = { data: { connections: [] } };
   const emptyServices = { data: { services: [] } },
     emptyVolumes = { data: { volumes: [] } };
   return {
     useServices: () => (state.empty ? emptyServices : services),
     useVolumes: () => (state.empty ? emptyVolumes : volumes),
+    useConnections: () => (state.empty ? emptyConnections : connections),
   };
 });
 
