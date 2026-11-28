@@ -200,7 +200,11 @@ func (a *Server) endpointJoins(e Endpoint) []netJoin {
 			out = append(out, netJoin{Network: connectionNetwork(c.ID), Label: "startship.connection=" + c.ID})
 		}
 		if c.To == e {
-			out = append(out, netJoin{Network: connectionNetwork(c.ID), Label: "startship.connection=" + c.ID, Names: []string{c.Alias, c.Alias + ".local"}})
+			names := []string{c.Alias, c.Alias + ".local"}
+			if host := endpointHost(e.Kind, name); host != c.Alias {
+				names = append(names, host, host+".local")
+			}
+			out = append(out, netJoin{Network: connectionNetwork(c.ID), Label: "startship.connection=" + c.ID, Names: names})
 		}
 	}
 	for _, n := range a.networks(ws) {

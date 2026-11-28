@@ -396,7 +396,7 @@ fn main() {
         redis.sendall(b"*1\r\n$4\r\nPING\r\n")
         assert stream.readline() == b"+PONG\r\n"
     print("Redis service running via API and external host-port PING: +PONG")
-    request("workspaces/" + ws["id"] + "/connections", {"from": {"kind": "project", "id": grouped["id"]},
+    cache_link = request("workspaces/" + ws["id"] + "/connections", {"from": {"kind": "project", "id": grouped["id"]},
                                                        "to": {"kind": "service", "id": service["id"]}, "alias": "shared-cache"})
     project_volume = request("workspaces/" + ws["id"] + "/volumes",
                              {"name": "e2e-data", "project_id": grouped["id"], "mount_path": "/e2e-data"})
@@ -422,7 +422,7 @@ fn main() {
         subprocess.run(["docker", "exec", revision["container"], "python", "-c", probe], check=True)
         assert any(mount["Name"] == "startship-vol-" + project_volume["id"] and mount["Destination"] == "/e2e-data"
                    for mount in info["Mounts"]), info["Mounts"]
-        assert set(info["NetworkSettings"]["Networks"]) == {"startship-" + grouped["id"]}
+        assert set(info["NetworkSettings"]["Networks"]) == {"startship-" + grouped["id"], "startship-link-" + cache_link["id"]}
         route = request("routes", {"project_id": grouped["id"], "container_id": container["id"], "host": "grouped.local",
                                   "path_prefix": "/api" if container["root_dir"].endswith("api") else "/", "strip_prefix": container["root_dir"].endswith("api")})
         assert route["container_id"] == container["id"]

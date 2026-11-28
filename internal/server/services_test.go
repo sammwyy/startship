@@ -198,7 +198,7 @@ func TestServiceNetworkNames(t *testing.T) {
 	if err := f.a.connectService(s); err != nil {
 		t.Fatal(err)
 	}
-	want := "network connect --alias db --alias db.local startship-link-link startship-svc-named"
+	want := "network connect --alias db --alias db.local --alias primary-db --alias primary-db.local startship-link-link startship-svc-named"
 	if !strings.Contains(strings.Join(calls, "\n"), want) {
 		t.Fatal(want, calls)
 	}
