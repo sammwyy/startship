@@ -55,7 +55,6 @@ export function ListenAddressPicker({
   interfaces,
   readOnly,
   disabled,
-  describedBy,
   onChange,
 }: {
   id: string;
@@ -65,7 +64,6 @@ export function ListenAddressPicker({
   interfaces: NetworkInterface[];
   readOnly?: boolean;
   disabled?: boolean;
-  describedBy?: string;
   onChange: (next: string) => void;
 }) {
   const menuId = useId();
@@ -165,7 +163,6 @@ export function ListenAddressPicker({
               value={currentPort}
               readOnly={readOnly}
               disabled={disabled}
-              aria-describedby={describedBy}
               spellCheck={false}
               onChange={(event) =>
                 onChange(formatListen(currentIface, event.target.value))
@@ -183,7 +180,6 @@ export function ListenAddressPicker({
           placeholder={`tailscale0:${defaultPort}, 127.0.0.1:${defaultPort}`}
           readOnly={readOnly}
           disabled={disabled}
-          aria-describedby={describedBy}
           spellCheck={false}
           onChange={(event) => onChange(event.target.value)}
         />

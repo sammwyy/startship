@@ -6,33 +6,12 @@ import { useLiveSubscription } from "../providers/LiveProvider";
 import { useSession } from "../providers/SessionProvider";
 import { request } from "../services/api";
 import { queries } from "../services/queries";
-import type {
-  RouterConfig,
-  RouterOverride,
-  RouterSettings,
-} from "../services/types";
+import type { RouterConfig, RouterSettings } from "../services/types";
 
-const overrides: Record<RouterOverride, [string, string]> = {
-  router_disabled: ["STARTSHIP_ROUTER_DISABLED", "--router-disabled"],
-  http_listen: ["STARTSHIP_HTTP_ADDR", "--http-listen"],
-  https_listen: ["STARTSHIP_HTTPS_ADDR", "--https-listen"],
-};
 const listenFields = [
   ["http_listen", "HTTP listen addresses", "80"],
   ["https_listen", "HTTPS listen addresses", "443"],
 ] as const;
-
-function OverrideNote({ field }: { field: RouterOverride }) {
-  const [env, flag] = overrides[field];
-  return (
-    <span
-      className="small muted router-override"
-      id={`router-${field}-override`}
-    >
-      Set at startup by <code>{env}</code> or <code>{flag}</code>.
-    </span>
-  );
-}
 
 type RouterDraft = Partial<{
   enabled: boolean;
@@ -60,16 +39,13 @@ export function RouterPanel() {
   });
   const cfg = status.data;
   const interfaces = interfacesQuery.data?.interfaces ?? [];
-  const overridden = (field: RouterOverride) => cfg?.overridden.includes(field);
-  const editable = (field: RouterOverride) => admin && !overridden(field);
+  const disabledOverridden = cfg?.overridden.includes("router_disabled");
   const enabled =
-    (editable("router_disabled") ? draft.enabled : undefined) ??
+    (admin && !disabledOverridden ? draft.enabled : undefined) ??
     cfg?.enabled ??
     false;
   const value = (field: (typeof listenFields)[number][0]) =>
-    (editable(field) ? draft[field] : undefined) ??
-    cfg?.[field].join(", ") ??
-    "";
+    (admin ? draft[field] : undefined) ?? cfg?.[field].join(", ") ?? "";
   const addresses = (field: (typeof listenFields)[number][0]) =>
     value(field)
       .split(",")
@@ -126,9 +102,9 @@ export function RouterPanel() {
                 role="switch"
                 className="switch"
                 checked={enabled}
-                disabled={save.isPending || overridden("router_disabled")}
+                disabled={save.isPending || disabledOverridden}
                 aria-describedby={
-                  overridden("router_disabled")
+                  disabledOverridden
                     ? "router-router_disabled-override"
                     : undefined
                 }
@@ -137,8 +113,14 @@ export function RouterPanel() {
               Enable public router
             </label>
           )}
-          {overridden("router_disabled") && (
-            <OverrideNote field="router_disabled" />
+          {disabledOverridden && (
+            <span
+              className="small muted router-override"
+              id="router-router_disabled-override"
+            >
+              Set at startup by <code>STARTSHIP_ROUTER_DISABLED</code> or{" "}
+              <code>--router-disabled</code>.
+            </span>
           )}
           {!enabled && (
             <p className="note router-warning">
@@ -155,13 +137,9 @@ export function RouterPanel() {
                 value={value(field)}
                 interfaces={interfaces}
                 readOnly={!admin}
-                disabled={save.isPending || overridden(field)}
-                describedBy={
-                  overridden(field) ? `router-${field}-override` : undefined
-                }
+                disabled={save.isPending}
                 onChange={(next) => edit({ [field]: next })}
               />
-              {overridden(field) && <OverrideNote field={field} />}
             </div>
           ))}
           <dl className="kv">

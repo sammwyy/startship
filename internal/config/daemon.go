@@ -21,20 +21,20 @@ const DefaultDashboardPort = "9000"
 const DefaultDashboardURL = "http://localhost:" + DefaultDashboardPort
 
 type Daemon struct {
-	DashboardListen []string        `toml:"dashboard_listen"`
-	HTTPListen      []string        `toml:"http_listen"`
-	HTTPSListen     []string        `toml:"https_listen"`
-	DataDir         string          `toml:"data_dir"`
-	DashboardDomain string          `toml:"dashboard_domain"`
-	ACMEEmail       string          `toml:"acme_email"`
-	ACMEDirectory   string          `toml:"acme_directory"`
-	SocketPath      string          `toml:"socket_path"`
-	TrustedProxies  []string        `toml:"trusted_proxies"`
-	GeoIPDatabase   string          `toml:"geoip_database"`
-	NetworkFirewall bool            `toml:"network_firewall"`
-	RouterDisabled  bool            `toml:"router_disabled"`
-	ConfigPath      string          `toml:"-"`
-	Overridden      map[string]bool `toml:"-"`
+	DashboardListen          []string `toml:"dashboard_listen"`
+	HTTPListen               []string `toml:"http_listen"`
+	HTTPSListen              []string `toml:"https_listen"`
+	DataDir                  string   `toml:"data_dir"`
+	DashboardDomain          string   `toml:"dashboard_domain"`
+	ACMEEmail                string   `toml:"acme_email"`
+	ACMEDirectory            string   `toml:"acme_directory"`
+	SocketPath               string   `toml:"socket_path"`
+	TrustedProxies           []string `toml:"trusted_proxies"`
+	GeoIPDatabase            string   `toml:"geoip_database"`
+	NetworkFirewall          bool     `toml:"network_firewall"`
+	RouterDisabled           bool     `toml:"router_disabled"`
+	ConfigPath               string   `toml:"-"`
+	RouterDisabledOverridden bool     `toml:"-"`
 }
 
 var environment = map[string]string{
@@ -44,8 +44,6 @@ var environment = map[string]string{
 	"trusted_proxies": "STARTSHIP_TRUSTED_PROXIES", "geoip_database": "STARTSHIP_GEOIP_DB",
 	"network_firewall": "STARTSHIP_NETWORK_FIREWALL", "router_disabled": "STARTSHIP_ROUTER_DISABLED",
 }
-
-func EnvironmentKey(key string) string { return environment[key] }
 
 func (d *Daemon) bools() map[string]*bool {
 	return map[string]*bool{"network_firewall": &d.NetworkFirewall, "router_disabled": &d.RouterDisabled}
@@ -77,14 +75,19 @@ func Read(path string) ([]byte, error) {
 	return b, err
 }
 func Parse(b []byte, d *Daemon) error {
+	_, err := parse(b, d)
+	return err
+}
+
+func parse(b []byte, d *Daemon) (toml.MetaData, error) {
 	meta, err := toml.Decode(string(b), d)
 	if err != nil {
-		return err
+		return meta, err
 	}
 	if unknown := meta.Undecoded(); len(unknown) > 0 {
-		return fmt.Errorf("unknown daemon setting: %s", unknown[0])
+		return meta, fmt.Errorf("unknown daemon setting: %s", unknown[0])
 	}
-	return nil
+	return meta, nil
 }
 
 type listenFlag []string
@@ -108,7 +111,7 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 		f.Var((*listenFlag)(p), strings.ReplaceAll(key, "_", "-"), "listen host:port or interface:port; comma-separated/repeatable ("+environment[key]+")")
 	}
 	f.Usage = func() {
-		fmt.Fprintln(out, "Usage: startshipd [flags]\nPrecedence: flags > environment > TOML file > defaults.\nDefaults: dashboard :"+DefaultDashboardPort+"; HTTP :80; HTTPS :443; data ./_data.\n--version prints the build version.")
+		fmt.Fprintln(out, "Usage: startshipd [flags]\nListener precedence: TOML file > flags > environment > defaults.\nOther settings: flags > environment > TOML file > defaults.\nDefaults: dashboard :"+DefaultDashboardPort+"; HTTP :80; HTTPS :443; data ./_data.\n--version prints the build version.")
 		f.PrintDefaults()
 	}
 	if err := f.Parse(args); err != nil {
@@ -120,24 +123,33 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 	d := Defaults()
 	path := Path(file)
 	d.ConfigPath = path
-	d.Overridden = map[string]bool{}
 	b, err := os.ReadFile(path)
 	if err != nil && !(errors.Is(err, os.ErrNotExist) && file == "" && os.Getenv("STARTSHIP_CONFIG") == "") {
 		return d, fmt.Errorf("config %s: %w", path, err)
 	}
-	if err = Parse(b, &d); err != nil {
+	meta, err := parse(b, &d)
+	if err != nil {
 		return d, fmt.Errorf("config %s: %w", path, err)
+	}
+	savedListener := func(key string) bool {
+		switch key {
+		case "dashboard_listen", "http_listen", "https_listen":
+			return meta.IsDefined(key)
+		default:
+			return false
+		}
 	}
 	for key, p := range d.strings() {
 		if s := os.Getenv(environment[key]); s != "" {
 			*p = s
-			d.Overridden[key] = true
 		}
 	}
 	for key, p := range d.lists() {
+		if savedListener(key) {
+			continue
+		}
 		if s := os.Getenv(environment[key]); s != "" {
 			*p = strings.Split(s, ",")
-			d.Overridden[key] = true
 		}
 	}
 	for key, p := range d.bools() {
@@ -147,13 +159,15 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 				return d, fmt.Errorf("%s: %w", environment[key], err)
 			}
 			*p = value
-			d.Overridden[key] = true
+			if key == "router_disabled" {
+				d.RouterDisabledOverridden = true
+			}
 		}
 	}
 	f.Visit(func(v *flag.Flag) {
 		key := strings.ReplaceAll(v.Name, "-", "_")
-		if key != "config" {
-			d.Overridden[key] = true
+		if key == "router_disabled" {
+			d.RouterDisabledOverridden = true
 		}
 		if p, ok := d.bools()[key]; ok {
 			*p = *values.bools()[key]
@@ -161,7 +175,7 @@ func Load(args []string, out io.Writer) (Daemon, error) {
 		if p, ok := d.strings()[key]; ok {
 			*p = *values.strings()[key]
 		}
-		if p, ok := d.lists()[key]; ok {
+		if p, ok := d.lists()[key]; ok && !savedListener(key) {
 			*p = *values.lists()[key]
 		}
 	})

@@ -27,10 +27,8 @@ export function DashboardListenPanel() {
     },
   });
   const cfg = status.data;
-  const overridden = cfg?.overridden.includes("dashboard_listen");
-  const editable = admin && !overridden;
   const value =
-    (editable ? draft : undefined) ?? cfg?.dashboard_listen.join(", ") ?? "";
+    (admin ? draft : undefined) ?? cfg?.dashboard_listen.join(", ") ?? "";
   const addresses = value
     .split(",")
     .map((entry) => entry.trim())
@@ -72,22 +70,12 @@ export function DashboardListenPanel() {
               value={value}
               interfaces={interfaces}
               readOnly={!admin}
-              disabled={save.isPending || overridden}
-              describedBy={overridden ? "dashboard-listen-override" : undefined}
+              disabled={save.isPending}
               onChange={(next) => {
                 setDraft(next);
                 if (save.isError) save.reset();
               }}
             />
-            {overridden && (
-              <span
-                className="small muted router-override"
-                id="dashboard-listen-override"
-              >
-                Set at startup by <code>STARTSHIP_DASHBOARD_ADDR</code> or{" "}
-                <code>--dashboard-listen</code>.
-              </span>
-            )}
           </div>
           {admin && changed && (
             <p className="note router-warning">

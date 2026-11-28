@@ -331,8 +331,6 @@ func (a *Server) stopRouterListeners() {
 	wg.Wait()
 }
 
-var routerSettingKeys = [...]string{"http_listen", "https_listen", "router_disabled"}
-
 type routerConfig struct {
 	Enabled     bool     `json:"enabled"`
 	HTTPListen  []string `json:"http_listen"`
@@ -350,10 +348,8 @@ func (a *Server) routerConfig() routerConfig {
 
 func routerConfigFrom(settings config.Daemon) routerConfig {
 	overridden := []string{}
-	for _, key := range routerSettingKeys {
-		if settings.Overridden[key] {
-			overridden = append(overridden, key)
-		}
+	if settings.RouterDisabledOverridden {
+		overridden = append(overridden, "router_disabled")
 	}
 	return routerConfig{
 		Enabled: !settings.RouterDisabled, HTTPListen: append([]string{}, settings.HTTPListen...),
@@ -417,11 +413,9 @@ func (a *Server) updateRouterSettings(w http.ResponseWriter, r *http.Request, ui
 		reply(w, http.StatusOK, routerConfigFrom(current))
 		return
 	}
-	for _, key := range routerSettingKeys {
-		if _, changed := changes[key]; changed && current.Overridden[key] {
-			fail(w, http.StatusConflict, fmt.Sprintf("%s is overridden by %s or --%s; change the daemon startup configuration", key, config.EnvironmentKey(key), strings.ReplaceAll(key, "_", "-")))
-			return
-		}
+	if next.RouterDisabled != current.RouterDisabled && current.RouterDisabledOverridden {
+		fail(w, http.StatusConflict, "router_disabled is overridden by STARTSHIP_ROUTER_DISABLED or --router-disabled; change the daemon startup configuration")
+		return
 	}
 	a.resourcesMu.Lock()
 	defer a.resourcesMu.Unlock()
@@ -486,7 +480,6 @@ func (a *Server) checkRouterPortConflicts(settings config.Daemon) error {
 type dashboardConfig struct {
 	DashboardListen []string `json:"dashboard_listen"`
 	ConfigPath      string   `json:"config_path"`
-	Overridden      []string `json:"overridden"`
 }
 
 func (a *Server) dashboardConfig() dashboardConfig {
@@ -497,14 +490,9 @@ func (a *Server) dashboardConfig() dashboardConfig {
 }
 
 func dashboardConfigFrom(settings config.Daemon) dashboardConfig {
-	overridden := []string{}
-	if settings.Overridden["dashboard_listen"] {
-		overridden = append(overridden, "dashboard_listen")
-	}
 	return dashboardConfig{
 		DashboardListen: append([]string{}, settings.DashboardListen...),
 		ConfigPath:      settings.ConfigPath,
-		Overridden:      overridden,
 	}
 }
 
@@ -551,10 +539,6 @@ func (a *Server) updateDashboardSettings(w http.ResponseWriter, r *http.Request,
 	}
 	if slices.Equal(next.DashboardListen, current.DashboardListen) {
 		reply(w, http.StatusOK, dashboardConfigFrom(current))
-		return
-	}
-	if current.Overridden["dashboard_listen"] {
-		fail(w, http.StatusConflict, fmt.Sprintf("dashboard_listen is overridden by %s or --dashboard-listen; change the daemon startup configuration", config.EnvironmentKey("dashboard_listen")))
 		return
 	}
 	a.resourcesMu.Lock()
