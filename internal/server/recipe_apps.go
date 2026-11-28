@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -128,7 +130,7 @@ var errRecipeFileMissing = errors.New("config file not found")
 func recipeRunArgs(app recipeApp, c recipes.Container, extra map[string]string) []string {
 	args := []string{"run", "-d", "--name", recipeContainer(app.ID, c.ID), "--network", recipeNetwork(app.ID),
 		"--network-alias", c.ID, "--restart", "unless-stopped", "--security-opt", "no-new-privileges",
-		"--label", "startship.managed=true", "--label", "startship.recipe-app=" + app.ID}
+		"--label", "startship.managed=true", "--label", "startship.recipe-app=" + app.ID, "--label", "startship.connection-env=" + envDigest(extra)}
 	for _, id := range slices.Sorted(maps.Keys(c.Mounts)) {
 		args = append(args, "--mount", "type=volume,source="+recipeVolume(app.ID, id)+",destination="+c.Mounts[id])
 	}
@@ -277,6 +279,12 @@ func (a *Server) actRecipeApp(app *recipeApp, action string) error {
 			}
 		case status.Status == "missing":
 			args = recipeRunArgs(*app, c, env)
+		case a.recipeEnvStale(n, env):
+			if _, err := a.appDocker("rm", "-f", n); err != nil {
+				result = errors.Join(result, err)
+				continue
+			}
+			args = recipeRunArgs(*app, c, env)
 		case action == "restart":
 			args = []string{"restart", n}
 		case status.Status != "running":
@@ -297,6 +305,20 @@ func (a *Server) actRecipeApp(app *recipeApp, action string) error {
 		}
 	}
 	return result
+}
+
+// envDigest fingerprints connection env so a restart recreates containers whose links changed.
+func envDigest(env map[string]string) string {
+	h := sha256.New()
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		fmt.Fprintf(h, "%s=%s\x00", k, env[k])
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+func (a *Server) recipeEnvStale(container string, env map[string]string) bool {
+	out, err := a.appDocker("inspect", "-f", `{{index .Config.Labels "startship.connection-env"}}`, container)
+	return err == nil && strings.TrimSpace(out) != envDigest(env)
 }
 
 func (a *Server) launchRecipeApp(id string) {
