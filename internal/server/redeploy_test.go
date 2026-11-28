@@ -145,7 +145,7 @@ func TestFailedRedeployPreservesActiveRelease(t *testing.T) {
 	a := testServer(t)
 	dir := t.TempDir()
 	log := filepath.Join(dir, "commands")
-	script := "#!/bin/sh\necho \"$*\" >> \"$DOCKER_CALLS\"\ncase \"$1\" in run) echo 'start failed' >&2; exit 1;; *) exit 0;; esac\n"
+	script := "#!/bin/sh\necho \"$*\" >> \"$DOCKER_CALLS\"\ncase \"$1\" in create) echo 'start failed' >&2; exit 1;; *) exit 0;; esac\n"
 	if err := os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}

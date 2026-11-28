@@ -584,6 +584,7 @@ func (a *Server) createConnection(w http.ResponseWriter, r *http.Request, ws, ui
 	}
 	for _, e := range []Endpoint{c.To, c.From} {
 		if err := a.syncEndpoint(e); err != nil {
+			a.removeConnection(c)
 			fail(w, 502, err.Error())
 			return
 		}
