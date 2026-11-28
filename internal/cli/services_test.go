@@ -31,9 +31,12 @@ func TestServiceVolumeCommands(t *testing.T) {
 		{[]string{"services", "delete", "s"}, "DELETE", "/api/services/s", "", `{"ok":true}`, "ok: true"},
 		{[]string{"services", "delete", "s", "--delete-volume"}, "DELETE", "/api/services/s?delete_volume=true", "", `{"ok":true}`, "ok: true"},
 		{[]string{"services", "delete", "s", "--delete-volume=false"}, "DELETE", "/api/services/s", "", `{"ok":true}`, "ok: true"},
-		{[]string{"services", "attach", "s", "API", "cache_db"}, "POST", "/api/services/s/attachments", `{"project_id":"p","alias":"cache_db"}`, `{"id":"s"}`, "Redeploy"},
-		{[]string{"services", "detach", "s", "p"}, "DELETE", "/api/services/s/attachments/p", "", `{"id":"s"}`, "Redeploy"},
-		{[]string{"services", "connections", "API"}, "GET", "/api/projects/p/services", "", `{"attached":[],"available":[]}`, "attached:"},
+		{[]string{"connections", "Team"}, "GET", "/api/workspaces/w/connections", "", `{"connections":[{"id":"c","alias":"db"}]}`, "ALIAS"},
+		{[]string{"connections", "create", "w", "project:API", "service:s", "cache_db"}, "POST", "/api/workspaces/w/connections", `{"alias":"cache_db","from":{"id":"p","kind":"project"},"to":{"id":"s","kind":"service"}}`, `{"id":"c"}`, "Redeploy"},
+		{[]string{"connections", "delete", "c"}, "DELETE", "/api/connections/c", "", `{"ok":true}`, "ok"},
+		{[]string{"networks", "create", "w", "backend"}, "POST", "/api/workspaces/w/networks", `{"name":"backend"}`, `{"id":"n"}`, "n"},
+		{[]string{"networks", "join", "n", "app:a"}, "POST", "/api/networks/n/members", `{"id":"a","kind":"app"}`, `{"id":"n"}`, "n"},
+		{[]string{"networks", "leave", "n", "service:s"}, "DELETE", "/api/networks/n/members/service/s", "", `{"id":"n"}`, "n"},
 		{[]string{"volumes", "Team"}, "GET", "/api/workspaces/w/volumes", "", `{"volumes":[{"id":"v","name":"data","size_bytes":123,"project_id":"p","mount_path":"/data"}]}`, "SIZE_BYTES"},
 		{[]string{"volumes", "list", "w"}, "GET", "/api/workspaces/w/volumes", "", `{"volumes":[]}`, "MOUNT_PATH"},
 		{[]string{"volumes", "create", "w", "data"}, "POST", "/api/workspaces/w/volumes", `{"name":"data"}`, `{"id":"v"}`, "id:"},
@@ -105,7 +108,7 @@ func TestServiceVolumeCommands(t *testing.T) {
 
 func TestResourceArgumentErrors(t *testing.T) {
 	for _, args := range [][]string{
-		{"catalog", "extra"}, {"catalog", "--unknown"}, {"services"}, {"services", "list"}, {"services", "create", "w", "redis"}, {"services", "show", "s", "extra"}, {"services", "patch", "s"}, {"services", "patch", "s", "--set", "bad"}, {"services", "patch", "s", "--set", "=value"}, {"services", "patch", "s", "--version="}, {"services", "patch", "s", "--port", "-1"}, {"services", "create", "w", "redis", "cache", "--port", "65536"}, {"services", "patch", "s", "--port", "x"}, {"services", "logs", "s", "--tail", "0"}, {"services", "logs", "s", "--tail", "10001"}, {"services", "logs", "s", "--tail", "x"}, {"services", "delete", "s", "--delete-volume=bad"}, {"services", "delete", "s", "--delete-volume", "--delete-volume"}, {"services", "show", "s", "--port", "5"}, {"services", "create", "w", "redis", "cache", "--port"}, {"services", "create", "w", "redis", "cache", "--port", "1", "--port", "2"}, {"services", "attach", "s", "p"}, {"services", "detach", "s"}, {"services", "unknown", "x"}, {"services", "list", "w", "--unknown"},
+		{"catalog", "extra"}, {"catalog", "--unknown"}, {"services"}, {"services", "list"}, {"services", "create", "w", "redis"}, {"services", "show", "s", "extra"}, {"services", "patch", "s"}, {"services", "patch", "s", "--set", "bad"}, {"services", "patch", "s", "--set", "=value"}, {"services", "patch", "s", "--version="}, {"services", "patch", "s", "--port", "-1"}, {"services", "create", "w", "redis", "cache", "--port", "65536"}, {"services", "patch", "s", "--port", "x"}, {"services", "logs", "s", "--tail", "0"}, {"services", "logs", "s", "--tail", "10001"}, {"services", "logs", "s", "--tail", "x"}, {"services", "delete", "s", "--delete-volume=bad"}, {"services", "delete", "s", "--delete-volume", "--delete-volume"}, {"services", "show", "s", "--port", "5"}, {"services", "create", "w", "redis", "cache", "--port"}, {"services", "create", "w", "redis", "cache", "--port", "1", "--port", "2"}, {"services", "attach", "s", "p"}, {"connections", "create", "w", "x"}, {"networks", "join", "n"}, {"services", "unknown", "x"}, {"services", "list", "w", "--unknown"},
 		{"volumes"}, {"volumes", "list"}, {"volumes", "list", "w", "extra"}, {"volumes", "create", "w"}, {"volumes", "create", "w", "data", "--project", "p"}, {"volumes", "create", "w", "data", "--mount", "/data"}, {"volumes", "create", "w", "data", "--project=", "--mount=/data"}, {"volumes", "create", "w", "data", "--project", "p", "--mount"}, {"volumes", "create", "w", "data", "--mount=/data", "--mount=/more"}, {"volumes", "attach", "v", "p"}, {"volumes", "detach", "v", "--project", "p"}, {"volumes", "delete", "v", "--unknown"}, {"volumes", "unknown", "x"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
@@ -123,7 +126,7 @@ func TestResourceArgumentErrors(t *testing.T) {
 }
 
 func TestResourceAPIErrors(t *testing.T) {
-	for _, args := range [][]string{{"catalog"}, {"services", "list", "Team"}, {"services", "create", "w", "redis", "cache"}, {"services", "show", "s"}, {"services", "patch", "s", "--port", "0"}, {"services", "start", "s"}, {"services", "stop", "s"}, {"services", "restart", "s"}, {"services", "logs", "s"}, {"services", "delete", "s"}, {"services", "attach", "s", "API", "cache"}, {"services", "detach", "s", "p"}, {"services", "connections", "API"}, {"volumes", "list", "w"}, {"volumes", "create", "Team", "data"}, {"volumes", "attach", "v", "API", "/data"}, {"volumes", "detach", "v"}, {"volumes", "delete", "v"}} {
+	for _, args := range [][]string{{"catalog"}, {"services", "list", "Team"}, {"services", "create", "w", "redis", "cache"}, {"services", "show", "s"}, {"services", "patch", "s", "--port", "0"}, {"services", "start", "s"}, {"services", "stop", "s"}, {"services", "restart", "s"}, {"services", "logs", "s"}, {"services", "delete", "s"}, {"connections", "list", "w"}, {"networks", "list", "w"}, {"volumes", "list", "w"}, {"volumes", "create", "Team", "data"}, {"volumes", "attach", "v", "API", "/data"}, {"volumes", "detach", "v"}, {"volumes", "delete", "v"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				switch r.URL.Path {

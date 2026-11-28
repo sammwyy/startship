@@ -125,7 +125,7 @@ mv -fT "$tmp" "$target"
 
 var errRecipeFileMissing = errors.New("config file not found")
 
-func recipeRunArgs(app recipeApp, c recipes.Container) []string {
+func recipeRunArgs(app recipeApp, c recipes.Container, extra map[string]string) []string {
 	args := []string{"run", "-d", "--name", recipeContainer(app.ID, c.ID), "--network", recipeNetwork(app.ID),
 		"--network-alias", c.ID, "--restart", "unless-stopped", "--security-opt", "no-new-privileges",
 		"--label", "startship.managed=true", "--label", "startship.recipe-app=" + app.ID}
@@ -135,6 +135,11 @@ func recipeRunArgs(app recipeApp, c recipes.Container) []string {
 	for _, p := range app.Recipe.Ports {
 		if n := app.Ports[p.ID]; p.Container == c.ID && n != 0 {
 			args = append(args, "-p", fmt.Sprintf("%d:%d/%s", n, p.Port, p.Protocol))
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(extra)) {
+		if _, ok := c.Env[k]; !ok {
+			args = append(args, "-e", k+"="+extra[k])
 		}
 	}
 	for _, k := range slices.Sorted(maps.Keys(c.Env)) {
@@ -246,6 +251,9 @@ func (a *Server) actRecipeApp(app *recipeApp, action string) error {
 		}
 	}
 	var result error
+	self := Endpoint{"app", app.ID}
+	env, joins := a.connectionEnv(self), a.endpointJoins(self)
+	primary := recipePrimary(*app)
 	for _, c := range app.Recipe.Containers {
 		n := recipeContainer(app.ID, c.ID)
 		status := a.recipeInspect(*app, c)
@@ -265,16 +273,25 @@ func (a *Server) actRecipeApp(app *recipeApp, action string) error {
 				}
 			}
 			if app.Running {
-				args = recipeRunArgs(*app, c)
+				args = recipeRunArgs(*app, c, env)
 			}
 		case status.Status == "missing":
-			args = recipeRunArgs(*app, c)
+			args = recipeRunArgs(*app, c, env)
 		case action == "restart":
 			args = []string{"restart", n}
 		case status.Status != "running":
 			args = []string{"start", n}
 		}
-		if len(args) != 0 {
+		if len(args) != 0 && args[0] == "run" {
+			_, err := a.appDocker(createArgs(args)...)
+			if err == nil {
+				err = a.joinWorkload(workload{Container: n, Suffix: c.ID, Primary: c.ID == primary}, joins)
+			}
+			if err == nil {
+				_, err = a.appDocker("start", n)
+			}
+			result = errors.Join(result, err)
+		} else if len(args) != 0 {
 			_, err := a.appDocker(args...)
 			result = errors.Join(result, err)
 		}

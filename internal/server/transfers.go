@@ -90,9 +90,9 @@ func (a *Server) transferGraph(root transferNode) []transferNode {
 	for _, s := range listResources[Service](a, "services", ws) {
 		from := transferRef{"services", s.ID}
 		link(from, "volumes", s.VolumeID)
-		for _, at := range s.Attachments {
-			link(from, "projects", at.ProjectID)
-		}
+	}
+	for _, c := range a.connections(ws) {
+		link(transferRef{c.From.Kind + "s", c.From.ID}, c.To.Kind+"s", c.To.ID)
 	}
 	for _, v := range listResources[Volume](a, "volumes", ws) {
 		from := transferRef{"volumes", v.ID}
@@ -170,7 +170,7 @@ func (a *Server) transfersAPI(w http.ResponseWriter, r *http.Request, p []string
 	graph := a.transferGraph(root)
 	hash := sha256.New()
 	for _, n := range graph {
-		fmt.Fprintf(hash, "%s/%s/%s/%s/%s/%v;", n.Kind, n.ID, n.service.VolumeID, n.volume.ProjectID, n.volume.ServiceID, n.service.Attachments)
+		fmt.Fprintf(hash, "%s/%s/%s/%s/%s;", n.Kind, n.ID, n.service.VolumeID, n.volume.ProjectID, n.volume.ServiceID)
 	}
 	planID := fmt.Sprintf("%x", hash.Sum(nil))
 	if p[2] == "plan" {
@@ -397,13 +397,6 @@ func (a *Server) transferResources(ctx context.Context, x *access, uid, source s
 				volumes = append(volumes, transferVolume{to: volumeName(v.ID)})
 				records = append(records, transferWrite{"volumes", Record{ID: v.ID, Kind: "volumes", WorkspaceID: dst.ID}, v})
 			}
-			at := []Attachment{}
-			for _, link := range s.Attachments {
-				if pid := ids[transferRef{"projects", link.ProjectID}]; pid != "" {
-					at = append(at, Attachment{pid, link.Alias})
-				}
-			}
-			s.Attachments = at
 			if err := a.validateService(s); err != nil {
 				return nil, nil, transferConflict("service " + s.Name + ": " + err.Error())
 			}
@@ -457,6 +450,17 @@ func (a *Server) transferResources(ctx context.Context, x *access, uid, source s
 			record.Kind = "recipe_apps"
 			records = append(records, transferWrite{"recipe_apps", record, app})
 		}
+	}
+	for _, c := range a.connections(source) {
+		from, to := ids[transferRef{c.From.Kind + "s", c.From.ID}], ids[transferRef{c.To.Kind + "s", c.To.ID}]
+		if from == "" || to == "" {
+			continue
+		}
+		if !move {
+			c.ID, c.Created, c.CreatedBy = randomID(), now, uid
+		}
+		c.WorkspaceID, c.From.ID, c.To.ID = dst.ID, from, to
+		records = append(records, transferWrite{"connections", Record{ID: c.ID, Kind: "connections", WorkspaceID: dst.ID}, c})
 	}
 	created := []string{}
 	committed := false
@@ -543,6 +547,21 @@ func (a *Server) splitTransferLinks(x *access, graph []transferNode, ids map[tra
 		projects = append(projects, p)
 		return true, nil
 	}
+	if len(graph) > 0 {
+		ws := graph[0].workspace()
+		for _, c := range a.connections(ws) {
+			if (ids[transferRef{c.From.Kind + "s", c.From.ID}] != "") != (ids[transferRef{c.To.Kind + "s", c.To.ID}] != "") {
+				return nil, nil, transferConflict("move connected resources together, or remove the connection " + c.Alias + " first")
+			}
+		}
+		for _, n := range a.networks(ws) {
+			members := slices.DeleteFunc(slices.Clone(n.Members), func(e Endpoint) bool { return ids[transferRef{e.Kind + "s", e.ID}] != "" })
+			if len(members) != len(n.Members) {
+				n.Members = members
+				writes = append(writes, transferWrite{"networks", Record{ID: n.ID, Kind: "networks", WorkspaceID: ws}, n})
+			}
+		}
+	}
 	for _, n := range graph {
 		moving := ids[n.transferRef] != ""
 		row := Record{ID: n.ID, Kind: n.Kind, WorkspaceID: n.workspace()}
@@ -551,20 +570,6 @@ func (a *Server) splitTransferLinks(x *access, graph []transferNode, ids map[tra
 			s := n.service
 			if s.VolumeID != "" && moving != (ids[transferRef{"volumes", s.VolumeID}] != "") {
 				return nil, nil, transferConflict("move a service and its data volume together")
-			}
-			attachments := []Attachment{}
-			for _, at := range s.Attachments {
-				detach, err := projectLink(n, moving, at.ProjectID)
-				if err != nil {
-					return nil, nil, err
-				}
-				if !detach {
-					attachments = append(attachments, at)
-				}
-			}
-			if !moving && len(attachments) != len(s.Attachments) {
-				s.Attachments, s.Updated = attachments, time.Now().UTC()
-				writes = append(writes, transferWrite{"services", row, s})
 			}
 		case "volumes":
 			v := n.volume

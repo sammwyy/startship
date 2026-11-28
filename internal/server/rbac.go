@@ -31,6 +31,7 @@ var permissionCatalog = []Permission{
 	{"firewall.manage", "Manage firewall", "Change workspace firewall policies, rules, lists and bans.", "Workspace", scopeWorkspace},
 	{"network.firewall", "Manage network firewall", "Manage host-wide network firewall rules.", "Platform", scopePlatform},
 	{"services.manage", "Manage services", "Deploy services from the catalog, manage volumes and their credentials.", "Workspace", scopeWorkspace},
+	{"networks.manage", "Manage networks", "Create workspace networks and choose which projects, apps and services join them.", "Workspace", scopeWorkspace},
 	{"apps.manage", "Manage apps", "Install and operate isolated recipe apps and manage their configuration and domains.", "Workspace", scopeWorkspace},
 	{"workspaces.create", "Create workspaces", "Create new workspaces and administer them.", "Platform", scopePlatform},
 	{"users.manage", "Manage users", "Create users, reset passwords, delete accounts and assign platform roles.", "Platform", scopePlatform},
@@ -108,8 +109,8 @@ var (
 	projectPermissions = []string{"project.view", "logs.view", "traffic.view", "deploy", "project.settings", "project.environment", "project.source", "domains.manage"}
 	builtinRoles       = []Role{
 		{ID: platformAdminRole, Name: "Platform Admin", Color: "#f5a524", Icon: "crown", Permissions: allPermissionKeys(), Fixed: true},
-		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"activity.view", "firewall.view", "firewall.manage", "services.manage", "apps.manage", "workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
-		{ID: "contributor", Name: "Contributor", Color: "#3e63dd", Icon: "wrench", Permissions: append([]string{"firewall.view", "services.manage", "projects.create"}, projectPermissions...)},
+		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"activity.view", "firewall.view", "firewall.manage", "services.manage", "networks.manage", "apps.manage", "workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete"}, projectPermissions...)},
+		{ID: "contributor", Name: "Contributor", Color: "#3e63dd", Icon: "wrench", Permissions: append([]string{"firewall.view", "services.manage", "networks.manage", "projects.create"}, projectPermissions...)},
 		{ID: "member", Name: "Member", Color: "#30a46c", Icon: "eye", Permissions: []string{"project.view", "logs.view", "traffic.view"}},
 		{ID: "guest", Name: "Guest", Color: "#8b8d98", Icon: "user", Permissions: []string{}},
 	}

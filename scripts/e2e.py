@@ -396,7 +396,8 @@ fn main() {
         redis.sendall(b"*1\r\n$4\r\nPING\r\n")
         assert stream.readline() == b"+PONG\r\n"
     print("Redis service running via API and external host-port PING: +PONG")
-    request("services/" + service["id"] + "/attachments", {"project_id": grouped["id"], "alias": "shared-cache"})
+    request("workspaces/" + ws["id"] + "/connections", {"from": {"kind": "project", "id": grouped["id"]},
+                                                       "to": {"kind": "service", "id": service["id"]}, "alias": "shared-cache"})
     project_volume = request("workspaces/" + ws["id"] + "/volumes",
                              {"name": "e2e-data", "project_id": grouped["id"], "mount_path": "/e2e-data"})
     volume_ids.append(project_volume["id"])

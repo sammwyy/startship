@@ -317,9 +317,18 @@ func (a *Server) buildContainer(app Record, id, checkout, commit string) {
 		} else {
 			args = append(args, image, "sh", "-c", testCommand)
 		}
+		testContainer := "startship-test-" + id
+		args = append(createArgs(args)[:1], append([]string{"--name", testContainer}, createArgs(args)[1:]...)...)
+		if e = command("", logger, "docker", args...); e != nil {
+			return
+		}
+		if e = a.joinWorkload(workload{Container: testContainer, Preview: true}, a.endpointJoins(Endpoint{"project", app.ProjectID})); e != nil {
+			command("", nil, "docker", "rm", "-f", testContainer)
+			return
+		}
 		var output strings.Builder
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-		c := exec.CommandContext(ctx, "docker", args...)
+		c := exec.CommandContext(ctx, "docker", "start", "-a", testContainer)
 		c.Stdout = io.MultiWriter(logger, &output)
 		c.Stderr = c.Stdout
 		runErr := c.Run()
@@ -427,7 +436,14 @@ func (a *Server) startRelease(app Record, id, image, network string, logger io.W
 	} else {
 		args = append(args, image)
 	}
-	if e = command("", logger, "docker", args...); e != nil {
+	if e = command("", logger, "docker", createArgs(args)...); e != nil {
+		return
+	}
+	d, _ := a.store.Get(id)
+	if e = a.joinWorkload(a.projectWorkload(app.ProjectID, app.ID, container, d.PreviewID != ""), a.endpointJoins(Endpoint{"project", app.ProjectID})); e != nil {
+		return
+	}
+	if e = command("", logger, "docker", "start", container); e != nil {
 		return
 	}
 	var ip string

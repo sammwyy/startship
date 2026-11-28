@@ -96,7 +96,7 @@ func (c *cli) refreshCatalog(path string, args []string) error {
 func (c *cli) runServices(args []string) error {
 	if len(args) == 1 && !strings.HasPrefix(args[0], "--") {
 		switch args[0] {
-		case "list", "create", "show", "patch", "start", "stop", "restart", "logs", "delete", "attach", "detach", "connections":
+		case "list", "create", "show", "patch", "start", "stop", "restart", "logs", "delete":
 		default:
 			args = append([]string{"list"}, args...)
 		}
@@ -105,7 +105,7 @@ func (c *cli) runServices(args []string) error {
 		return errors.New("services action or workspace required; run startship help")
 	}
 	op := args[0]
-	allowed := map[string]string{"list": "", "create": "version set port volume", "show": "", "patch": "version set port", "start": "", "stop": "", "restart": "", "logs": "tail", "delete": "delete-volume", "attach": "", "detach": "", "connections": ""}
+	allowed := map[string]string{"list": "", "create": "version set port volume", "show": "", "patch": "version set port", "start": "", "stop": "", "restart": "", "logs": "tail", "delete": "delete-volume"}
 	flags, ok := allowed[op]
 	if !ok {
 		return fmt.Errorf("unknown services action %q", op)
@@ -117,10 +117,8 @@ func (c *cli) runServices(args []string) error {
 	p := a.positional
 	n := 1
 	switch op {
-	case "create", "attach":
+	case "create":
 		n = 3
-	case "detach":
-		n = 2
 	}
 	if len(p) != n {
 		return errors.New("invalid services arguments; run startship help")
@@ -176,7 +174,7 @@ func (c *cli) runServices(args []string) error {
 		}
 		path = "workspaces/" + url.PathEscape(ws) + "/services"
 		if op == "list" {
-			return c.resourceList(path, "services", "id", "name", "engine", "version", "status", "external_port", "volume_id", "attachments")
+			return c.resourceList(path, "services", "id", "name", "engine", "version", "status", "external_port", "volume_id")
 		}
 		method = "POST"
 		body["engine"], body["name"] = p[1], p[2]
@@ -194,27 +192,9 @@ func (c *cli) runServices(args []string) error {
 		method, path = "POST", path+"/"+op
 	case "logs":
 		path += "/logs?tail=" + strconv.Itoa(tail)
-	case "attach", "detach":
-		project, err := c.resolve("projects", p[1])
-		if err != nil {
-			return err
-		}
-		path += "/attachments"
-		method = "POST"
-		if op == "attach" {
-			body["project_id"], body["alias"] = project, p[2]
-		} else {
-			method, path = "DELETE", path+"/"+url.PathEscape(project)
-		}
-	case "connections":
-		project, err := c.resolve("projects", p[0])
-		if err != nil {
-			return err
-		}
-		path = "projects/" + url.PathEscape(project) + "/services"
 	}
 	var payload any
-	if method == "PATCH" || method == "POST" && (op == "create" || op == "attach") {
+	if method == "PATCH" || method == "POST" && op == "create" {
 		payload = body
 	}
 	v, err := c.request(method, path, payload)
@@ -232,9 +212,6 @@ func (c *cli) runServices(args []string) error {
 		}
 		fmt.Fprint(c.out, log)
 		return nil
-	}
-	if !c.raw && (op == "attach" || op == "detach") {
-		fmt.Fprintln(c.out, "Redeploy the project to apply connection changes.")
 	}
 	return c.print(v)
 }

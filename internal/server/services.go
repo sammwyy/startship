@@ -14,10 +14,6 @@ import (
 	"github.com/sammwyy/startship/internal/catalog"
 )
 
-type Attachment struct {
-	ProjectID string `json:"project_id"`
-	Alias     string `json:"alias"`
-}
 type Service struct {
 	ID           string            `json:"id"`
 	WorkspaceID  string            `json:"workspace_id"`
@@ -30,7 +26,6 @@ type Service struct {
 	VolumeID     string            `json:"volume_id"`
 	Backup       *BackupPolicy     `json:"backup,omitempty"`
 	BackupAt     *time.Time        `json:"next_backup,omitempty"`
-	Attachments  []Attachment      `json:"attachments"`
 	Status       string            `json:"status"`
 	LastError    string            `json:"last_error"`
 	Container    string            `json:"container"`
@@ -157,17 +152,7 @@ func (a *Server) serviceNetwork(name string) error {
 	return err
 }
 func (a *Server) connectService(s Service) error {
-	for _, at := range s.Attachments {
-		n := "startship-" + at.ProjectID
-		if err := a.serviceNetwork(n); err != nil {
-			return err
-		}
-		a.serviceDocker("network", "disconnect", n, serviceContainer(s.ID))
-		if _, err := a.serviceDocker("network", "connect", "--alias", at.Alias, "--alias", at.Alias+".local", "--alias", s.Name, "--alias", s.Name+".local", "--alias", serviceContainer(s.ID), n, serviceContainer(s.ID)); err != nil {
-			return err
-		}
-	}
-	return nil
+	return a.syncEndpoint(Endpoint{"service", s.ID})
 }
 func (a *Server) serviceAction(id, action string) error {
 	s, err := getResource[Service](a, "services", id)
@@ -282,20 +267,7 @@ func (a *Server) reconcileServices() {
 	}
 }
 func (a *Server) projectRunArgs(app Record, network string, test bool) []string {
-	env := map[string]string{}
-	for _, s := range listResources[Service](a, "services", "") {
-		e, ok := s.engineDefinition()
-		if !ok {
-			continue
-		}
-		for _, at := range s.Attachments {
-			if at.ProjectID == app.ProjectID {
-				for k, v := range e.Connection(at.Alias, e.Port, s.Config) {
-					env[k] = v
-				}
-			}
-		}
-	}
+	env := a.connectionEnv(Endpoint{"project", app.ProjectID})
 	for k, v := range app.Env {
 		env[k] = v
 	}
@@ -311,28 +283,13 @@ func (a *Server) projectRunArgs(app Record, network string, test bool) []string 
 	return args
 }
 func (a *Server) detachProjectServices(id string) {
+	ws := ""
+	if p, err := a.store.Get(id); err == nil {
+		ws = projectWorkspace(p)
+	}
+	a.forgetEndpoint(ws, Endpoint{"project", id})
 	a.resourcesMu.Lock()
 	defer a.resourcesMu.Unlock()
-	for _, s := range listResources[Service](a, "services", "") {
-		lock := serviceLock(s.ID)
-		lock.Lock()
-		s, err := getResource[Service](a, "services", s.ID)
-		if err != nil {
-			lock.Unlock()
-			continue
-		}
-		out := []Attachment{}
-		for _, at := range s.Attachments {
-			if at.ProjectID != id {
-				out = append(out, at)
-			} else {
-				a.serviceDocker("network", "disconnect", "startship-"+id, serviceContainer(s.ID))
-			}
-		}
-		s.Attachments = out
-		a.saveService(s)
-		lock.Unlock()
-	}
 	for _, v := range listResources[Volume](a, "volumes", "") {
 		if v.ProjectID == id {
 			v.ProjectID = ""

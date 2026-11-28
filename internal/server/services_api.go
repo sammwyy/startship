@@ -73,42 +73,6 @@ func (a *Server) resourceProject(x *access, ws, id, mount string) bool {
 	return err == nil && p.Kind == "projects" && projectWorkspace(p) == ws && x.can(p, "project.settings")
 }
 func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string, uid string, x *access) bool {
-	if len(p) == 4 && p[1] == "projects" && p[3] == "services" {
-		pr, err := a.store.Get(p[2])
-		if err != nil || pr.Kind != "projects" || !x.visible(pr) {
-			fail(w, 404, "not found")
-			return true
-		}
-		if r.Method != "GET" {
-			fail(w, 405, "method not allowed")
-			return true
-		}
-		attached := []any{}
-		available := []Service{}
-		for _, s := range listResources[Service](a, "services", projectWorkspace(pr)) {
-			found := false
-			for _, at := range s.Attachments {
-				if at.ProjectID == pr.ID {
-					found = true
-					e, _ := s.engineDefinition()
-					env := e.Connection(at.Alias, e.Port, s.Config)
-					if !x.at(s.WorkspaceID, "")["services.manage"] {
-						for k := range env {
-							if strings.HasSuffix(k, "_PASSWORD") || strings.HasSuffix(k, "_URL") || strings.HasSuffix(k, "_SECRET_KEY") {
-								env[k] = "********"
-							}
-						}
-					}
-					attached = append(attached, map[string]any{"service": publicService(s, x), "alias": at.Alias, "env": env})
-				}
-			}
-			if !found {
-				available = append(available, publicService(s, x))
-			}
-		}
-		reply(w, 200, map[string]any{"attached": attached, "available": available})
-		return true
-	}
 	if len(p) == 4 && p[1] == "workspaces" && (p[3] == "services" || p[3] == "volumes") {
 		ws, err := a.store.Get(p[2])
 		if err != nil || ws.Kind != "workspaces" || !x.visible(ws) {
@@ -157,7 +121,7 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 				input.Version = e.Versions[0]
 			}
 			config, err := catalog.Validate(e, input.Version, input.Config)
-			s := Service{ID: randomID(), WorkspaceID: ws.ID, Name: input.Name, Engine: e.ID, Definition: &e, Version: input.Version, Config: config, ExternalPort: input.ExternalPort, VolumeID: input.VolumeID, Status: "pending", Attachments: []Attachment{}, Created: time.Now().UTC(), CreatedBy: uid}
+			s := Service{ID: randomID(), WorkspaceID: ws.ID, Name: input.Name, Engine: e.ID, Definition: &e, Version: input.Version, Config: config, ExternalPort: input.ExternalPort, VolumeID: input.VolumeID, Status: "pending", Created: time.Now().UTC(), CreatedBy: uid}
 			s.Updated = s.Created
 			if err == nil {
 				err = a.validateService(s)
@@ -404,10 +368,8 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 					}
 				}
 			}
+			a.forgetEndpoint(s.WorkspaceID, Endpoint{"service", s.ID})
 			a.deleteResource("services", s.ID, s.WorkspaceID)
-			for _, at := range s.Attachments {
-				a.notifyProject(at.ProjectID)
-			}
 			a.audit(r.Context(), uid, "service.delete", s.ID, scopeWorkspace, s.WorkspaceID, nil)
 			reply(w, 200, map[string]bool{"ok": true})
 		default:
@@ -436,65 +398,6 @@ func (a *Server) servicesAPI(w http.ResponseWriter, r *http.Request, p []string,
 		a.launchService(s.ID, p[3])
 		a.audit(r.Context(), uid, "service."+p[3], s.Name, scopeWorkspace, s.WorkspaceID, nil)
 		reply(w, 202, map[string]bool{"ok": true})
-		return true
-	}
-	if len(p) >= 4 && p[3] == "attachments" {
-		var at Attachment
-		if len(p) == 4 && r.Method == "POST" {
-			if decode(w, r, &at) != nil || !serviceName.MatchString(at.Alias) {
-				fail(w, 400, "invalid alias")
-				return true
-			}
-		} else if len(p) == 5 && r.Method == "DELETE" {
-			at.ProjectID = p[4]
-		} else {
-			fail(w, 405, "method not allowed")
-			return true
-		}
-		if !a.resourceProject(x, s.WorkspaceID, at.ProjectID, "") {
-			forbidden(w)
-			return true
-		}
-		if at.Alias != "" {
-			for _, other := range listResources[Service](a, "services", s.WorkspaceID) {
-				for _, existing := range other.Attachments {
-					if existing.ProjectID == at.ProjectID && (existing.Alias == at.Alias || strings.EqualFold(strings.ReplaceAll(existing.Alias, "-", "_"), strings.ReplaceAll(at.Alias, "-", "_")) || other.ID == s.ID) {
-						fail(w, 409, "project attachment or alias already exists")
-						return true
-					}
-				}
-			}
-			s.Attachments = append(s.Attachments, at)
-		} else {
-			out := []Attachment{}
-			for _, v := range s.Attachments {
-				if v.ProjectID != at.ProjectID {
-					out = append(out, v)
-				}
-			}
-			s.Attachments = out
-			if _, err = a.serviceDocker("network", "disconnect", "startship-"+at.ProjectID, serviceContainer(s.ID)); err != nil {
-				fail(w, 500, err.Error())
-				return true
-			}
-		}
-		if at.Alias != "" && s.Status == "running" {
-			if err = a.connectService(s); err != nil {
-				fail(w, 500, err.Error())
-				return true
-			}
-		}
-		if a.saveService(s) != nil {
-			fail(w, 500, "save failed")
-			return true
-		}
-		a.notifyProject(at.ProjectID)
-		action := "service.attach"
-		if at.Alias == "" {
-			action = "service.detach"
-		}
-		a.audit(r.Context(), uid, action, s.Name, scopeProject, at.ProjectID, at)
-		reply(w, 200, s)
 		return true
 	}
 	fail(w, 404, "not found")

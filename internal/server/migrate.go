@@ -555,7 +555,6 @@ func (a *Server) migrateSingleService(ctx context.Context, uid, wsID string, sp 
 		Version:     version,
 		Config:      cfg,
 		Status:      "pending",
-		Attachments: []Attachment{},
 		Created:     now,
 		Updated:     now,
 		CreatedBy:   uid,
@@ -821,21 +820,9 @@ func (a *Server) migrateSingleProject(
 		if err != nil {
 			continue
 		}
-		already := false
-		for _, att := range latest.Attachments {
-			if att.ProjectID == proj.ID {
-				already = true
-				break
-			}
-		}
-		if !already {
-			latest.Attachments = append(latest.Attachments, Attachment{
-				ProjectID: proj.ID,
-				Alias:     latest.Name,
-			})
-			if err := a.saveService(latest); err == nil {
-				linkedSrcSvcs = append(linkedSrcSvcs, srcSvcID)
-			}
+		c := Connection{ID: randomID(), WorkspaceID: wsID, From: Endpoint{"project", proj.ID}, To: Endpoint{"service", latest.ID}, Alias: latest.Name, Created: now, CreatedBy: uid}
+		if a.connectionConflict(c) == "" && a.saveConnection(c) == nil {
+			linkedSrcSvcs = append(linkedSrcSvcs, srcSvcID)
 		}
 	}
 
