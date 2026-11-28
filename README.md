@@ -84,6 +84,25 @@ startship logs website
 
 Run `startship --help` or see the [CLI guide](docs/cli.md) for more commands.
 
+## File explorer
+
+Select **Files** on a workspace or project volume, a deployed project container, or an installed App's container or persistent volume. Use the breadcrumbs to browse, drag in files to upload them, and open UTF-8 text files up to 5 MiB in the syntax-aware editor. Use **Format** for supported languages such as JSON and YAML and **Ctrl+S** (or **⌘S**) to save. Download files directly or folders as ZIP or TAR.GZ. Select files to compress them on the target, or extract ZIP, TAR, and TAR.GZ archives into a directory. Extraction does not replace existing top-level entries.
+
+**Read files** and **Write files** are separate permissions. Project containers and attached project volumes use project permissions; standalone workspace volumes and installed Apps use workspace permissions. Stopped and shell-less containers support browsing and copy-based changes, but not deletion or moving files. Changes to a container's writable layer disappear when it is replaced; put persistent configuration in a volume. Startship-managed service backup volumes use the dedicated Backups screen.
+
+The same operations are available over the CLI's usual HTTPS or Unix-socket connection. Replace the sample identifiers with Startship IDs:
+
+```sh
+startship files ls volume:VOLUME_ID /
+startship files put volume:VOLUME_ID ./settings.json /settings.json
+startship files edit volume:VOLUME_ID /settings.json  # uses $EDITOR
+startship files get container:CONTAINER_ID /config ./config.tar.gz
+startship files ls app:WORKSPACE_ID/APP_ID/web /
+startship files ls app-volume:WORKSPACE_ID/APP_ID/data /
+startship files zip volume:VOLUME_ID /config.zip /settings.json
+startship files unzip volume:VOLUME_ID /config.zip /restored
+```
+
 ## Self-hosted apps
 
 Open **Apps** in a workspace and select **Install app** to choose a recipe. App

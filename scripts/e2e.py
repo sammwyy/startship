@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 import time
 import urllib.request
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 root = Path(__file__).resolve().parent.parent
 work = Path(tempfile.mkdtemp(prefix="startship-e2e-", dir=Path.home()))
@@ -37,6 +37,40 @@ def request(path, body=None, method=None):
                                  headers={"Content-Type": "application/json"}, method=method)
     with client.open(req, timeout=10) as response:
         return json.load(response)
+
+def explore_files(target, parent):
+    def endpoint(op, path):
+        return target + "/files/" + op + "?" + urlencode({"path": path})
+
+    def transfer(op, path, data=None):
+        req = urllib.request.Request(api + endpoint(op, path), data=data,
+                                     headers={"Content-Type": "application/octet-stream"},
+                                     method="PUT" if data is not None else "GET")
+        with client.open(req, timeout=30) as response:
+            return response.read()
+
+    directory = parent + "/explorer-e2e"
+    filename = directory + "/config.json"
+    archive = directory + "/config.zip"
+    extracted = directory + "/unpacked/config"
+    request(endpoint("mkdir", directory), method="POST")
+    transfer("upload", filename, b'{"port":8080}')
+    listing = request(endpoint("list", directory))
+    assert listing["capabilities"]["write"], listing
+    assert [(e["name"], e["type"], e["size"]) for e in listing["entries"]] == [("config.json", "file", 13)], listing
+    assert request(endpoint("text", filename))["text"] == '{"port":8080}'
+    updated = b'{\n  "port": 9000\n}\n'
+    transfer("save", filename, updated)
+    assert transfer("download", filename) == updated
+    request(endpoint("compress", archive), {"format": "zip", "paths": [filename]})
+    request(endpoint("extract", archive), {"to": extracted})
+    assert transfer("download", extracted + "/config.json") == updated
+    if listing["capabilities"]["move"]:
+        request(endpoint("move", filename), {"to": directory + "/moved.json"})
+        assert transfer("download", directory + "/moved.json") == updated
+    if listing["capabilities"]["delete"]:
+        request(endpoint("delete", directory), method="DELETE")
+    print("file explorer list/upload/text save/download/ZIP extraction: " + target + " OK")
 
 def inspect_if_present(container_id):
     result = subprocess.run(["docker", "inspect", container_id], text=True, capture_output=True)
@@ -433,6 +467,8 @@ fn main() {
     assert "grouped api /probe" in grouped_response("/api/probe")
     print("project deployment: one checkout, two detected HTTP containers, one shared release/env, selectable domain targets and runtime logs: OK")
     first_revision = request("deployments/" + first_group["container_releases"][0])
+    explore_files("volumes/" + project_volume["id"], "")
+    explore_files("containers/" + containers[0]["id"], "")
     subprocess.run(["docker", "exec", first_revision["container"], "python", "-c",
                     'from pathlib import Path; Path("/e2e-data/probe").write_text("persistent-e2e-data")'], check=True)
     print("project deployment injects service env, resolves alias/service DNS and reaches Redis: OK")

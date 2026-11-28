@@ -882,7 +882,7 @@ a.attachment-chip:hover {
   display: grid;
   grid-template-columns:
     minmax(150px, 1.35fr) 60px minmax(100px, 1fr) minmax(80px, 1fr)
-    100px 34px;
+    100px 205px;
   align-items: center;
   gap: 18px;
   padding: 15px 20px;
@@ -895,7 +895,7 @@ a.attachment-chip:hover {
 .project-volumes .volume-table-head {
   grid-template-columns:
     minmax(150px, 1.35fr) 80px minmax(100px, 1fr)
-    100px 70px;
+    100px 205px;
 }
 .volume-name {
   display: flex;
@@ -932,6 +932,9 @@ a.attachment-chip:hover {
   min-width: 0;
 }
 .volume-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   justify-self: end;
 }
 .volume-actions button:disabled {
@@ -952,7 +955,7 @@ a.attachment-chip:hover {
   .volume-table-head {
     grid-template-columns:
       minmax(130px, 1.25fr) 45px minmax(90px, 1fr) minmax(60px, 0.8fr)
-      80px 30px;
+      80px 205px;
     gap: 10px;
     padding-left: 16px;
     padding-right: 16px;

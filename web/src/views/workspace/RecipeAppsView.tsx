@@ -30,6 +30,7 @@ import {
 import { useDashboard } from "../../layouts/DashboardLayout";
 import { useLiveSubscription } from "../../providers/LiveProvider";
 import { useSession } from "../../providers/SessionProvider";
+import { FileExplorerButton } from "../../components/FileExplorerButton";
 import { ConnectionsPanel } from "../../components/ConnectionsPanel";
 import { useUI } from "../../providers/UIProvider";
 import { remove, request } from "../../services/api";
@@ -585,6 +586,8 @@ function AppDetail({
 }) {
   const [dialog, setDialog] = useState<"settings" | "domain" | "delete">();
   const [acting, setActing] = useState(false);
+  const { workspace } = useDashboard();
+  const { can } = useSession();
   const ui = useUI();
   const navigate = useNavigate();
   const path = `${collection}/${app.id}`;
@@ -682,6 +685,12 @@ function AppDetail({
                     status === "running" ? container?.health || status : status
                   }
                 />
+                {can("files.read", workspace) && (
+                  <FileExplorerButton
+                    target={`${path}/containers/${encodeURIComponent(c.id)}`}
+                    label={c.id}
+                  />
+                )}
               </div>
             );
           })}
@@ -703,6 +712,12 @@ function AppDetail({
               <div className="recipe-row" key={v}>
                 <strong>{v}</strong>
                 <span className="muted small">App-owned</span>
+                {can("files.read", workspace) && (
+                  <FileExplorerButton
+                    target={`${path}/volumes/${encodeURIComponent(v)}`}
+                    label={v}
+                  />
+                )}
               </div>
             ))
           ) : (

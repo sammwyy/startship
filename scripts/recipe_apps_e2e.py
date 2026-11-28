@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlencode
 
 
 IMAGE = "mirror.gcr.io/library/busybox:1.37"
@@ -193,6 +194,28 @@ def run():
             assert proxy_get(host)["message"] == "persisted"
             request(path + "/stop", {}, "POST")
             wait(lambda: reaches(one, "stopped"))
+            worker_files = path + "/containers/worker/files"
+            caps = request(worker_files + "/list")["capabilities"]
+            assert caps == {"write": True, "move": False, "delete": False, "reason": "The container is stopped."}, caps
+            request(worker_files + "/create?path=%2Fexplorer.txt", method="POST")
+            assert request(worker_files + "/text?path=%2Fexplorer.txt")["text"] == ""
+            try:
+                request(worker_files + "/delete?path=%2Fexplorer.txt", method="DELETE")
+                raise AssertionError("delete unexpectedly accepted on a stopped container")
+            except urllib.error.HTTPError as error:
+                assert error.code == 409, error
+            app_volume_files = path + "/volumes/data/files"
+            app_volume = request(app_volume_files + "/list")
+            assert app_volume["capabilities"]["delete"] and any(e["name"] == "settings.json" for e in app_volume["entries"]), app_volume
+            print("file explorer stopped App container and App volume capabilities: OK")
+            for target, source in [(worker_files, "/explorer.txt"), (app_volume_files, "/settings.json")]:
+                archive = urlencode({"path": "/explorer.zip"})
+                request(target + "/compress?" + archive, {"format": "zip", "paths": [source]})
+                request(target + "/extract?" + archive, {"to": "/unpacked/config"})
+                extracted = urlencode({"path": "/unpacked/config" + source})
+                original = urlencode({"path": source})
+                assert request(target + "/text?" + extracted) == request(target + "/text?" + original)
+            print("file explorer creates nested extraction directories for stopped App containers and App volumes: OK")
             request(path + "/start", {}, "POST")
             wait(lambda: reaches(one, "running"))
             assert request(file_path)["message"] == "persisted"

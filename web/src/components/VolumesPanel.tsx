@@ -19,6 +19,7 @@ import { Icon } from "./Icon";
 import { Heading } from "./Heading";
 import { ProjectHeading } from "./ProjectHeading";
 import { ResourceTransfer } from "./ResourceTransfer";
+import { FileExplorerButton } from "./FileExplorerButton";
 
 export function volumeSize(bytes: number) {
   if (!bytes) return "0 B";
@@ -337,6 +338,22 @@ export function VolumesPanel({
                     })}
                   </time>
                   <div className="volume-actions">
+                    {v.purpose !== "backups" &&
+                      (!v.project_id ||
+                        project ||
+                        projects.data?.some((p) => p.id === v.project_id)) &&
+                      can(
+                        "files.read",
+                        v.project_id
+                          ? project ||
+                              projects.data?.find((p) => p.id === v.project_id)
+                          : workspace,
+                      ) && (
+                        <FileExplorerButton
+                          target={`volumes/${v.id}`}
+                          label={v.name}
+                        />
+                      )}
                     {allowed && v.purpose !== "backups" && (
                       <ResourceTransfer
                         kind="volumes"

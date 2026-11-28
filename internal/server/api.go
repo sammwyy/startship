@@ -385,6 +385,9 @@ func (a *Server) api() http.Handler {
 			reply(w, 200, pipeline.Templates())
 			return
 		}
+		if a.filesAPI(w, r, p, uid, x) {
+			return
+		}
 		if a.transfersAPI(w, r, p, uid, x) || a.catalogAPI(w, r, p, x) || a.networkAPI(w, r, p, uid, x) || a.firewallAPI(w, r, p, uid, x) || a.backupsAPI(w, r, p, uid, x) || a.servicesAPI(w, r, p, uid, x) || a.networkingAPI(w, r, p, uid, x) || a.certificatesAPI(w, r, p, uid, x) || a.recipeAppsAPI(w, r, p, uid, x) {
 			return
 		}
