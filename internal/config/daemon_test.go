@@ -69,13 +69,13 @@ func TestRouterSettingsPrecedence(t *testing.T) {
 	path := configFile(t, "router_disabled = true\n")
 	t.Setenv("STARTSHIP_CONFIG", path)
 	d, err := Load(nil, io.Discard)
-	if err != nil || !d.RouterDisabled || d.ConfigPath != path || len(d.Overridden) != 0 {
+	if err != nil || !d.RouterDisabled || d.ConfigPath != path || d.RouterDisabledOverridden {
 		t.Fatal(d, err)
 	}
 	t.Setenv("STARTSHIP_ROUTER_DISABLED", "true")
 	t.Setenv("STARTSHIP_HTTP_ADDR", "127.0.0.1:18081")
 	d, err = Load([]string{"--config", path, "--router-disabled=false", "--https-listen", "127.0.0.1:18443"}, io.Discard)
-	if err != nil || d.RouterDisabled || !reflect.DeepEqual(d.Overridden, map[string]bool{"router_disabled": true, "http_listen": true, "https_listen": true}) {
+	if err != nil || d.RouterDisabled || !d.RouterDisabledOverridden || d.HTTPListen[0] != "127.0.0.1:18081" {
 		t.Fatal(d, err)
 	}
 	if err := d.ExportRouter(); err != nil || os.Getenv("STARTSHIP_ROUTER_DISABLED") != "false" || os.Getenv("STARTSHIP_HTTPS_ADDR") != "127.0.0.1:18443" {
@@ -139,6 +139,9 @@ func TestDaemonPrecedence(t *testing.T) {
 	}
 	t.Setenv("STARTSHIP_DATA", "/env-data")
 	t.Setenv("STARTSHIP_DASHBOARD_ADDR", "127.0.0.1:9001,[::1]:9001")
+	if err := EditSettings(path, map[string][]string{"dashboard_listen": nil}); err != nil {
+		t.Fatal(err)
+	}
 	d, err = Load(nil, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -164,6 +167,35 @@ func TestDaemonPrecedence(t *testing.T) {
 	t.Setenv("STARTSHIP_CONFIG", "")
 	if Path("") != DefaultPath {
 		t.Fatal(Path(""))
+	}
+}
+
+func TestSavedListenersBeatStartupDefaults(t *testing.T) {
+	cleanEnvironment(t)
+	path := configFile(t, "")
+	saved := map[string][]string{
+		"dashboard_listen": {"127.0.0.1:19000", "[::1]:19000"},
+		"http_listen":      {},
+		"https_listen":     {"127.0.0.1:19443"},
+	}
+	if err := EditSettings(path, saved); err == nil {
+		t.Fatal("accepted empty HTTP list with the router enabled")
+	}
+	saved["router_disabled"] = []string{"true"}
+	if err := EditSettings(path, saved); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("STARTSHIP_DASHBOARD_ADDR", ":9000")
+	t.Setenv("STARTSHIP_HTTP_ADDR", ":80")
+	t.Setenv("STARTSHIP_HTTPS_ADDR", ":443")
+	d, err := Load([]string{"--config", path, "--dashboard-listen=:9001", "--http-listen=:8080", "--https-listen=:8443"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range d.lists() {
+		if want, ok := saved[key]; ok && !reflect.DeepEqual(*value, want) {
+			t.Errorf("%s = %v; want %v", key, *value, want)
+		}
 	}
 }
 func TestDaemonErrorsAndHelp(t *testing.T) {

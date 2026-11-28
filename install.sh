@@ -144,7 +144,7 @@ for bin in startship startshipd; do
     mv -f "/usr/local/bin/.$bin.new" "/usr/local/bin/$bin"
 done
 # Settings given as options are checked on a copy first, then written to the TOML.
-# A matching variable in the environment file would override them, so it is removed.
+# A matching variable in the environment file is removed when an option is supplied.
 configure() { # TOML EDIT_ENV [RUNNER...]
     file=$1 edit_env=$2
     shift 2
@@ -180,7 +180,7 @@ if [ ! -f "$env_file" ]; then
     chmod 0600 "$env_file"
 fi
 if [ ! -f "$config" ]; then
-    printf '%s\n' '# Startship daemon settings; flags > environment > this file > defaults.' '# Existing /etc/startship/startshipd.env values override these settings.' '# Remove corresponding *_ADDR entries from that env file to use file listeners.' '# dashboard_listen = ["127.0.0.1:9000"]' '# dashboard_listen = ["tailscale0:9000", "127.0.0.1:9000"]' '# http_listen = [":80"]' '# https_listen = [":443"]' '# router_disabled = false' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' |
+    printf '%s\n' '# Listener precedence: this file > flags > environment > defaults.' '# Other daemon settings: flags > environment > this file > defaults.' '# dashboard_listen = ["127.0.0.1:9000"]' '# dashboard_listen = ["tailscale0:9000", "127.0.0.1:9000"]' '# http_listen = [":80"]' '# https_listen = [":443"]' '# router_disabled = false' "# data_dir = \"$data\"" '# dashboard_domain = "deploy.example.com" # exposes the panel via the proxy too' '# acme_email = "admin@example.com"' '# acme_directory = "https://acme-v02.api.letsencrypt.org/directory"' '# socket_path = "/run/startship/startship.sock"' |
         runuser -u startship -- sh -c 'umask 027; cat > "$1"' sh "$config"
 fi
 configure "$config" 1 runuser -u startship -- || die "could not write settings to $config"

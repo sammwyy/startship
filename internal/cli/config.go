@@ -66,7 +66,7 @@ func (c *cli) runConfig(args []string) error {
 		if err := daemonconfig.Edit(path, rest[1], rest[2:], rest[0] == "unset"); err != nil {
 			return err
 		}
-		fmt.Fprintf(c.out, "Updated %s. Restart the daemon: sudo systemctl restart startshipd\nEnvironment variables and daemon flags override file settings.\n", path)
+		fmt.Fprintf(c.out, "Updated %s. Restart the daemon: sudo systemctl restart startshipd\nFile listener addresses take precedence over daemon flags and environment variables. For other settings, daemon flags and environment variables take precedence.\n", path)
 		return nil
 	}
 	return fmt.Errorf("invalid config arguments; run startship config")

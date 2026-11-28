@@ -60,7 +60,7 @@ See the [installation guide](INSTALL.md) for [Docker Compose](INSTALL.md#docker-
 | **Live dashboard** | Follow activity, build and runtime logs, and routed traffic. View relationships between projects, services, and volumes on the workspace Map, and set your preferred theme and accent color. |
 | **Uptime and alerts** | Opt projects into uptime checks, publish selected projects on a workspace status page, and send deployment or uptime notifications to Slack, Discord, or an HTTP webhook. |
 | **Traffic policies** | Monitor or block requests with workspace Firewall and WAF rules. Native Linux deployments can opt in to the host-wide network firewall. |
-| **Listener interfaces** | Choose a specific network interface (such as a Tailscale or other VPN interface) or all interfaces from the dashboard or CLI. |
+| **Listener interfaces** | Platform Admins can change the interface or port from the dashboard or CLI. Saved listener addresses take precedence over startup defaults. |
 | **Roles and audit history** | Assign built-in or custom roles at workspace and project scope and review actions in activity and audit logs. |
 | **Automation and MCP** | Use scoped personal access tokens with the API, CLI, or built-in [MCP server](docs/mcp.md). MCP tools use the same permissions and audit trail as the API. |
 | **Updates** | Systemd installs with the update helper can update the daemon from the dashboard or CLI. |

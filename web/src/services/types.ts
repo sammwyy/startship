@@ -306,20 +306,17 @@ export interface NetworkInterface {
 export interface DashboardSettings {
   dashboard_listen: string[];
 }
-export type DashboardOverride = "dashboard_listen";
 export interface DashboardConfig extends DashboardSettings {
   config_path: string;
-  overridden: DashboardOverride[];
 }
 export interface RouterSettings {
   enabled: boolean;
   http_listen: string[];
   https_listen: string[];
 }
-export type RouterOverride = "router_disabled" | "http_listen" | "https_listen";
 export interface RouterConfig extends RouterSettings {
   config_path: string;
-  overridden: RouterOverride[];
+  overridden: "router_disabled"[];
 }
 export interface UpdateRequest {
   version: string;

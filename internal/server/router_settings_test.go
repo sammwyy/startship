@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -30,6 +31,7 @@ func TestSystemRouterSettings(t *testing.T) {
 	for _, key := range []string{"STARTSHIP_ROUTER_DISABLED", "STARTSHIP_HTTP_ADDR", "STARTSHIP_HTTPS_ADDR"} {
 		t.Setenv(key, "")
 	}
+	t.Setenv("STARTSHIP_HTTP_ADDR", "127.0.0.1:0")
 	a := testServer(t)
 	if _, err := a.createUserPending("admin", "password123", false); err != nil {
 		t.Fatal(err)
@@ -37,11 +39,17 @@ func TestSystemRouterSettings(t *testing.T) {
 	if _, err := a.createUser("bob", "password123"); err != nil {
 		t.Fatal(err)
 	}
-	settings := config.Defaults()
-	settings.ConfigPath = filepath.Join(t.TempDir(), "startship.toml")
-	settings.HTTPListen = []string{"127.0.0.1:0"}
-	settings.HTTPSListen = []string{"127.0.0.1:0"}
-	settings.Overridden = map[string]bool{"https_listen": true}
+	path := filepath.Join(t.TempDir(), "startship.toml")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := config.Load([]string{"--config", path, "--https-listen=127.0.0.1:0"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
 	a.routerListeners.httpHandler = a
 	certificate := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	defer certificate.Close()
@@ -104,16 +112,13 @@ func TestSystemRouterSettings(t *testing.T) {
 	checkProxy(oldURL, true)
 	checkProxy(httpsURL, true)
 	var got routerConfig
-	if err := json.Unmarshal([]byte(call(false, "GET", "", 200)), &got); err != nil || !got.Enabled || got.ConfigPath != settings.ConfigPath || len(got.Overridden) != 1 || got.Overridden[0] != "https_listen" {
+	if err := json.Unmarshal([]byte(call(false, "GET", "", 200)), &got); err != nil || !got.Enabled || got.ConfigPath != settings.ConfigPath || len(got.Overridden) != 0 {
 		t.Fatal(got, err)
 	}
 	call(false, "PUT", put(false, "127.0.0.1:0", "127.0.0.1:0"), 403)
 	call(true, "PUT", `{"http_listen":[],"https_listen":[]}`, 400)
 	call(true, "PUT", `{"enabled":true,"http_listen":[],"https_listen":[]}`, 400)
 	call(true, "PUT", put(true, "not an address", "127.0.0.1:0"), 400)
-	if msg := call(true, "PUT", put(true, "127.0.0.1:0", ":18443"), 409); !strings.Contains(msg, "STARTSHIP_HTTPS_ADDR") {
-		t.Fatal(msg)
-	}
 	if msg := call(true, "PUT", put(true, "127.0.0.1:9000", "127.0.0.1:0"), 409); !strings.Contains(msg, "dashboard_listen") {
 		t.Fatal(msg)
 	}
@@ -192,10 +197,21 @@ func TestSystemRouterSettings(t *testing.T) {
 	checkProxy("http://"+newHTTP, true)
 	reboundHTTPS := a.routerListeners.active[listenerKey{2, "127.0.0.1:0"}].listener.Addr().String()
 	checkProxy("https://"+reboundHTTPS, true)
+	candidateHTTPS := routerTestListener(t)
+	newHTTPS := candidateHTTPS.Addr().String()
+	candidateHTTPS.Close()
+	call(true, "PUT", put(true, newHTTP, newHTTPS), 200)
+	checkProxy("https://"+newHTTPS, true)
+	a.routerListeners.mu.Lock()
+	a.routerListeners.settings.RouterDisabledOverridden = true
+	a.routerListeners.mu.Unlock()
+	if msg := call(true, "PUT", put(false, newHTTP, newHTTPS), 409); !strings.Contains(msg, "STARTSHIP_ROUTER_DISABLED") {
+		t.Fatal(msg)
+	}
 }
 
 func TestSystemDashboardAndInterfaces(t *testing.T) {
-	t.Setenv("STARTSHIP_DASHBOARD_ADDR", "")
+	t.Setenv("STARTSHIP_DASHBOARD_ADDR", "127.0.0.1:0")
 	a := testServer(t)
 	if _, err := a.createUserPending("admin", "password123", false); err != nil {
 		t.Fatal(err)
@@ -203,13 +219,17 @@ func TestSystemDashboardAndInterfaces(t *testing.T) {
 	if _, err := a.createUser("bob", "password123"); err != nil {
 		t.Fatal(err)
 	}
-	settings := config.Defaults()
-	settings.ConfigPath = filepath.Join(t.TempDir(), "startship.toml")
-	settings.DashboardListen = []string{"127.0.0.1:0"}
-	settings.HTTPListen = []string{"127.0.0.1:18081"}
-	settings.HTTPSListen = []string{"127.0.0.1:18443"}
-	settings.RouterDisabled = false
-	settings.Overridden = map[string]bool{}
+	path := filepath.Join(t.TempDir(), "startship.toml")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings, err := config.Load([]string{"--config", path, "--http-listen=127.0.0.1:18081", "--https-listen=127.0.0.1:18443", "--router-disabled=false"}, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
 	a.routerListeners.dashboardHandler = a.api()
 	a.listInterfaces = func() ([]config.NetworkInterface, error) {
 		return []config.NetworkInterface{
@@ -252,8 +272,11 @@ func TestSystemDashboardAndInterfaces(t *testing.T) {
 	if err := json.Unmarshal([]byte(call(false, "GET", "/api/system/interfaces", "", 200)), &ifacesResp); err != nil || len(ifacesResp.Interfaces) != 2 || ifacesResp.Interfaces[0].Name != "tailscale0" {
 		t.Fatal(ifacesResp, err)
 	}
-	var got dashboardConfig
-	if err := json.Unmarshal([]byte(call(false, "GET", "/api/system/dashboard", "", 200)), &got); err != nil || len(got.DashboardListen) != 1 || got.DashboardListen[0] != "127.0.0.1:0" || len(got.Overridden) != 0 {
+	var got struct {
+		dashboardConfig
+		Overridden json.RawMessage `json:"overridden"`
+	}
+	if err := json.Unmarshal([]byte(call(false, "GET", "/api/system/dashboard", "", 200)), &got); err != nil || len(got.DashboardListen) != 1 || got.DashboardListen[0] != "127.0.0.1:0" || got.Overridden != nil {
 		t.Fatal(got, err)
 	}
 	call(false, "PUT", "/api/system/dashboard", `{"dashboard_listen":["127.0.0.1:0"]}`, 403)
@@ -332,10 +355,9 @@ func TestSystemDashboardAndInterfaces(t *testing.T) {
 	if err != nil || config.Parse(b, &saved) != nil || len(saved.DashboardListen) != 1 || saved.DashboardListen[0] != newAddr {
 		t.Fatal(string(b), err)
 	}
-	a.routerListeners.mu.Lock()
-	a.routerListeners.settings.Overridden["dashboard_listen"] = true
-	a.routerListeners.mu.Unlock()
-	if msg := call(true, "PUT", "/api/system/dashboard", `{"dashboard_listen":[":18099"]}`, 409); !strings.Contains(msg, "STARTSHIP_DASHBOARD_ADDR") {
-		t.Fatal(msg)
+	t.Setenv("STARTSHIP_DASHBOARD_ADDR", "127.0.0.1:0")
+	restarted, err := config.Load([]string{"--config", settings.ConfigPath}, io.Discard)
+	if err != nil || len(restarted.DashboardListen) != 1 || restarted.DashboardListen[0] != newAddr {
+		t.Fatal(restarted.DashboardListen, err)
 	}
 }

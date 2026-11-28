@@ -12,7 +12,7 @@ import (
 )
 
 func TestRouterCommands(t *testing.T) {
-	const initial = `{"enabled":false,"http_listen":[":80"],"https_listen":[":443"],"config_path":"/etc/startship/config/startship.toml","overridden":["https_listen"]}`
+	const initial = `{"enabled":false,"http_listen":[":80"],"https_listen":[":443"],"config_path":"/etc/startship/config/startship.toml","overridden":["router_disabled"]}`
 	cases := []struct {
 		name string
 		args []string
@@ -20,7 +20,7 @@ func TestRouterCommands(t *testing.T) {
 		want string
 	}{
 		{"default", nil, "", "enabled: false"},
-		{"show", []string{"show"}, "", "http_listen: [:80]\nhttps_listen: [:443]\noverridden: [https_listen]"},
+		{"show", []string{"show"}, "", "http_listen: [:80]\nhttps_listen: [:443]\noverridden: [router_disabled]"},
 		{"show JSON", []string{"show", "--json"}, "", `"config_path": "/etc/startship/config/startship.toml"`},
 		{"set HTTP", []string{"set", "--http", " :8081, [::1]:8081 "}, `{"enabled":false,"http_listen":[":8081","[::1]:8081"],"https_listen":[":443"]}`, "enabled: true"},
 		{"set HTTPS", []string{"set", "--https=:8443"}, `{"enabled":false,"http_listen":[":80"],"https_listen":[":8443"]}`, "enabled: true"},
@@ -90,7 +90,7 @@ func TestRouterArgumentsAndAPIErrors(t *testing.T) {
 	}{
 		{"GET error", `{"error":"not authorized"}`, "not authorized", http.StatusForbidden},
 		{"malformed response", `{"enabled":true}`, "invalid router settings response", http.StatusOK},
-		{"PUT conflict", `{"enabled":true,"http_listen":[":80"],"https_listen":[":443"]}`, "STARTSHIP_HTTP_ADDR", http.StatusOK},
+		{"PUT conflict", `{"enabled":true,"http_listen":[":80"],"https_listen":[":443"]}`, "address already in use", http.StatusOK},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +103,7 @@ func TestRouterArgumentsAndAPIErrors(t *testing.T) {
 					t.Errorf("unexpected %s", r.Method)
 				}
 				w.WriteHeader(http.StatusConflict)
-				io.WriteString(w, `{"error":"http_listen is overridden by STARTSHIP_HTTP_ADDR"}`)
+				io.WriteString(w, `{"error":"proxy: cannot listen on :8081 (address already in use)"}`)
 			}))
 			defer s.Close()
 			c := &cli{config: config{Server: s.URL}, out: io.Discard, client: s.Client()}
@@ -115,7 +115,7 @@ func TestRouterArgumentsAndAPIErrors(t *testing.T) {
 }
 
 func TestDashboardAndInterfacesCommands(t *testing.T) {
-	const initial = `{"dashboard_listen":[":8080"],"config_path":"/etc/startship/config/startship.toml","overridden":[]}`
+	const initial = `{"dashboard_listen":[":8080"],"config_path":"/etc/startship/config/startship.toml"}`
 	cases := []struct {
 		name string
 		args []string

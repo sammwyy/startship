@@ -50,7 +50,6 @@ beforeEach(() => {
   dashboardConfig = {
     dashboard_listen: [":8080"],
     config_path: "/etc/startship/config/startship.toml",
-    overridden: [],
   };
   config = {
     enabled: true,
@@ -171,20 +170,17 @@ describe("node dashboard listen settings", () => {
     );
   });
 
-  it("locks overridden dashboard_listen and renders read-only for non-admins", async () => {
-    dashboardConfig.overridden = ["dashboard_listen"];
+  it("allows platform admins to edit dashboard interface and port", async () => {
     const panel = renderView(false, "Dashboard");
     const trigger = await panel.findByRole("button", {
       name: "Dashboard listen addresses interface",
     });
-    expect(trigger).toBeDisabled();
+    expect(trigger).toBeEnabled();
     const port = panel.getByRole("textbox", {
       name: "Dashboard listen addresses port",
     });
-    expect(port).toBeDisabled();
-    expect(port).toHaveAccessibleDescription(
-      /STARTSHIP_DASHBOARD_ADDR.*--dashboard-listen/,
-    );
+    expect(port).toBeEnabled();
+    expect(panel.queryByText(/Set at startup by/)).not.toBeInTheDocument();
   });
 
   it("renders dashboard settings read-only for non-admins", async () => {
@@ -280,9 +276,9 @@ describe("node router settings", () => {
     "proxy: cannot listen on :8888 (address already in use)",
     "router port 8888 collides with the dashboard",
   ])(
-    "locks overridden fields and displays the API error: %s",
+    "keeps listeners editable when the router toggle is locked and displays the API error: %s",
     async (message) => {
-      config.overridden = ["router_disabled", "https_listen"];
+      config.overridden = ["router_disabled"];
       error = new Error(message);
       const panel = renderView();
       const toggle = await panel.findByRole("switch");
@@ -293,10 +289,7 @@ describe("node router settings", () => {
       const httpsPort = panel.getByRole("textbox", {
         name: "HTTPS listen addresses port",
       });
-      expect(httpsPort).toBeDisabled();
-      expect(httpsPort).toHaveAccessibleDescription(
-        /STARTSHIP_HTTPS_ADDR.*--https-listen/,
-      );
+      expect(httpsPort).toBeEnabled();
       const user = userEvent.setup();
       const httpPort = panel.getByRole("textbox", {
         name: "HTTP listen addresses port",
