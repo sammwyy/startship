@@ -52,7 +52,7 @@ def explore_files(target, parent):
     directory = parent + "/explorer-e2e"
     filename = directory + "/config.json"
     archive = directory + "/config.zip"
-    extracted = directory + "/unpacked"
+    extracted = directory + "/unpacked/config"
     request(endpoint("mkdir", directory), method="POST")
     transfer("upload", filename, b'{"port":8080}')
     listing = request(endpoint("list", directory))
@@ -63,7 +63,6 @@ def explore_files(target, parent):
     transfer("save", filename, updated)
     assert transfer("download", filename) == updated
     request(endpoint("compress", archive), {"format": "zip", "paths": [filename]})
-    request(endpoint("mkdir", extracted), method="POST")
     request(endpoint("extract", archive), {"to": extracted})
     assert transfer("download", extracted + "/config.json") == updated
     if listing["capabilities"]["move"]:

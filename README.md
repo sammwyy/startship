@@ -100,7 +100,6 @@ startship files get container:CONTAINER_ID /config ./config.tar.gz
 startship files ls app:WORKSPACE_ID/APP_ID/web /
 startship files ls app-volume:WORKSPACE_ID/APP_ID/data /
 startship files zip volume:VOLUME_ID /config.zip /settings.json
-startship files mkdir volume:VOLUME_ID /restored
 startship files unzip volume:VOLUME_ID /config.zip /restored
 ```
 

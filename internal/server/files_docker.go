@@ -181,6 +181,10 @@ func (fs fileDocker) stat(ctx context.Context, p string) (*tar.Header, error) {
 }
 
 func (fs fileDocker) check(ctx context.Context, p string) (*tar.Header, error) {
+	return fs.checkPath(ctx, p, false)
+}
+
+func (fs fileDocker) checkPath(ctx context.Context, p string, createDirs bool) (*tar.Header, error) {
 	if fs.base == "/" && (p == "/proc" || p == "/sys" || p == "/dev" ||
 		strings.HasPrefix(p, "/proc/") || strings.HasPrefix(p, "/sys/") || strings.HasPrefix(p, "/dev/")) {
 		return nil, errFilePath
@@ -190,14 +194,18 @@ func (fs fileDocker) check(ctx context.Context, p string) (*tar.Header, error) {
 			part := strings.SplitN(p[len(prefix)+1:], "/", 2)
 			prefix += "/" + part[0]
 			h, err := fs.stat(ctx, prefix)
+			if createDirs && errors.Is(err, errFileMissing) {
+				h = &tar.Header{Typeflag: tar.TypeDir, Mode: 0755, ModTime: time.Now()}
+				err = fs.put(ctx, prefix, h, nil)
+			}
 			if err != nil {
 				return nil, err
 			}
+			if h.Typeflag != tar.TypeDir && (createDirs || prefix != p) {
+				return nil, errFilePath
+			}
 			if prefix == p {
 				return h, nil
-			}
-			if h.Typeflag != tar.TypeDir {
-				return nil, errFilePath
 			}
 		}
 	}

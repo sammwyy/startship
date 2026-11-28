@@ -293,10 +293,11 @@ func (fs fileDocker) extract(ctx context.Context, name, dir string) error {
 		return err
 	}
 	h, err := fs.check(ctx, dir)
-	if err != nil {
+	missing := errors.Is(err, errFileMissing)
+	if err != nil && !missing {
 		return err
 	}
-	if h.Typeflag != tar.TypeDir {
+	if !missing && h.Typeflag != tar.TypeDir {
 		return errFilePath
 	}
 	if _, err := fs.check(ctx, name); err != nil {
@@ -324,23 +325,26 @@ func (fs fileDocker) extract(ctx context.Context, name, dir string) error {
 	if err != nil {
 		return err
 	}
-	checked := map[string]bool{}
+	tops := map[string]bool{}
 	if err := normalizeFileArchive(in, name, out, func(n string) error {
 		top, _, _ := strings.Cut(n, "/")
-		if checked[top] {
-			return nil
-		}
-		dst := path.Join(dir, top)
-		if err := fs.destination(ctx, dst, false); err != nil {
-			return err
-		}
-		checked[top] = true
+		tops[top] = true
 		return nil
 	}); err != nil {
 		return err
 	}
 	if _, err := out.Seek(0, io.SeekStart); err != nil {
 		return err
+	}
+	if missing {
+		if _, err := fs.checkPath(ctx, dir, true); err != nil {
+			return err
+		}
+	}
+	for top := range tops {
+		if err := fs.destination(ctx, path.Join(dir, top), false); err != nil {
+			return err
+		}
 	}
 	return fs.writeTar(ctx, dir, out)
 }
