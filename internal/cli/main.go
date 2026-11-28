@@ -375,6 +375,7 @@ const usage = `startship [--json] COMMAND
   volumes attach ID PROJECT /path | volumes detach ID | volumes delete ID
   files ls|cat|get|put|rm|mkdir|mv|edit|zip|unzip TARGET [PATH ...]
                                  TARGET: volume:ID, container:ID, app:WS/ID/CONTAINER
+  exec TARGET [-- COMMAND ARGS...]   TARGET: container:ID, app:WS/ID/CONTAINER, service:ID
   backups [list] WORKSPACE [--service ID]
   backups create SERVICE   copy the service volume into the workspace backups volume now
   backups schedule SERVICE --every hourly|daily|weekly [--at HH:MM] [--minute M] [--weekday mon] [--keep N] | --off   times in UTC
@@ -438,6 +439,9 @@ If unavailable, uses ` + daemonconfig.DefaultDashboardURL + `. Use login URL for
 func (c *cli) run(args []string) error {
 	if len(args) > 0 && args[0] == "config" {
 		return c.runConfig(args[1:])
+	}
+	if len(args) > 0 && args[0] == "exec" {
+		return c.runExec(args[1:])
 	}
 	var a []string
 	wait, noCache := false, false
@@ -939,6 +943,10 @@ func Run() {
 		c.Token, c.Refresh = s, ""
 	}
 	if err = c.run(os.Args[1:]); err != nil {
+		var status terminalExit
+		if errors.As(err, &status) && status > 0 && status < 256 {
+			os.Exit(int(status))
+		}
 		fmt.Fprintln(os.Stderr, "startship:", err)
 		os.Exit(1)
 	}

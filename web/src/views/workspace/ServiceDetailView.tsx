@@ -34,6 +34,8 @@ import {
 } from "../../components/ServiceUI";
 import { ServiceConfig } from "../../components/ServiceConfig";
 import { ServiceActions } from "../../components/ServiceActions";
+import { FileExplorerButton } from "../../components/FileExplorerButton";
+import { TerminalButton } from "../../components/TerminalButton";
 import { ResourceTransfer } from "../../components/ResourceTransfer";
 import { ConnectionsPanel } from "../../components/ConnectionsPanel";
 import {
@@ -99,6 +101,15 @@ export function ServiceDetailView() {
         actions={
           <>
             <Badge status={s.status} />
+            {s.volume_id && can("files.read", workspace) && (
+              <FileExplorerButton
+                target={`volumes/${s.volume_id}`}
+                label={`${s.name} data`}
+              />
+            )}
+            {s.status === "running" && can("containers.exec", workspace) && (
+              <TerminalButton target={`services/${s.id}`} label={s.name} />
+            )}
             {allowed && (
               <ResourceTransfer
                 kind="services"

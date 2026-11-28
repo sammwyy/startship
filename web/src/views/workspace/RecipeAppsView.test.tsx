@@ -21,6 +21,11 @@ vi.mock("../../providers/LiveProvider", () => ({
   useLiveSubscription: () => undefined,
 }));
 vi.mock("../../services/api", () => ({ request: vi.fn(), remove: vi.fn() }));
+vi.mock("../../components/TerminalDialog", () => ({
+  default: ({ target }: { target: string }) => (
+    <div role="dialog">{target}</div>
+  ),
+}));
 
 beforeAll(() => {
   HTMLDialogElement.prototype.showModal = function () {
@@ -82,6 +87,34 @@ function renderApps() {
     </QueryClientProvider>,
   );
 }
+
+it("opens the running App container's terminal beside its Files action", async () => {
+  const user = userEvent.setup();
+  vi.mocked(request).mockImplementation(async (path) =>
+    path === "recipes"
+      ? [jellyfin]
+      : {
+          ...installed,
+          apps: [
+            {
+              ...installed.apps[0],
+              containers: { web: { status: "running" } },
+            },
+          ],
+        },
+  );
+  renderApps();
+  await user.click(await screen.findByRole("link", { name: "Home media" }));
+  const files = screen.getByRole("button", { name: "Browse files in web" });
+  const terminal = screen.getByRole("button", {
+    name: "Open terminal for web",
+  });
+  expect(files.nextElementSibling).toBe(terminal);
+  await user.click(terminal);
+  expect(await screen.findByRole("dialog")).toHaveTextContent(
+    "workspaces/w/apps/media/containers/web",
+  );
+});
 
 it("switches layouts and restores the browser preference on a new mount", async () => {
   const user = userEvent.setup();

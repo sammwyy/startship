@@ -42,6 +42,7 @@ var permissionCatalog = []Permission{
 	{"projects.create", "Create projects", "Add projects to the workspace.", "Workspace", scopeWorkspace},
 	{"members.manage", "Manage members", "Add members, assign roles and edit permission overrides.", "Workspace", scopeProject},
 	{"project.view", "View projects", "See projects, containers, releases and domains.", "Projects", scopeProject},
+	{"containers.exec", "Open container terminals", "Run commands in project, App and Service containers with the container's configured user and access.", "Projects", scopeProject},
 	{"files.read", "Read files", "Browse and download files from managed volumes and containers.", "Files", scopeProject},
 	{"files.write", "Write files", "Upload, edit, move, remove and archive files in managed volumes and containers.", "Files", scopeProject},
 	{"logs.view", "View logs", "Read build output and runtime logs.", "Projects", scopeProject},
@@ -111,7 +112,7 @@ var (
 	projectPermissions = []string{"project.view", "logs.view", "traffic.view", "deploy", "project.settings", "project.environment", "project.source", "domains.manage"}
 	builtinRoles       = []Role{
 		{ID: platformAdminRole, Name: "Platform Admin", Color: "#f5a524", Icon: "crown", Permissions: allPermissionKeys(), Fixed: true},
-		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"activity.view", "firewall.view", "firewall.manage", "services.manage", "networks.manage", "apps.manage", "workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete", "files.read", "files.write"}, projectPermissions...)},
+		{ID: "administrator", Name: "Administrator", Color: "#e5484d", Icon: "shield", Permissions: append([]string{"activity.view", "firewall.view", "firewall.manage", "services.manage", "networks.manage", "apps.manage", "workspace.manage", "workspace.domains", "projects.create", "members.manage", "project.delete", "files.read", "files.write", "containers.exec"}, projectPermissions...)},
 		{ID: "contributor", Name: "Contributor", Color: "#3e63dd", Icon: "wrench", Permissions: append([]string{"firewall.view", "services.manage", "networks.manage", "projects.create"}, projectPermissions...)},
 		{ID: "member", Name: "Member", Color: "#30a46c", Icon: "eye", Permissions: []string{"project.view", "logs.view", "traffic.view"}},
 		{ID: "guest", Name: "Guest", Color: "#8b8d98", Icon: "user", Permissions: []string{}},

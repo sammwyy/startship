@@ -31,6 +31,7 @@ import { useDashboard } from "../../layouts/DashboardLayout";
 import { useLiveSubscription } from "../../providers/LiveProvider";
 import { useSession } from "../../providers/SessionProvider";
 import { FileExplorerButton } from "../../components/FileExplorerButton";
+import { TerminalButton } from "../../components/TerminalButton";
 import { ConnectionsPanel } from "../../components/ConnectionsPanel";
 import { useUI } from "../../providers/UIProvider";
 import { remove, request } from "../../services/api";
@@ -687,6 +688,12 @@ function AppDetail({
                 />
                 {can("files.read", workspace) && (
                   <FileExplorerButton
+                    target={`${path}/containers/${encodeURIComponent(c.id)}`}
+                    label={c.id}
+                  />
+                )}
+                {status === "running" && can("containers.exec", workspace) && (
+                  <TerminalButton
                     target={`${path}/containers/${encodeURIComponent(c.id)}`}
                     label={c.id}
                   />
