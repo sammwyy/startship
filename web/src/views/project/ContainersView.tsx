@@ -6,8 +6,11 @@ import { Badge } from "../../components/ui";
 import { useQuery } from "@tanstack/react-query";
 import { queries } from "../../services/queries";
 import { TemplateIcon } from "../../components/TemplateIcon";
+import { useSession } from "../../providers/SessionProvider";
+import { FileExplorerButton } from "../../components/FileExplorerButton";
 export function ContainersView() {
   const { project, containers } = useProject();
+  const { can } = useSession();
   const { data: templates } = useQuery(queries.pipelineTemplates());
   return (
     <>
@@ -40,6 +43,12 @@ export function ContainersView() {
               </span>
             </div>
             <Badge status={c.status} />
+            {can("files.read", project) && (
+              <FileExplorerButton
+                target={`containers/${c.id}`}
+                label={c.name}
+              />
+            )}
             <Link className="button" to={`/project/${project.id}/logs/${c.id}`}>
               <Icon name="terminal" />
               Logs

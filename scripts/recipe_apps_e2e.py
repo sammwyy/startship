@@ -193,6 +193,19 @@ def run():
             assert proxy_get(host)["message"] == "persisted"
             request(path + "/stop", {}, "POST")
             wait(lambda: reaches(one, "stopped"))
+            worker_files = path + "/containers/worker/files"
+            caps = request(worker_files + "/list")["capabilities"]
+            assert caps == {"write": True, "move": False, "delete": False, "reason": "The container is stopped."}, caps
+            request(worker_files + "/create?path=%2Fexplorer.txt", method="POST")
+            assert request(worker_files + "/text?path=%2Fexplorer.txt")["text"] == ""
+            try:
+                request(worker_files + "/delete?path=%2Fexplorer.txt", method="DELETE")
+                raise AssertionError("delete unexpectedly accepted on a stopped container")
+            except urllib.error.HTTPError as error:
+                assert error.code == 409, error
+            app_volume = request(path + "/volumes/data/files/list")
+            assert app_volume["capabilities"]["delete"] and any(e["name"] == "settings.json" for e in app_volume["entries"]), app_volume
+            print("file explorer stopped App container and App volume capabilities: OK")
             request(path + "/start", {}, "POST")
             wait(lambda: reaches(one, "running"))
             assert request(file_path)["message"] == "persisted"

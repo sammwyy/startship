@@ -53,14 +53,21 @@ export async function request<T>(
   signal?: AbortSignal,
 ): Promise<T> {
   const revision = sessionRevision;
+  const raw = body instanceof Blob;
   const send = () =>
     fetch(`/api/${path}`, {
       method,
       credentials: "same-origin",
       signal,
       headers:
-        body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+        body === undefined
+          ? undefined
+          : {
+              "Content-Type": raw
+                ? "application/octet-stream"
+                : "application/json",
+            },
+      body: body === undefined ? undefined : raw ? body : JSON.stringify(body),
     });
   let response = await send();
   const protectedRequest = !["login", "setup", "logout", "refresh"].includes(

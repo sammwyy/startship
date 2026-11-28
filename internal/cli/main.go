@@ -136,17 +136,36 @@ func (c *cli) request(method, path string, body any) (result any, requestErr err
 }
 
 func (c *cli) doAPI(method, path string, body []byte) (*http.Response, error) {
+	return c.doAPIReader(method, path, bytes.NewReader(body), "application/json")
+}
+
+func (c *cli) doAPIReader(method, path string, body io.ReadSeeker, contentType string) (*http.Response, error) {
 	server, client, err := c.transport()
 	if err != nil {
 		return nil, err
 	}
-	send := func(method, path string, body []byte) (*http.Response, error) {
-		r, err := http.NewRequest(method, server+"/api/"+path, bytes.NewReader(body))
+	if contentType != "application/json" {
+		copy := *client
+		copy.Timeout = 5 * time.Minute
+		client = &copy
+	}
+	send := func() (*http.Response, error) {
+		var payload io.Reader
+		if body != nil {
+			if _, err := body.Seek(0, io.SeekStart); err != nil {
+				return nil, err
+			}
+			payload = struct{ io.Reader }{body}
+			if _, ok := body.(*bytes.Reader); ok {
+				payload = body
+			}
+		}
+		r, err := http.NewRequest(method, server+"/api/"+path, payload)
 		if err != nil {
 			return nil, err
 		}
 		r.Header.Set("User-Agent", "Startship-CLI/"+version.Version)
-		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Content-Type", contentType)
 		if strings.HasPrefix(c.Token, "sst_") {
 			r.Header.Set("Authorization", "Bearer "+c.Token)
 		} else if c.Token != "" && path != "refresh" {
@@ -157,7 +176,7 @@ func (c *cli) doAPI(method, path string, body []byte) (*http.Response, error) {
 		}
 		return client.Do(r)
 	}
-	resp, err := send(method, path, body)
+	resp, err := send()
 	if err != nil || resp.StatusCode != http.StatusUnauthorized || c.Refresh == "" || path == "login" || path == "logout" || path == "refresh" {
 		return resp, err
 	}
@@ -165,7 +184,7 @@ func (c *cli) doAPI(method, path string, body []byte) (*http.Response, error) {
 	if err = c.renewAccess(); err != nil {
 		return nil, err
 	}
-	return send(method, path, body)
+	return send()
 }
 
 func (c *cli) renewAccess() error {
@@ -354,6 +373,8 @@ const usage = `startship [--json] COMMAND
   volumes [list] WORKSPACE
   volumes create WORKSPACE NAME [--project P --mount /path]
   volumes attach ID PROJECT /path | volumes detach ID | volumes delete ID
+  files ls|cat|get|put|rm|mkdir|mv|edit|zip|unzip TARGET [PATH ...]
+                                 TARGET: volume:ID, container:ID, app:WS/ID/CONTAINER
   backups [list] WORKSPACE [--service ID]
   backups create SERVICE   copy the service volume into the workspace backups volume now
   backups schedule SERVICE --every hourly|daily|weekly [--at HH:MM] [--minute M] [--weekday mon] [--keep N] | --off   times in UTC
@@ -485,6 +506,9 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "volumes" {
 		return c.runVolumes(a)
+	}
+	if cmd == "files" {
+		return c.runFiles(a)
 	}
 	if cmd == "backups" {
 		return c.runBackups(a)
