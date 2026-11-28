@@ -1,7 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLiveSubscription } from "../providers/LiveProvider";
 import { queries } from "./queries";
-import type { Project, Release, Service, ServiceEngine } from "./types";
+import type {
+  Endpoint,
+  EndpointKind,
+  Project,
+  Release,
+  Service,
+  ServiceEngine,
+} from "./types";
 
 export function resourceDeployNeeded(project: Project, releases: Release[]) {
   if (!project.resources_updated) return false;
@@ -28,6 +35,29 @@ export function useServices(workspaceId: string) {
   });
   return { ...useQuery(queries.services(workspaceId)), liveError };
 }
+export function useConnections(workspaceId: string) {
+  const liveError = useLiveSubscription({
+    topic: "connections",
+    workspace_id: workspaceId,
+  });
+  return { ...useQuery(queries.connections(workspaceId)), liveError };
+}
+export function useNetworks(workspaceId: string) {
+  const liveError = useLiveSubscription({
+    topic: "networks",
+    workspace_id: workspaceId,
+  });
+  return { ...useQuery(queries.networks(workspaceId)), liveError };
+}
+export const sameEndpoint = (a: Endpoint, b: Endpoint) =>
+  a.kind === b.kind && a.id === b.id;
+export const endpointHost = (kind: EndpointKind, name: string) =>
+  kind === "service"
+    ? name
+    : name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
 export function useVolumes(workspaceId: string) {
   const liveError = useLiveSubscription({
     topic: "volumes",

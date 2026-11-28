@@ -21,8 +21,9 @@ func TestWorkspaceTransferGraphCopyAndMove(t *testing.T) {
 		copies = append(copies, args)
 		return nil
 	}
-	s := Service{ID: "db", WorkspaceID: f.workspace.ID, Name: "db", VolumeID: "data", ExternalPort: 15432, Status: "running", Container: "real-db",
-		Attachments: []Attachment{{f.project.ID, "database"}, {f.second.ID, "database"}}}
+	s := Service{ID: "db", WorkspaceID: f.workspace.ID, Name: "db", VolumeID: "data", ExternalPort: 15432, Status: "running", Container: "real-db"}
+	f.a.saveConnection(Connection{ID: "c1", WorkspaceID: f.workspace.ID, From: Endpoint{"project", f.project.ID}, To: Endpoint{"service", s.ID}, Alias: "database"})
+	f.a.saveConnection(Connection{ID: "c2", WorkspaceID: f.workspace.ID, From: Endpoint{"project", f.second.ID}, To: Endpoint{"service", s.ID}, Alias: "database"})
 	v := Volume{ID: "data", WorkspaceID: f.workspace.ID, Name: "db-data", ServiceID: s.ID}
 	if err := f.a.saveService(s); err != nil {
 		t.Fatal(err)
@@ -75,7 +76,7 @@ func TestWorkspaceTransferGraphCopyAndMove(t *testing.T) {
 	cv, _ := getResource[Volume](f.a, "volumes", id("volumes", "db-data"))
 	cp, _ := f.a.store.Get(id("projects", f.project.Name))
 	if cs.ID == s.ID || cs.WorkspaceID != dst.ID || cs.VolumeID != cv.ID || cv.ServiceID != cs.ID ||
-		len(cs.Attachments) != 2 || cs.Attachments[0].ProjectID != cp.ID || cs.ExternalPort != 0 || cs.Status != "stopped" ||
+		len(f.a.connections(dst.ID)) != 2 || cs.ExternalPort != 0 || cs.Status != "stopped" ||
 		cp.Parent != dst.ID || cp.Owner != dst.Owner || cp.Env["KEY"] != "secret" || len(copies) != 1 ||
 		!slices.Contains(copies[0], volumeName(v.ID)+":/source:ro") {
 		t.Fatalf("copy mismatched: service=%+v volume=%+v project=%+v commands=%v", cs, cv, cp, copies)

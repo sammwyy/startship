@@ -1,20 +1,37 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildWorkspaceMap,
+  buildWorkspaceMap as build,
   connectedMapNodes,
   mapNodeHeight,
   routeMapEdges,
 } from "./map";
 import type { MapBox, MapEdge } from "./map";
-import type { Project, Service, Volume } from "../services/types";
+import type { Connection, Project, Service, Volume } from "../services/types";
 
 const projects = [{ id: "a" }, { id: "b" }, { id: "c" }] as Project[];
-const service = (id: string, ids: string[], volume_id = "") =>
-  ({
+const links = new Map<string, Connection[]>();
+const service = (id: string, ids: string[], volume_id = "") => {
+  links.set(
     id,
-    volume_id,
-    attachments: ids.map((project_id) => ({ project_id, alias: "db" })),
-  }) as Service;
+    ids.map(
+      (project_id) =>
+        ({
+          id: project_id + id,
+          from: { kind: "project", id: project_id },
+          to: { kind: "service", id },
+          alias: "db",
+        }) as Connection,
+    ),
+  );
+  return { id, volume_id } as Service;
+};
+const buildWorkspaceMap = (p: Project[], s: Service[], v: Volume[]) =>
+  build(
+    p,
+    s,
+    v,
+    s.flatMap((x) => links.get(x.id) || []),
+  );
 const volume = (id: string, project_id = "") =>
   ({ id, project_id, mount_path: "/data" }) as Volume;
 

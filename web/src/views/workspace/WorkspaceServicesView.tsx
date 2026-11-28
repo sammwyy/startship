@@ -3,7 +3,12 @@ import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useDashboard } from "../../layouts/DashboardLayout";
 import { useSession } from "../../providers/SessionProvider";
-import { useServices, externalEndpoint } from "../../services/services";
+import {
+  useConnections,
+  useServices,
+  externalEndpoint,
+} from "../../services/services";
+import { useWorkspaceResources } from "../../components/ConnectionsPanel";
 import { queries } from "../../services/queries";
 import { Heading } from "../../components/Heading";
 import {
@@ -23,7 +28,12 @@ export function WorkspaceServicesView() {
     { can } = useSession(),
     client = useQueryClient();
   const services = useServices(id),
-    projects = useQuery(queries.projects(id)),
+    connections = useConnections(id),
+    { find } = useWorkspaceResources(id),
+    consumers = (serviceId: string) =>
+      (connections.data?.connections || []).filter(
+        (c) => c.to.kind === "service" && c.to.id === serviceId,
+      ),
     catalog = useQuery(queries.catalog()),
     [open, setOpen] = useState(false);
   useLiveSubscription({ topic: "services_catalog" });
@@ -75,7 +85,7 @@ export function WorkspaceServicesView() {
                 <span>Service</span>
                 <span>Status</span>
                 <span>Endpoints</span>
-                <span>Connected projects</span>
+                <span>Used by</span>
                 <span />
               </div>
               {services.data.services.map((s) => (
@@ -114,16 +124,15 @@ export function WorkspaceServicesView() {
                     )}
                   </div>
                   <div className="attachment-chips">
-                    {s.attachments.length ? (
-                      s.attachments.map((a) => (
+                    {consumers(s.id).length ? (
+                      consumers(s.id).map((c) => (
                         <Link
-                          key={a.project_id}
-                          to={`/project/${a.project_id}/connections`}
+                          key={c.id}
+                          to={find(c.from)?.href || "#"}
                           className="attachment-chip"
                         >
                           <Icon name="plug" />
-                          {projects.data?.find((p) => p.id === a.project_id)
-                            ?.name || a.project_id}
+                          {find(c.from)?.name || c.from.id}
                         </Link>
                       ))
                     ) : (

@@ -48,7 +48,7 @@ See the [installation guide](INSTALL.md) for [Docker Compose](INSTALL.md#docker-
 
 | Feature | What it does |
 | --- | --- |
-| **Managed services** | Run engines such as PostgreSQL, Redis, and S3-compatible SeaweedFS. Attach services through project **Connections** to supply connection settings to your applications. |
+| **Managed services** | Run engines such as PostgreSQL, Redis, and S3-compatible SeaweedFS. Link projects, apps and services through **Connections** (one private network per link, internal DNS and env vars), or group them in workspace **Networks**. |
 | **Volumes and backups** | Mount persistent volumes, schedule backups for volume-backed services, and download or restore backups from the dashboard or CLI. |
 | **App recipes** | Install [self-hosted apps](#self-hosted-apps) such as Jellyfin, Gitea, Minecraft, or TeamSpeak. Each installation has its own Docker network, volumes, and configuration. Use built-in or remote catalogs for recipes and service engines. |
 | **Migration** | Platform Admins can import selected projects and services from Openship, Dokploy, or Coolify installations on the same host without modifying the source installations. |
@@ -89,7 +89,8 @@ Run `startship --help` or see the [CLI guide](docs/cli.md) for more commands.
 Open **Apps** in a workspace and select **Install app** to choose a recipe. App
 management requires the workspace **Manage apps** permission. Each app's
 containers can communicate by service name on their own bridge and are not
-attached to projects, managed services or other apps' private networks. Apps
+attached to projects, managed services or other apps' private networks unless
+you add a Connection or a workspace Network. Apps
 can still reach public endpoints, including ports deliberately published to
 the host.
 

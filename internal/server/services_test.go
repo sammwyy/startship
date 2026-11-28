@@ -25,20 +25,20 @@ func TestServicesAPI(t *testing.T) {
 	accountRequest(t, f.h, "PATCH", route, `{"config":{"password":""}}`, f.alice, 400)
 	accountRequest(t, f.h, "PATCH", route, `{"config":{"password":"changed"}}`, f.alice, 200)
 	accountRequest(t, f.h, "DELETE", "volumes/"+s.VolumeID, "", f.alice, 409)
-	accountRequest(t, f.h, "POST", route+"/attachments", `{"project_id":"`+f.project.ID+`","alias":"INVALID"}`, f.alice, 400)
-	accountRequest(t, f.h, "POST", route+"/attachments", `{"project_id":"`+f.project.ID+`","alias":"db"}`, f.alice, 200)
-	accountRequest(t, f.h, "POST", route+"/attachments", `{"project_id":"`+f.project.ID+`","alias":"db"}`, f.alice, 409)
+	accountRequest(t, f.h, "POST", "workspaces/"+f.workspace.ID+"/connections", `{"from":{"kind":"project","id":"`+f.project.ID+`"},"to":{"kind":"service","id":"`+s.ID+`"},"alias":"INVALID"}`, f.alice, 400)
+	accountRequest(t, f.h, "POST", "workspaces/"+f.workspace.ID+"/connections", `{"from":{"kind":"project","id":"`+f.project.ID+`"},"to":{"kind":"service","id":"`+s.ID+`"},"alias":"db"}`, f.alice, 200)
+	accountRequest(t, f.h, "POST", "workspaces/"+f.workspace.ID+"/connections", `{"from":{"kind":"project","id":"`+f.project.ID+`"},"to":{"kind":"service","id":"`+s.ID+`"},"alias":"db"}`, f.alice, 409)
 	f.assign(t, f.alice, f.bobID, "member", scopeWorkspace, f.workspace.ID, 201)
 	public := decodeBody[Service](t, accountRequest(t, f.h, "GET", route, "", f.bob, 200).Body.Bytes())
 	if public.Config["password"] != "" {
 		t.Fatal("credentials exposed")
 	}
 	accountRequest(t, f.h, "PATCH", route, `{}`, f.bob, 403)
-	accountRequest(t, f.h, "POST", route+"/attachments", `{"project_id":"`+f.second.ID+`","alias":"db"}`, f.bob, 403)
+	accountRequest(t, f.h, "POST", "workspaces/"+f.workspace.ID+"/connections", `{"from":{"kind":"project","id":"`+f.second.ID+`"},"to":{"kind":"service","id":"`+s.ID+`"},"alias":"db"}`, f.bob, 403)
 	f.assign(t, f.alice, f.bobID, "contributor", scopeWorkspace, f.workspace.ID, 201)
 	deny, _ := json.Marshal(override{Scope: scopeProject, ScopeID: f.second.ID, SubjectType: "user", SubjectID: f.bobID, Deny: []string{"project.settings"}})
 	accountRequest(t, f.h, "PUT", "overrides", string(deny), f.alice, 200)
-	accountRequest(t, f.h, "POST", route+"/attachments", `{"project_id":"`+f.second.ID+`","alias":"db"}`, f.bob, 403)
+	accountRequest(t, f.h, "POST", "workspaces/"+f.workspace.ID+"/connections", `{"from":{"kind":"project","id":"`+f.second.ID+`"},"to":{"kind":"service","id":"`+s.ID+`"},"alias":"db"}`, f.bob, 403)
 	accountRequest(t, f.h, "POST", "workspaces/"+f.workspace.ID+"/volumes", `{"name":"no-access","project_id":"`+f.second.ID+`","mount_path":"/data"}`, f.bob, 403)
 	for _, topic := range []string{"services", "volumes"} {
 		data, _, _, why := f.a.liveData(context.Background(), f.bobID, &liveSub{Topic: topic, WorkspaceID: f.workspace.ID})
@@ -66,7 +66,8 @@ func TestServiceLifecycle(t *testing.T) {
 	calls := []string{}
 	f.a.dockerService = func(args ...string) (string, error) { calls = append(calls, strings.Join(args, " ")); return "ok", nil }
 	e, _ := catalog.Lookup("redis")
-	s := Service{ID: "lifecycle", WorkspaceID: f.workspace.ID, Name: "cache", Engine: e.ID, Version: e.Versions[0], Config: map[string]string{"password": "test-password"}, VolumeID: "data", ExternalPort: 16379, Attachments: []Attachment{{ProjectID: f.project.ID, Alias: "cache"}}}
+	s := Service{ID: "lifecycle", WorkspaceID: f.workspace.ID, Name: "cache", Engine: e.ID, Version: e.Versions[0], Config: map[string]string{"password": "test-password"}, VolumeID: "data", ExternalPort: 16379}
+	f.a.saveConnection(Connection{ID: "c1", WorkspaceID: f.workspace.ID, From: Endpoint{"project", f.project.ID}, To: Endpoint{"service", s.ID}, Alias: "cache"})
 	f.a.saveVolume(Volume{ID: "data", WorkspaceID: f.workspace.ID, ServiceID: s.ID})
 	f.a.saveService(s)
 	for _, action := range []string{"recreate", "stop", "start", "restart"} {
@@ -159,14 +160,15 @@ func TestSeaweedSecretVisibility(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := Service{ID: "objects", Name: "objects", WorkspaceID: f.workspace.ID, Engine: e.ID, Version: e.Versions[0], Config: config, Attachments: []Attachment{{ProjectID: f.project.ID, Alias: "objects"}}}
+	s := Service{ID: "objects", Name: "objects", WorkspaceID: f.workspace.ID, Engine: e.ID, Version: e.Versions[0], Config: config}
+	f.a.saveConnection(Connection{ID: "c1", WorkspaceID: f.workspace.ID, From: Endpoint{"project", f.project.ID}, To: Endpoint{"service", s.ID}, Alias: "objects"})
 	f.a.saveService(s)
 	f.assign(t, f.alice, f.bobID, "member", scopeWorkspace, f.workspace.ID, 201)
-	r := accountRequest(t, f.h, "GET", "projects/"+f.project.ID+"/services", "", f.bob, 200)
+	r := accountRequest(t, f.h, "GET", "workspaces/"+f.workspace.ID+"/connections", "", f.bob, 200)
 	if strings.Contains(r.Body.String(), config["secret_key"]) || !strings.Contains(r.Body.String(), `"OBJECTS_SECRET_KEY":"********"`) {
 		t.Fatal("S3 secret exposed or masking missing")
 	}
-	r = accountRequest(t, f.h, "GET", "projects/"+f.project.ID+"/services", "", f.alice, 200)
+	r = accountRequest(t, f.h, "GET", "workspaces/"+f.workspace.ID+"/connections", "", f.alice, 200)
 	if !strings.Contains(r.Body.String(), config["secret_key"]) {
 		t.Fatal("manager lost S3 secret")
 	}
@@ -187,19 +189,18 @@ func TestServiceNetworkNames(t *testing.T) {
 		calls = append(calls, strings.Join(args, " "))
 		return "ok", nil
 	}
-	s := Service{ID: "named", Name: "primary-db", Attachments: []Attachment{{ProjectID: "storefront", Alias: "db"}, {ProjectID: "worker", Alias: "jobs_db"}}}
+	s := Service{ID: "named", WorkspaceID: f.workspace.ID, Name: "primary-db"}
+	f.a.saveService(s)
+	if err := f.a.connectService(s); err != nil || len(calls) != 0 {
+		t.Fatal("unconnected service should not join networks", err, calls)
+	}
+	f.a.saveConnection(Connection{ID: "link", WorkspaceID: f.workspace.ID, From: Endpoint{"project", f.project.ID}, To: Endpoint{"service", s.ID}, Alias: "db"})
 	if err := f.a.connectService(s); err != nil {
 		t.Fatal(err)
 	}
-	for _, at := range s.Attachments {
-		want := "network connect --alias " + at.Alias + " --alias " + at.Alias + ".local --alias primary-db --alias primary-db.local --alias startship-svc-named startship-" + at.ProjectID + " startship-svc-named"
-		if !strings.Contains(strings.Join(calls, "\n"), want) {
-			t.Fatal(want, calls)
-		}
-	}
-	calls = nil
-	if err := f.a.connectService(Service{}); err != nil || len(calls) != 0 {
-		t.Fatal("unattached service should not connect", err, calls)
+	want := "network connect --alias db --alias db.local --alias primary-db --alias primary-db.local startship-link-link startship-svc-named"
+	if !strings.Contains(strings.Join(calls, "\n"), want) {
+		t.Fatal(want, calls)
 	}
 	f.a.dockerService = func(args ...string) (string, error) {
 		if len(args) > 1 && args[0] == "network" && args[1] == "connect" {
@@ -232,7 +233,8 @@ func TestServiceProjectArgs(t *testing.T) {
 	f := newRBACFixture(t)
 	e, _ := catalog.Lookup("postgresql")
 	config, _ := catalog.Validate(e, "17", nil)
-	s := Service{ID: "svc", WorkspaceID: f.workspace.ID, Engine: e.ID, Config: config, Attachments: []Attachment{{ProjectID: f.project.ID, Alias: "db"}}}
+	s := Service{ID: "svc", WorkspaceID: f.workspace.ID, Engine: e.ID, Config: config}
+	f.a.saveConnection(Connection{ID: "c1", WorkspaceID: f.workspace.ID, From: Endpoint{"project", f.project.ID}, To: Endpoint{"service", s.ID}, Alias: "db"})
 	if err := f.a.saveService(s); err != nil {
 		t.Fatal(err)
 	}

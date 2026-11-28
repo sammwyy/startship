@@ -1,13 +1,11 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { request } from "../services/api";
-import type { Service, ServiceEngine, Project } from "../services/types";
+import type { ServiceEngine } from "../services/types";
 import { NewServiceModal } from "./NewServiceModal";
-import { ConnectServiceModal } from "./ConnectServiceModal";
-import { EnvPreview, ServicePicker } from "./ServiceUI";
+import { EnvPreview } from "./ServiceUI";
 import { EngineIcon } from "./EngineIcon";
 import { generateServiceSecret } from "./ServiceConfig";
 vi.mock("../services/api", () => ({ request: vi.fn() }));
@@ -38,25 +36,6 @@ const engine: ServiceEngine = {
       help: "",
     },
   ],
-};
-const projectA: Project = { id: "a", name: "Storefront", workspace_id: "w" },
-  projectB: Project = { id: "b", name: "Workers", workspace_id: "w" };
-const service: Service = {
-  id: "s",
-  workspace_id: "w",
-  name: "primary",
-  engine: "postgresql",
-  version: "17",
-  config: { user: "app", password: "private", database: "app" },
-  external_port: 0,
-  volume_id: "v",
-  attachments: [{ project_id: "a", alias: "db" }],
-  status: "running",
-  last_error: "",
-  container: "",
-  created: "",
-  updated: "",
-  created_by: "",
 };
 beforeAll(() => {
   Object.defineProperty(HTMLDialogElement.prototype, "showModal", {
@@ -295,155 +274,7 @@ describe("service catalog", () => {
     expect(screen.getByLabelText("Service name")).toHaveValue("postgresql");
   });
 });
-function connect(services: Service[] = [service]) {
-  return render(
-    <MemoryRouter>
-      <ConnectServiceModal
-        workspaceId="w"
-        services={services}
-        engines={[engine]}
-        projects={[projectA, projectB]}
-        project={projectB}
-        onClose={vi.fn()}
-        onSaved={vi.fn().mockResolvedValue(undefined)}
-      />
-    </MemoryRouter>,
-  );
-}
 describe("connect picker", () => {
-  it.each(["Version", "Service"])(
-    "navigates the %s listbox with arrows, Home/End, Enter and Escape",
-    async (label) => {
-      const user = userEvent.setup(),
-        onChange = vi.fn();
-      render(
-        <ServicePicker
-          label={label}
-          value="first"
-          options={[
-            { value: "first", label: "First" },
-            { value: "second", label: "Second" },
-            { value: "last", label: "Last" },
-          ]}
-          onChange={onChange}
-        />,
-      );
-      const trigger = screen.getByRole("button", { name: label });
-      trigger.focus();
-      await user.keyboard("{ArrowDown}");
-      expect(screen.getByRole("option", { name: "First" })).toHaveFocus();
-      await user.keyboard("{ArrowDown}");
-      expect(screen.getByRole("option", { name: "Second" })).toHaveFocus();
-      await user.keyboard("{End}");
-      expect(screen.getByRole("option", { name: "Last" })).toHaveFocus();
-      await user.keyboard("{Home}{ArrowDown}{ArrowUp}");
-      expect(screen.getByRole("option", { name: "First" })).toHaveFocus();
-      await user.keyboard("{ArrowDown}{Enter}");
-      expect(onChange).toHaveBeenCalledWith("second");
-      expect(trigger).toHaveFocus();
-      await user.keyboard("{ArrowUp}");
-      expect(screen.getByRole("option", { name: "Last" })).toHaveFocus();
-      const escape = new KeyboardEvent("keydown", {
-        key: "Escape",
-        bubbles: true,
-        cancelable: true,
-      });
-      document.activeElement!.dispatchEvent(escape);
-      expect(escape.defaultPrevented).toBe(true);
-      expect(trigger).toHaveFocus();
-      expect(HTMLElement.prototype.hidePopover).toHaveBeenCalled();
-    },
-  );
-  it("shows attachments before selection and previews the exact alias host", async () => {
-    vi.mocked(request).mockResolvedValue({});
-    const user = userEvent.setup(),
-      { container } = connect();
-    expect(screen.getByText("Attached to: Storefront")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /primary/ }));
-    expect(screen.getByLabelText("Connection alias")).toHaveValue("primary");
-    await user.clear(screen.getByLabelText("Connection alias"));
-    await user.type(screen.getByLabelText("Connection alias"), "app_db");
-    expect(container.querySelector(".env-line")).toHaveTextContent(
-      "app_db.local",
-    );
-    expect(
-      Array.from(
-        container.querySelectorAll(".env-line > span:first-child"),
-        (node) => node.textContent,
-      ),
-    ).toEqual([
-      "APP_DB_HOST",
-      "APP_DB_PORT",
-      "APP_DB_USER",
-      "APP_DB_PASSWORD",
-      "APP_DB_DATABASE",
-      "APP_DB_URL",
-    ]);
-    await user.click(screen.getByRole("button", { name: "Show secrets" }));
-    expect(container.querySelector(".env-line:last-child")).toHaveTextContent(
-      "postgres://app:private@app_db.local:5432/app",
-    );
-    expect(container.querySelector("select")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Connect service" }));
-    await waitFor(() =>
-      expect(request).toHaveBeenCalledWith("services/s/attachments", {
-        project_id: "b",
-        alias: "app_db",
-      }),
-    );
-  });
-  it("handles an empty list with a deploy link", () => {
-    connect([]);
-    expect(screen.getByText(/No workspace services/)).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Deploy a new service" }),
-    ).toHaveAttribute("href", "/workspace/w/services");
-    expect(
-      screen.getByRole("button", { name: "Connect service" }),
-    ).toBeDisabled();
-  });
-  it("keeps already-connected services visible and disabled", async () => {
-    const user = userEvent.setup();
-    connect([
-      service,
-      {
-        ...service,
-        id: "taken",
-        name: "cache",
-        attachments: [{ project_id: "b", alias: "cache" }],
-      },
-    ]);
-    const attached = screen.getByRole("button", {
-      name: /cache.*Connected to this project/,
-    });
-    expect(attached).toBeDisabled();
-    expect(attached).toHaveTextContent("Attached to: Workers");
-    expect(screen.getByLabelText("Connection alias")).toBeDisabled();
-    expect(
-      screen.getByText(
-        "Choose a service to preview its connection environment.",
-      ),
-    ).toBeInTheDocument();
-    await user.click(attached);
-    expect(
-      screen.getByRole("button", { name: "Connect service" }),
-    ).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: /primary/ }));
-    expect(screen.getByLabelText("Connection alias")).toHaveValue("primary");
-    expect(
-      screen.getByRole("button", { name: "Connect service" }),
-    ).toBeEnabled();
-  });
-  it("shows attach errors without closing", async () => {
-    vi.mocked(request).mockRejectedValue(new Error("Alias already used"));
-    const user = userEvent.setup();
-    connect();
-    await user.click(screen.getByRole("button", { name: /primary/ }));
-    await user.click(screen.getByRole("button", { name: "Connect service" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Alias already used",
-    );
-  });
   it("masks secrets until revealed", async () => {
     const user = userEvent.setup();
     render(

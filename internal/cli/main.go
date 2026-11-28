@@ -346,8 +346,11 @@ const usage = `startship [--json] COMMAND
   services show ID | services patch ID [--version V] [--set KEY=VALUE]... [--port N]
   services start|stop|restart ID | services logs ID [--tail N]
   services delete ID [--delete-volume]  keeps data by default
-  services attach ID PROJECT ALIAS | services detach ID PROJECT
-  services connections PROJECT   attached services, connection env and available services
+  connections [list] WORKSPACE
+  connections create WORKSPACE FROM TO ALIAS   FROM/TO: project:REF, app:ID or service:ID; FROM reaches TO as ALIAS
+  connections delete ID
+  networks [list] WORKSPACE | networks create WORKSPACE NAME | networks rename ID NAME | networks delete ID
+  networks join ID MEMBER | networks leave ID MEMBER   MEMBER: project:REF, app:ID or service:ID
   volumes [list] WORKSPACE
   volumes create WORKSPACE NAME [--project P --mount /path]
   volumes attach ID PROJECT /path | volumes detach ID | volumes delete ID
@@ -470,6 +473,12 @@ func (c *cli) run(args []string) error {
 	}
 	if cmd == "services" {
 		return c.runServices(a)
+	}
+	if cmd == "connections" {
+		return c.runConnections(a)
+	}
+	if cmd == "networks" {
+		return c.runNetworks(a)
 	}
 	if cmd == "apps" {
 		return c.runApps(a)

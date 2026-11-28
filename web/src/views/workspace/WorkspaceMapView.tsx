@@ -3,7 +3,11 @@ import { useQueries } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 import { useDashboard } from "../../layouts/DashboardLayout";
 import { queries } from "../../services/queries";
-import { useServices, useVolumes } from "../../services/services";
+import {
+  useConnections,
+  useServices,
+  useVolumes,
+} from "../../services/services";
 import {
   useLiveProjects,
   useLiveStatus,
@@ -43,7 +47,8 @@ export function WorkspaceMapView() {
     queries: [queries.projects(id), queries.containers(), queries.releases()],
   });
   const services = useServices(id),
-    volumes = useVolumes(id);
+    volumes = useVolumes(id),
+    connections = useConnections(id);
   const liveError = useLiveSubscription({
     topic: "workspace",
     workspace_id: id,
@@ -56,8 +61,9 @@ export function WorkspaceMapView() {
         projects.data || [],
         services.data?.services || [],
         volumes.data?.volumes || [],
+        connections.data?.connections || [],
       ),
-    [projects.data, services.data, volumes.data],
+    [projects.data, services.data, volumes.data, connections.data],
   );
   const columns = useMemo(() => {
     const sorted = sortReleases(releases.data || []);

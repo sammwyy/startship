@@ -19,7 +19,10 @@ import type {
 
 export type LiveSubscription =
   | { topic: "recipes_catalog" | "services_catalog" }
-  | { topic: "services" | "volumes" | "backups"; workspace_id: string }
+  | {
+      topic: "services" | "volumes" | "backups" | "connections" | "networks";
+      workspace_id: string;
+    }
   | { topic: "recipe_apps"; workspace_id: string }
   | { topic: "certificates"; workspace_id: string }
   | { topic: "firewall"; workspace_id: string }
@@ -252,7 +255,9 @@ export function applyLiveMessage(
   if (
     (spec.topic === "services" ||
       spec.topic === "volumes" ||
-      spec.topic === "backups") &&
+      spec.topic === "backups" ||
+      spec.topic === "connections" ||
+      spec.topic === "networks") &&
     event.type === "snapshot"
   ) {
     const queryKey = [`workspaces/${spec.workspace_id}/${spec.topic}`];
@@ -266,8 +271,7 @@ export function applyLiveMessage(
         client.setQueryData(key, service);
       }
       void client.invalidateQueries({
-        predicate: (query) =>
-          /^projects\/[^/]+\/services$/.test(String(query.queryKey[0])),
+        queryKey: [`workspaces/${spec.workspace_id}/connections`],
       });
     }
   } else if (

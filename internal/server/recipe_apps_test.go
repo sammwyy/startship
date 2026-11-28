@@ -12,12 +12,12 @@ import (
 
 func TestRecipeRunArgsEntrypoint(t *testing.T) {
 	c := recipes.Container{ID: "matrix", Image: "example/matrix:1", Command: []string{"-c", "exec server"}}
-	args := recipeRunArgs(recipeApp{ID: "test"}, c)
+	args := recipeRunArgs(recipeApp{ID: "test"}, c, nil)
 	if slices.Contains(args, "--entrypoint") || !slices.Equal(args[len(args)-3:], []string{c.Image, "-c", "exec server"}) {
 		t.Fatal(args)
 	}
 	c.Entrypoint = "/bin/sh"
-	args = recipeRunArgs(recipeApp{ID: "test"}, c)
+	args = recipeRunArgs(recipeApp{ID: "test"}, c, nil)
 	if !slices.Equal(args[len(args)-5:], []string{"--entrypoint", "/bin/sh", c.Image, "-c", "exec server"}) {
 		t.Fatal(args)
 	}
@@ -98,4 +98,23 @@ func TestRecipeAppPermissionsConfigAndDomains(t *testing.T) {
 	}
 	accountRequest(t, f.h, "DELETE", path+"/domains/"+binding.ID, "", f.alice, 200)
 	accountRequest(t, f.h, "DELETE", base+"/domains/"+domain.ID, "", f.alice, 200)
+}
+
+func TestRecipeRestartRecreatesOnConnectionEnvChange(t *testing.T) {
+	label := envDigest(map[string]string{"DB_HOST": "db.local"})
+	if label == envDigest(nil) || label != envDigest(map[string]string{"DB_HOST": "db.local"}) {
+		t.Fatal(label)
+	}
+	current := label
+	a := &Server{dockerService: func(args ...string) (string, error) { return current + "\n", nil }}
+	if a.recipeEnvStale("c", map[string]string{"DB_HOST": "db.local"}) {
+		t.Fatal("matching env reported stale")
+	}
+	if !a.recipeEnvStale("c", nil) {
+		t.Fatal("removed connection not detected")
+	}
+	args := recipeRunArgs(recipeApp{ID: "x"}, recipes.Container{ID: "web", Image: "img"}, map[string]string{"DB_HOST": "db.local"})
+	if !slices.Contains(args, "startship.connection-env="+label) {
+		t.Fatal(args)
+	}
 }

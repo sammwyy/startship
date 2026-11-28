@@ -27,9 +27,10 @@ def run_services(request):
     project = request("projects", {"workspace_id": workspace["id"], "name": "catalog-clients"})
     label = "startship.catalog-smoke=" + workspace["id"]
     results = []
+    link_network = ["host"]
 
     def url_client(env, script):
-        return docker(["run", "--rm", "--label", label, "--network", "startship-" + project["id"], "-e", "CHECK_INPUT",
+        return docker(["run", "--rm", "--label", label, "--network", link_network[0], "-e", "CHECK_INPUT",
                        client_image, "python", "-c", "import json,os; c=json.loads(os.environ['CHECK_INPUT']); " + script],
                       environment={"CHECK_INPUT": json.dumps(env)})
 
@@ -58,9 +59,12 @@ def run_services(request):
                     time.sleep(1)
                 else:
                     raise TimeoutError("service did not reach running")
-                request("services/" + service["id"] + "/attachments", {"project_id": project["id"], "alias": "probe"})
-                attached = request("projects/" + project["id"] + "/services")["attached"]
-                env = next(a["env"] for a in attached if a["service"]["id"] == service["id"])
+                link = request("workspaces/" + workspace["id"] + "/connections", {
+                    "from": {"kind": "project", "id": project["id"]},
+                    "to": {"kind": "service", "id": service["id"]}, "alias": "probe"})
+                connections = request("workspaces/" + workspace["id"] + "/connections")["connections"]
+                env = next(c["env"] for c in connections if c["id"] == link["id"])
+                link_network[0] = "startship-link-" + link["id"]
                 config, image = service["config"], engine["image"] + ":" + service["version"]
 
                 def client(command, data=None, environment=None, network="host", client_image=image):
@@ -102,7 +106,7 @@ def run_services(request):
                         url_client(env, 'import pika; connection=pika.BlockingConnection(pika.URLParameters(c["PROBE_URL"])); channel=connection.channel(); channel.queue_declare(queue="probe"); channel.basic_publish(exchange="",routing_key="probe",body=b"authenticated"); method,properties,body=channel.basic_get("probe",auto_ack=True); assert body==b"authenticated"; connection.close(); print("AMQP URL authenticated publish/consume: OK")')
                         return "AMQP generated URL authenticated publish/consume: OK"
                     if kind == "kafka":
-                        for network, host, label in [("host", "127.0.0.1:" + str(port), "host"), ("startship-" + project["id"], "probe.local:9092", "alias")]:
+                        for network, host, label in [("host", "127.0.0.1:" + str(port), "host"), (link_network[0], "probe.local:9092", "alias")]:
                             topic = "smoke-" + label
                             client(["/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", host, "--create", "--if-not-exists", "--topic", topic, "--partitions", "1", "--replication-factor", "1"], network=network)
                             client(["/opt/kafka/bin/kafka-console-producer.sh", "--bootstrap-server", host, "--topic", topic], "message-" + label + "\n", network=network)
@@ -126,7 +130,7 @@ def run_services(request):
                         endpoint="http://127.0.0.1:"+str(port)
                         def aws(args,data=None,internal=False):
                             return client(["aws","--endpoint-url",env["PROBE_ENDPOINT"] if internal else endpoint]+args,data,credentials,
-                                          network="startship-"+project["id"] if internal else "host",client_image="amazon/aws-cli:2.27.49")
+                                          network=link_network[0] if internal else "host",client_image="amazon/aws-cli:2.27.49")
                         aws(["s3api","list-buckets"])
                         aws(["s3","mb","s3://catalog-probe"])
                         aws(["s3","cp","-","s3://catalog-probe/probe.txt"],"persistent-s3-data\n")

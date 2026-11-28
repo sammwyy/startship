@@ -24,7 +24,7 @@ For a local source build with the [installation example](../INSTALL.md#build-fro
 
 ## 4. Add data and automate future releases
 
-- Create a database or cache under workspace **Services**. In the project, use **Connections** to attach it, then redeploy so the running container receives the connection settings. Keep services private unless you need external access.
+- Create a database or cache under workspace **Services**. In the project, app or service, use **Connections** to link it (each link gets its own private network and hostname), then redeploy so the running container receives the connection settings. To let several resources talk to each other, add them to a workspace **Network**. Keep services private unless you need external access.
 - Use workspace **Volumes** for persistent storage, and **Backups** to schedule copies for a service backed by a volume.
 - To deploy matching GitHub pushes automatically, enable push deployment in the project overview and use the signed webhook URL and secret shown under **Source**. The webhook endpoint must be reachable by GitHub; do not expose raw dashboard port 9000 just for this.
 

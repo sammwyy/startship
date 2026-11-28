@@ -22,7 +22,8 @@ import type {
   ServiceEngine,
   Service,
   Volume,
-  ProjectServices,
+  Connection,
+  WorkspaceNetwork,
   Backups,
 } from "./types";
 
@@ -40,8 +41,10 @@ export const queries = {
   backups: (id: string) => resource<Backups>(`workspaces/${id}/backups`),
   volumes: (id: string) =>
     resource<{ volumes: Volume[] }>(`workspaces/${id}/volumes`),
-  projectServices: (id: string) =>
-    resource<ProjectServices>(`projects/${id}/services`),
+  connections: (id: string) =>
+    resource<{ connections: Connection[] }>(`workspaces/${id}/connections`),
+  networks: (id: string) =>
+    resource<{ networks: WorkspaceNetwork[] }>(`workspaces/${id}/networks`),
   pipelineTemplates: () => resource<PipelineTemplate[]>("pipeline/templates"),
   updates: () => ({
     ...resource<UpdateInfo>("system/update"),

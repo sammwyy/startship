@@ -103,7 +103,7 @@ func (s *liveSub) relevant(r Record) bool {
 		return r.Kind == "workspaces"
 	case "certificates":
 		return r.Kind == "certificates" && r.WorkspaceID == s.WorkspaceID
-	case "services", "volumes", "backups", "recipe_apps":
+	case "services", "volumes", "backups", "recipe_apps", "connections", "networks":
 		return r.Kind == s.Topic && r.WorkspaceID == s.WorkspaceID
 	case "release_log":
 		return r.ID == s.ReleaseID
@@ -149,7 +149,7 @@ func (a *Server) liveAccess(uid string, s *liveSub) (*access, Record, string) {
 				return x, Record{}, "invalid subscription"
 			}
 		}
-	case "workspace", "certificates", "services", "volumes", "firewall", "backups", "workspace_activity", "status_page", "notifications", "recipe_apps":
+	case "workspace", "certificates", "services", "volumes", "firewall", "backups", "workspace_activity", "status_page", "notifications", "recipe_apps", "connections", "networks":
 		id, kind = s.WorkspaceID, "workspaces"
 		if s.Topic == "status_page" || s.Topic == "notifications" {
 			perm = "workspace.manage"
@@ -249,6 +249,10 @@ func (a *Server) liveData(ctx context.Context, uid string, s *liveSub) (any, map
 		return map[string]any{"policy": policy, "lists": lists, "events": events, "stats": stats, "can_manage": x.can(r, "firewall.manage")}, nil, r, ""
 	case "services":
 		return map[string]any{"services": a.publicServices(s.WorkspaceID, x)}, nil, r, ""
+	case "connections":
+		return map[string]any{"connections": a.connectionViews(s.WorkspaceID, x)}, nil, r, ""
+	case "networks":
+		return map[string]any{"networks": a.networks(s.WorkspaceID)}, nil, r, ""
 	case "recipe_apps":
 		return a.recipeApps(s.WorkspaceID, x.at(s.WorkspaceID, "")["apps.manage"]), nil, r, ""
 	case "volumes":
@@ -602,7 +606,7 @@ func (a *Server) liveHandler(w http.ResponseWriter, r *http.Request, uid string)
 					drop(s, why)
 					continue
 				}
-				if key != "" || periodic || s.Topic == "certificates" || s.Topic == "services" || s.Topic == "volumes" || s.Topic == "firewall" || s.Topic == "backups" || s.Topic == "recipe_apps" {
+				if key != "" || periodic || s.Topic == "certificates" || s.Topic == "services" || s.Topic == "volumes" || s.Topic == "firewall" || s.Topic == "backups" || s.Topic == "recipe_apps" || s.Topic == "connections" || s.Topic == "networks" {
 					b, _ := json.Marshal(data)
 					if s.Topic == "traffic" || string(b) != s.update {
 						m := s.message("snapshot")

@@ -131,6 +131,7 @@ func (a *Server) recipeAppsAPI(w http.ResponseWriter, r *http.Request, p []strin
 	action := ""
 	switch {
 	case len(p) == 5 && r.Method == "DELETE":
+		a.forgetEndpoint(ws.ID, Endpoint{"app", app.ID})
 		if err := a.removeRecipeApp(app, r.URL.Query().Get("purge") == "true"); err != nil {
 			fail(w, 502, err.Error())
 			return true
