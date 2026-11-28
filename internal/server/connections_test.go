@@ -57,7 +57,7 @@ func TestConnectionsAndNetworksAPI(t *testing.T) {
 	}
 	joined := strings.Join(calls, "\n")
 	if !strings.Contains(joined, "network create --driver bridge --label startship.managed=true --label startship.connection=") ||
-		!strings.Contains(joined, "network connect --alias db --alias db.local startship-link-") || !strings.Contains(joined, "startship-svc-db") {
+		!strings.Contains(joined, "network connect --alias db --alias db.local --alias main-db --alias main-db.local startship-link-") || !strings.Contains(joined, "startship-svc-db") {
 		t.Fatal(joined)
 	}
 	f.assign(t, f.alice, f.bobID, "member", scopeWorkspace, f.workspace.ID, 201)
